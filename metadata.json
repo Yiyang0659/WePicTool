@@ -1,0 +1,6 @@
+{
+  "name": "WePicTool",
+  "description": "微信穿搭求建议素材生成工具 (微信小程序 WePicTool - 阶段一：最小技术闭环)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

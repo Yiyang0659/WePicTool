@@ -1,0 +1,30 @@
+/**app.wxss**/
+page {
+  background-color: #f7f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica,
+    Segoe UI, Arial, Roboto, 'PingFang SC', 'miui', 'Hiragino Sans GB', 'Microsoft Yahei',
+    sans-serif;
+  color: #333333;
+  font-size: 28rpx;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* 按钮全局重置 */
+button {
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  font-weight: normal;
+  background: transparent;
+}
+button::after {
+  border: none;
+}

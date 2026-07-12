@@ -1,0 +1,119 @@
+<!--pages/preview/preview.wxml-->
+<view class="preview-page">
+  <!-- 顶部导航栏 -->
+  <view class="custom-nav">
+    <view class="nav-safe-area">
+      <view class="nav-content">
+        <view class="nav-back" bindtap="onBack">
+          <text class="nav-back-icon">‹</text>
+        </view>
+        <view class="nav-title">小助手</view>
+        <view class="nav-more">···</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 聊天内容区 -->
+  <scroll-view class="chat-scroll" scroll-y="true" enhanced="true" show-scrollbar="false">
+    <view class="chat-container">
+      <!-- 时间戳 -->
+      <view class="chat-time">上午 {{chatTime}}</view>
+
+      <!-- 每个分组一条消息 -->
+      <block wx:for="{{groupList}}" wx:key="key">
+        <view class="chat-row">
+          <!-- 头像（最右侧） -->
+          <view class="sender-avatar">😎</view>
+
+          <!-- 消息内容区 -->
+          <view class="message-body">
+            <!-- 胶囊按钮 -->
+            <view
+              class="expand-pill {{pillAnimating[item.key] ? 'pill-animating' : ''}}"
+              bindtap="onToggleExpand"
+              data-group="{{item.key}}"
+            >
+              <text class="pill-text">{{expanded[item.key] ? '收起' : '展开 ' + item.items.length}}</text>
+            </view>
+
+            <!-- 图片列表容器：所有图片始终在 DOM，class 切换堆叠 ↔ 展开 -->
+            <view class="card-list {{expanded[item.key] ? 'card-list-expanded' : 'card-list-collapsed'}}">
+              <block wx:for="{{item.items}}" wx:for-item="imgUrl" wx:for-index="imgIdx" wx:key="index">
+                <view
+                  class="card-item {{expanded[item.key] ? 'card-item-expanded' : 'card-item-collapsed'}}"
+                  data-group="{{item.key}}"
+                  data-index="{{imgIdx}}"
+                  style="{{expanded[item.key] ? '' : 'transform: translateY(' + getStackTranslateY(item.key, imgIdx, item.items.length) + 'rpx) scale(' + getStackScale(item.key, imgIdx, item.items.length) + '); opacity: ' + getStackOpacity(item.key, imgIdx, item.items.length) + '; z-index: ' + getStackZIndex(item.key, imgIdx, item.items.length) + ';'}}"
+                >
+                  <!-- 顶层卡片：包裹滑动层 -->
+                  <view
+                    wx:if="{{!expanded[item.key] && imgIdx === stackIndex[item.key]}}"
+                    class="swipe-layer"
+                    bindtouchstart="onTouchStart"
+                    bindtouchmove="onTouchMove"
+                    bindtouchend="onTouchEnd"
+                    data-group="{{item.key}}"
+                    style="transform: translateX({{slideOffset[item.key] || 0}}px);"
+                  >
+                    <image
+                      class="card-img"
+                      src="{{imgUrl}}"
+                      mode="aspectFill"
+                      lazy-load="true"
+                      bindtap="onPreviewGroupImage"
+                      data-group="{{item.key}}"
+                      data-index="{{imgIdx}}"
+                    />
+                  </view>
+
+                  <!-- 非顶层卡片或展开态 -->
+                  <block wx:if="{{expanded[item.key] || imgIdx !== stackIndex[item.key]}}">
+                    <image
+                      class="card-img"
+                      src="{{imgUrl}}"
+                      mode="aspectFill"
+                      lazy-load="true"
+                      bindtap="{{expanded[item.key] ? 'onPreviewGroupImage' : ''}}"
+                      data-group="{{item.key}}"
+                      data-index="{{imgIdx}}"
+                    />
+                    <view class="card-overlay" wx:if="{{expanded[item.key]}}">
+                      <view class="overlay-btn" catchtap="onChangeCategory" data-group="{{item.key}}" data-index="{{imgIdx}}">改分类</view>
+                    </view>
+                  </block>
+                </view>
+              </block>
+            </view>
+          </view>
+        </view>
+      </block>
+
+      <view class="empty-state" wx:if="{{isEmpty}}">
+        <view class="empty-icon">📂</view>
+        <view class="empty-text">未找到有效的分组结果</view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 底部输入栏 -->
+  <view class="chat-input-bar">
+    <view class="input-bar-safe">
+      <view class="input-bar-inner">
+        <view class="input-icon">🎙️</view>
+        <view class="input-placeholder"></view>
+        <view class="input-icon">🎤</view>
+        <view class="input-icon">😊</view>
+        <view class="input-icon">➕</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 底部操作栏 -->
+  <view class="bottom-bar">
+    <view class="bottom-safe-area">
+      <button class="merge-send-btn" bindtap="onBack">
+        <text class="merge-send-text">返回结果页</text>
+      </button>
+    </view>
+  </view>
+</view>

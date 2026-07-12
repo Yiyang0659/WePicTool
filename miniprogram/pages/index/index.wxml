@@ -1,0 +1,54 @@
+<!--pages/index/index.wxml-->
+<view class="container">
+  <!-- 头部 Slogon 区 -->
+  <view class="header-section">
+    <view class="logo-container">
+      <view class="logo-icon">👗</view>
+    </view>
+    <view class="title">WePicTool</view>
+    <view class="subtitle">微信最快的穿搭参考图生成工具</view>
+  </view>
+
+  <!-- 核心功能入口区 -->
+  <view class="main-section">
+    <view class="card-btn" bindtap="onChooseMedia">
+      <view class="card-btn-content">
+        <view class="card-btn-icon">📸</view>
+        <view class="card-btn-title">做穿搭参考图</view>
+        <view class="card-btn-desc">选择 1-9 张衣服/鞋子图片自动分组整理</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 说明指引区 -->
+  <view class="guide-section">
+    <view class="guide-title">使用步骤</view>
+    <view class="guide-list">
+      <view class="guide-item">
+        <view class="guide-num">1</view>
+        <view class="guide-text">点击上方“做穿搭参考图”，选择上衣、裤子、裙子或鞋子的照片（可混选1-9张）。</view>
+      </view>
+      <view class="guide-item">
+        <view class="guide-num">2</view>
+        <view class="guide-text">系统对图片进行基础压缩，快速上传至云端进行部件智能分类与整理。</view>
+      </view>
+      <view class="guide-item">
+        <view class="guide-num">3</view>
+        <view class="guide-text">在结果页查看自动分出的【上衣组】、【下装组】和【鞋子组】，一键保存到手机相册。</view>
+      </view>
+      <view class="guide-item">
+        <view class="guide-num">4</view>
+        <view class="guide-text">发送到微信群或私聊，利用微信多图合并堆叠效果，让闺蜜/群友左右滑动帮你挑选！</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 处理中的 Loading 弹窗 -->
+  <view class="loading-overlay" wx:if="{{loading}}">
+    <view class="loading-box">
+      <view class="spinner"></view>
+      <view class="loading-text">{{loadingText}}</view>
+      <view class="loading-subtext">正在处理您的穿搭素材...</view>
+    </view>
+  </view>
+</view>

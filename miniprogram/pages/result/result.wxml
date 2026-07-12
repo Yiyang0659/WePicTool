@@ -1,0 +1,330 @@
+<!--pages/result/result.wxml-->
+<view class="chat-page">
+  <!-- 顶部导航栏 -->
+  <view class="custom-nav">
+    <view class="nav-safe-area">
+      <view class="nav-content">
+        <view class="nav-back" bindtap="onBackHome">
+          <text class="nav-back-icon">‹</text>
+          <text class="nav-back-text">返回</text>
+        </view>
+        <view class="nav-title">穿搭分组结果</view>
+        <view class="nav-send" bindtap="onSendToFriend">发送给朋友</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 聊天内容区 -->
+  <scroll-view class="chat-scroll" scroll-y="true" enhanced="true" show-scrollbar="false">
+    <view class="chat-container">
+      <!-- 时间戳 -->
+      <view class="chat-time">{{chatTime}}</view>
+
+      <!-- 对方消息：引导语 -->
+      <view class="chat-row chat-row-left">
+        <view class="avatar avatar-other">😊</view>
+        <view class="bubble bubble-other">
+          <text class="bubble-text">姐妹你真是个天才</text>
+        </view>
+      </view>
+
+      <!-- 我的分组消息：上衣 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.tops && groups.tops.length > 0}}">
+        <view class="bubble bubble-card" bindtap="onToggleExpand" data-group="tops">
+          <view class="card-title">【 上 衣 】</view>
+          <view class="card-preview">
+            <image
+              class="card-preview-img {{expanded.tops ? 'card-preview-img-hidden' : ''}}"
+              src="{{getDisplayUrl(groups.tops[0])}}"
+              mode="aspectFit"
+              lazy-load="true"
+            />
+            <view class="card-preview-stack" wx:if="{{!expanded.tops && groups.tops.length > 1}}">
+              <view class="stack-layer stack-layer-2"></view>
+              <view class="stack-layer stack-layer-1"></view>
+            </view>
+          </view>
+          <view class="card-expand">
+            <text class="card-expand-text">展开 {{groups.tops.length}}</text>
+            <text class="card-expand-arrow {{expanded.tops ? 'card-expand-arrow-up' : ''}}">›</text>
+          </view>
+        </view>
+        <view class="avatar avatar-me">😎</view>
+      </view>
+
+      <!-- 上衣展开内容 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.tops && groups.tops.length > 0 && expanded.tops}}">
+        <view class="bubble bubble-expanded">
+          <scroll-view class="expanded-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
+            <view class="expanded-list">
+              <view class="expanded-item" wx:for="{{groups.tops}}" wx:key="resultId">
+                <image
+                  class="expanded-img"
+                  src="{{getDisplayUrl(item)}}"
+                  mode="aspectFill"
+                  bindtap="onPreviewGroupImage"
+                  data-group="tops"
+                  data-index="{{index}}"
+                  lazy-load="true"
+                />
+                <view class="expanded-actions">
+                  <view class="expanded-action expanded-action-primary" bindtap="onToggleOriginal" data-group="tops" data-index="{{index}}">
+                    {{item.showMode === 'original' ? '白底' : '原图'}}
+                  </view>
+                  <view class="expanded-action" bindtap="onChangeCategory" data-group="tops" data-index="{{index}}">改分类</view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="expanded-tip">← 左右滑动查看更多 →</view>
+        </view>
+        <view class="avatar avatar-me avatar-placeholder"></view>
+      </view>
+
+      <!-- 我的分组消息：下衣 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.bottoms && groups.bottoms.length > 0}}">
+        <view class="bubble bubble-card" bindtap="onToggleExpand" data-group="bottoms">
+          <view class="card-title">【 下 衣 】</view>
+          <view class="card-preview">
+            <image
+              class="card-preview-img {{expanded.bottoms ? 'card-preview-img-hidden' : ''}}"
+              src="{{getDisplayUrl(groups.bottoms[0])}}"
+              mode="aspectFit"
+              lazy-load="true"
+            />
+            <view class="card-preview-stack" wx:if="{{!expanded.bottoms && groups.bottoms.length > 1}}">
+              <view class="stack-layer stack-layer-2"></view>
+              <view class="stack-layer stack-layer-1"></view>
+            </view>
+          </view>
+          <view class="card-expand">
+            <text class="card-expand-text">展开 {{groups.bottoms.length}}</text>
+            <text class="card-expand-arrow {{expanded.bottoms ? 'card-expand-arrow-up' : ''}}">›</text>
+          </view>
+        </view>
+        <view class="avatar avatar-me">😎</view>
+      </view>
+
+      <!-- 下衣展开内容 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.bottoms && groups.bottoms.length > 0 && expanded.bottoms}}">
+        <view class="bubble bubble-expanded">
+          <scroll-view class="expanded-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
+            <view class="expanded-list">
+              <view class="expanded-item" wx:for="{{groups.bottoms}}" wx:key="resultId">
+                <image
+                  class="expanded-img"
+                  src="{{getDisplayUrl(item)}}"
+                  mode="aspectFill"
+                  bindtap="onPreviewGroupImage"
+                  data-group="bottoms"
+                  data-index="{{index}}"
+                  lazy-load="true"
+                />
+                <view class="expanded-actions">
+                  <view class="expanded-action expanded-action-primary" bindtap="onToggleOriginal" data-group="bottoms" data-index="{{index}}">
+                    {{item.showMode === 'original' ? '白底' : '原图'}}
+                  </view>
+                  <view class="expanded-action" bindtap="onChangeCategory" data-group="bottoms" data-index="{{index}}">改分类</view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="expanded-tip">← 左右滑动查看更多 →</view>
+        </view>
+        <view class="avatar avatar-me avatar-placeholder"></view>
+      </view>
+
+      <!-- 我的分组消息：鞋子 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.shoes && groups.shoes.length > 0}}">
+        <view class="bubble bubble-card" bindtap="onToggleExpand" data-group="shoes">
+          <view class="card-title">【 鞋 子 】</view>
+          <view class="card-preview">
+            <image
+              class="card-preview-img {{expanded.shoes ? 'card-preview-img-hidden' : ''}}"
+              src="{{getDisplayUrl(groups.shoes[0])}}"
+              mode="aspectFit"
+              lazy-load="true"
+            />
+            <view class="card-preview-stack" wx:if="{{!expanded.shoes && groups.shoes.length > 1}}">
+              <view class="stack-layer stack-layer-2"></view>
+              <view class="stack-layer stack-layer-1"></view>
+            </view>
+          </view>
+          <view class="card-expand">
+            <text class="card-expand-text">展开 {{groups.shoes.length}}</text>
+            <text class="card-expand-arrow {{expanded.shoes ? 'card-expand-arrow-up' : ''}}">›</text>
+          </view>
+        </view>
+        <view class="avatar avatar-me">😎</view>
+      </view>
+
+      <!-- 鞋子展开内容 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.shoes && groups.shoes.length > 0 && expanded.shoes}}">
+        <view class="bubble bubble-expanded">
+          <scroll-view class="expanded-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
+            <view class="expanded-list">
+              <view class="expanded-item" wx:for="{{groups.shoes}}" wx:key="resultId">
+                <image
+                  class="expanded-img"
+                  src="{{getDisplayUrl(item)}}"
+                  mode="aspectFill"
+                  bindtap="onPreviewGroupImage"
+                  data-group="shoes"
+                  data-index="{{index}}"
+                  lazy-load="true"
+                />
+                <view class="expanded-actions">
+                  <view class="expanded-action expanded-action-primary" bindtap="onToggleOriginal" data-group="shoes" data-index="{{index}}">
+                    {{item.showMode === 'original' ? '白底' : '原图'}}
+                  </view>
+                  <view class="expanded-action" bindtap="onChangeCategory" data-group="shoes" data-index="{{index}}">改分类</view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="expanded-tip">← 左右滑动查看更多 →</view>
+        </view>
+        <view class="avatar avatar-me avatar-placeholder"></view>
+      </view>
+
+      <!-- 未处理素材区 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.others && groups.others.length > 0}}">
+        <view class="bubble bubble-card bubble-card-gray" bindtap="onToggleExpand" data-group="others">
+          <view class="card-title">【 未处理素材 】</view>
+          <view class="card-preview">
+            <image
+              class="card-preview-img {{expanded.others ? 'card-preview-img-hidden' : ''}}"
+              src="{{getDisplayUrl(groups.others[0])}}"
+              mode="aspectFit"
+              lazy-load="true"
+            />
+          </view>
+          <view class="card-expand">
+            <text class="card-expand-text">展开 {{groups.others.length}}</text>
+            <text class="card-expand-arrow {{expanded.others ? 'card-expand-arrow-up' : ''}}">›</text>
+          </view>
+        </view>
+        <view class="avatar avatar-me">😎</view>
+      </view>
+
+      <!-- 未处理素材展开内容 -->
+      <view class="chat-row chat-row-right" wx:if="{{groups.others && groups.others.length > 0 && expanded.others}}">
+        <view class="bubble bubble-expanded bubble-expanded-gray">
+          <scroll-view class="expanded-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
+            <view class="expanded-list">
+              <view class="expanded-item" wx:for="{{groups.others}}" wx:key="resultId">
+                <image
+                  class="expanded-img"
+                  src="{{item.url}}"
+                  mode="aspectFill"
+                  bindtap="onPreviewGroupImage"
+                  data-group="others"
+                  data-index="{{index}}"
+                  lazy-load="true"
+                />
+                <view class="expanded-actions">
+                  <view class="expanded-action" bindtap="onChangeCategory" data-group="others" data-index="{{index}}">改分类</view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="expanded-tip">← 左右滑动查看更多 →</view>
+        </view>
+        <view class="avatar avatar-me avatar-placeholder"></view>
+      </view>
+
+      <!-- 对方提示消息 -->
+      <view class="chat-row chat-row-left">
+        <view class="avatar avatar-other">😊</view>
+        <view class="bubble bubble-other">
+          <text class="bubble-text">发给朋友就能左右滑动对比啦～</text>
+        </view>
+      </view>
+
+      <!-- 兜底空白状态 -->
+      <view class="empty-state" wx:if="{{isEmpty}}">
+        <view class="empty-icon">📂</view>
+        <view class="empty-text">未找到有效的分组结果</view>
+        <button class="back-btn" bindtap="onBackHome">返回首页</button>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 底部操作栏 -->
+  <view class="bottom-bar">
+    <view class="bottom-safe-area">
+      <view class="secondary-actions">
+        <view class="secondary-btn" bindtap="onEditGroup">
+          <text class="secondary-icon">📝</text>
+          <text class="secondary-text">编辑分组</text>
+        </view>
+        <view class="secondary-btn" bindtap="onReorder">
+          <text class="secondary-icon">↕️</text>
+          <text class="secondary-text">调整顺序</text>
+        </view>
+        <view class="secondary-btn" bindtap="onSaveLongImage">
+          <text class="secondary-icon">🖼️</text>
+          <text class="secondary-text">保存长图</text>
+        </view>
+      </view>
+      <view class="primary-action">
+        <!-- 新增：微信发送预览按钮 -->
+        <view class="preview-btn" bindtap="onWechatPreview">
+          <text class="preview-btn-text">📱 微信发送预览</text>
+        </view>
+        <view class="merge-send-btn" bindtap="onMergeSend">
+          <text class="merge-send-icon">📤</text>
+          <text class="merge-send-text">一键合并发送 ({{totalCount}}张)</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 合并发送选项弹窗 -->
+  <view class="action-mask {{showActionSheet ? 'action-mask-show' : ''}}" wx:if="{{showActionSheet}}" bindtap="onCloseActionSheet">
+    <view class="action-panel" catchtap="onActionPanelTap">
+      <view class="action-title">选择发送方式</view>
+      <view class="action-list">
+        <view class="action-item" bindtap="onShareAppMessageAction">
+          <text class="action-icon">💬</text>
+          <view class="action-content">
+            <view class="action-name">分享给微信好友</view>
+            <view class="action-desc">发送小程序卡片，好友可点击查看</view>
+          </view>
+        </view>
+        <view class="action-item" bindtap="onSaveAllImages">
+          <text class="action-icon">💾</text>
+          <view class="action-content">
+            <view class="action-name">保存全部图片</view>
+            <view class="action-desc">保存 {{totalCount}} 张到相册，再手动发送</view>
+          </view>
+        </view>
+        <view class="action-item" bindtap="onSaveByGroup">
+          <text class="action-icon">📁</text>
+          <view class="action-content">
+            <view class="action-name">按分组保存</view>
+            <view class="action-desc">分别保存上衣/下衣/鞋子到相册</view>
+          </view>
+        </view>
+      </view>
+      <view class="action-cancel" bindtap="onCloseActionSheet">取消</view>
+    </view>
+  </view>
+
+  <!-- 分组保存选择弹窗 -->
+  <view class="action-mask {{showGroupSaveSheet ? 'action-mask-show' : ''}}" wx:if="{{showGroupSaveSheet}}" bindtap="onCloseGroupSaveSheet">
+    <view class="action-panel" catchtap="onActionPanelTap">
+      <view class="action-title">选择要保存的分组</view>
+      <view class="action-list">
+        <view class="action-item" wx:for="{{availableGroups}}" wx:key="key" bindtap="onSaveGroupByKey" data-group="{{item.key}}">
+          <text class="action-icon">{{item.emoji}}</text>
+          <view class="action-content">
+            <view class="action-name">保存{{item.title}}</view>
+            <view class="action-desc">{{item.count}} 张图片</view>
+          </view>
+        </view>
+      </view>
+      <view class="action-cancel" bindtap="onCloseGroupSaveSheet">取消</view>
+    </view>
+  </view>
+</view>

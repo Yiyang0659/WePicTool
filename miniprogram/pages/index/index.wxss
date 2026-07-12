@@ -1,0 +1,211 @@
+/* pages/index/index.wxss */
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40rpx 40rpx 180rpx;
+  min-height: 100vh;
+  background-color: #f8fafc;
+  padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
+}
+
+/* 头部 Slogon 区 */
+.header-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 60rpx;
+  margin-bottom: 80rpx;
+  text-align: center;
+}
+
+.logo-container {
+  width: 140rpx;
+  height: 140rpx;
+  background-color: #ffffff;
+  border-radius: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.04);
+  margin-bottom: 30rpx;
+}
+
+.logo-icon {
+  font-size: 70rpx;
+}
+
+.title {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: 2rpx;
+  margin-bottom: 16rpx;
+}
+
+.subtitle {
+  font-size: 26rpx;
+  color: #64748b;
+  letter-spacing: 1rpx;
+}
+
+/* 核心按钮卡片 */
+.main-section {
+  width: 100%;
+  max-width: 670rpx;
+  margin-bottom: 80rpx;
+}
+
+.card-btn {
+  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  border-radius: 32rpx;
+  padding: 50rpx 40rpx;
+  box-shadow: 0 20rpx 40rpx rgba(59, 130, 246, 0.25);
+  transition: all 0.2s ease;
+}
+
+.card-btn:active {
+  transform: scale(0.98);
+  box-shadow: 0 10rpx 20rpx rgba(59, 130, 246, 0.2);
+}
+
+.card-btn-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.card-btn-icon {
+  font-size: 80rpx;
+  margin-bottom: 24rpx;
+}
+
+.card-btn-title {
+  font-size: 38rpx;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 12rpx;
+  letter-spacing: 1rpx;
+}
+
+.card-btn-desc {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 指引区 */
+.guide-section {
+  width: 100%;
+  max-width: 670rpx;
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 40rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.02);
+}
+
+.guide-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 30rpx;
+  position: relative;
+  padding-left: 20rpx;
+}
+
+.guide-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8rpx;
+  width: 6rpx;
+  height: 28rpx;
+  background-color: #3b82f6;
+  border-radius: 3rpx;
+}
+
+.guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.guide-item {
+  display: flex;
+  align-items: flex-start;
+}
+
+.guide-num {
+  width: 36rpx;
+  height: 36rpx;
+  background-color: #eff6ff;
+  color: #3b82f6;
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 18rpx;
+  margin-top: 4rpx;
+  flex-shrink: 0;
+}
+
+.guide-text {
+  font-size: 25rpx;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+/* Loading 浮层 */
+.loading-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loading-box {
+  width: 480rpx;
+  background-color: #ffffff;
+  border-radius: 32rpx;
+  padding: 50rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 20rpx 50rpx rgba(0, 0, 0, 0.15);
+}
+
+.spinner {
+  width: 70rpx;
+  height: 70rpx;
+  border: 6rpx solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 30rpx;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 10rpx;
+  text-align: center;
+}
+
+.loading-subtext {
+  font-size: 24rpx;
+  color: #94a3b8;
+  text-align: center;
+}

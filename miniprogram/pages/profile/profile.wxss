@@ -1,0 +1,251 @@
+/* pages/profile/profile.wxss */
+
+page {
+  background-color: #f7f8fa;
+}
+
+.profile-page {
+  min-height: 100vh;
+  background-color: #f7f8fa;
+  padding-bottom: 60rpx;
+}
+
+/* 用户信息区 */
+.profile-header {
+  background-color: #ffffff;
+  padding: 40rpx 30rpx;
+  margin-bottom: 20rpx;
+}
+
+.profile-user {
+  display: flex;
+  align-items: center;
+}
+
+.user-avatar {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48rpx;
+  color: #ffffff;
+  font-weight: 600;
+  margin-right: 24rpx;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #333333;
+  margin-bottom: 12rpx;
+}
+
+.user-id {
+  display: flex;
+  align-items: center;
+}
+
+.user-id-text {
+  font-size: 24rpx;
+  color: #999999;
+  margin-right: 12rpx;
+}
+
+.user-id-copy {
+  font-size: 22rpx;
+  color: #3b82f6;
+  background-color: #eff6ff;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+}
+
+/* 分组标题 */
+.profile-section {
+  margin-bottom: 20rpx;
+}
+
+.section-title {
+  font-size: 26rpx;
+  color: #999999;
+  padding: 20rpx 30rpx 16rpx;
+}
+
+/* 菜单卡片 */
+.menu-card {
+  background-color: #ffffff;
+  margin: 0 30rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 30rpx 24rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+}
+
+.menu-item:last-child {
+  border-bottom: none;
+}
+
+.menu-item:active {
+  background-color: #f9f9f9;
+}
+
+.menu-icon {
+  font-size: 36rpx;
+  margin-right: 20rpx;
+  width: 44rpx;
+  text-align: center;
+}
+
+.menu-text {
+  flex: 1;
+  font-size: 30rpx;
+  color: #333333;
+}
+
+.menu-extra {
+  font-size: 26rpx;
+  color: #999999;
+  margin-right: 12rpx;
+}
+
+.menu-arrow {
+  font-size: 28rpx;
+  color: #cccccc;
+}
+
+/* 底部版权 */
+.profile-footer {
+  text-align: center;
+  padding: 60rpx 0 40rpx;
+  font-size: 24rpx;
+  color: #cccccc;
+}
+
+/* 反馈弹窗 */
+.feedback-mask,
+.about-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s ease;
+}
+
+.feedback-mask-show,
+.about-mask-show {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.feedback-panel,
+.about-panel {
+  width: 620rpx;
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 40rpx;
+}
+
+.feedback-title,
+.about-name {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #333333;
+  text-align: center;
+  margin-bottom: 30rpx;
+}
+
+.feedback-textarea {
+  width: 100%;
+  height: 240rpx;
+  background-color: #f7f8fa;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  font-size: 28rpx;
+  color: #333333;
+  box-sizing: border-box;
+}
+
+.feedback-count {
+  text-align: right;
+  font-size: 24rpx;
+  color: #999999;
+  margin-top: 12rpx;
+  margin-bottom: 30rpx;
+}
+
+.feedback-btns {
+  display: flex;
+  gap: 20rpx;
+}
+
+.feedback-btn {
+  flex: 1;
+  text-align: center;
+  padding: 22rpx 0;
+  border-radius: 12rpx;
+  font-size: 30rpx;
+}
+
+.feedback-btn-cancel {
+  background-color: #f5f5f5;
+  color: #666666;
+}
+
+.feedback-btn-confirm {
+  background-color: #3b82f6;
+  color: #ffffff;
+}
+
+/* 关于弹窗 */
+.about-logo {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 24rpx;
+  background-color: #eff6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60rpx;
+  margin: 0 auto 20rpx;
+}
+
+.about-version {
+  text-align: center;
+  font-size: 26rpx;
+  color: #999999;
+  margin-bottom: 30rpx;
+}
+
+.about-desc {
+  font-size: 28rpx;
+  color: #666666;
+  line-height: 1.6;
+  margin-bottom: 40rpx;
+}
+
+.about-close {
+  text-align: center;
+  padding: 22rpx 0;
+  background-color: #3b82f6;
+  color: #ffffff;
+  border-radius: 12rpx;
+  font-size: 30rpx;
+}
