@@ -25,7 +25,8 @@ AI / 图像服务
 | `miniprogram/pages/index/` | 首页 Tab：选图、压缩、上传、创建任务 |
 | `miniprogram/pages/record/` | 记录 Tab：本地历史任务列表、查看、再次生成 |
 | `miniprogram/pages/profile/` | 我的 Tab：相册权限、反馈、分享、缓存清理 |
-| `miniprogram/pages/result/` | 结果页（非 Tab）：微信聊天预览风格，分组展示、保存、改分类、发送引导 |
+| `miniprogram/pages/result/` | 结果页（非 Tab）：白色聊天风格，分组展示、保存、改分类、发送引导 |
+| `miniprogram/pages/preview/` | 微信预览页（非 Tab）：深色微信聊天风格，堆叠卡片、展开/收起、滑动切换 |
 | `miniprogram/app.json` | 全局页面路由与底部 Tab（首页 / 记录 / 我的）配置 |
 | `miniprogram/config/env.js` | CloudBase 环境 ID 和本地预览开关 |
 | `miniprogram/utils/task.js` | 阶段一任务规则、mock 分组、发送能力判断 |
