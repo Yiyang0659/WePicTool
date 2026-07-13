@@ -8,6 +8,7 @@
 - `matting-prompt.md`：阶段三抠图提示词和调用方式（DashScope qwen-image-2.0）。
 - `matting-api-evaluation.md`：阶段三抠图 API 选型与测试标准。
 - `workflow-backlog.md`：后续 AI 工作流优先级和验收标准。
+- `prompt-engineering-plan.md`：提示词工程化方案——抽取可复用 Block 与工作流封装（待实施）。
 
 ## 使用原则
 
