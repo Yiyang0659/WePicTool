@@ -111,11 +111,8 @@ WePicTool/
 │                                     # 不是小程序上传必需内容，已被 project.config.json 忽略
 ├── dist/                             # Vite 构建产物（被小程序上传忽略）
 ├── docs/                             # 产品文档和 AI 工作流设计
-│   ├── product/                      # PRD、阶段路线、开发手册、技术架构、API 文档、错误处理规范
-│   ├── ai-workflows/                 # AI 提示词、抠图 API 评估、抠图提示词、工作流计划
-│   └── superpowers/                  # 阶段化工程整理规格与实施计划
-│       ├── plans/
-│       └── specs/
+│   ├── product/                      # PRD、项目状态、技术方案、开发指南、归档文档
+│   └── ai-workflows/                 # AI 提示词、抠图 API 评估、抠图提示词、工作流计划
 ├── scripts/
 │   ├── check-miniprogram.mjs         # 小程序上线前本地预检脚本
 │   ├── test-dashscope.cjs            # DashScope 分类 API 本地测试
