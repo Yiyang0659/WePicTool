@@ -111,9 +111,9 @@
 
 ### 2026-07-13
 
-- **做了什么：** 全面同步文档状态（旧 7 份文档替换为新 5 份文档体系），建立文档同步规范和保护规则，删除 superpowers 一次性文档。
-- **改了哪些文件：** docs/product/ 全部替换，README.md、CLAUDE.md 更新引用。
-- **关键决策：** 文档同步采用最小改动原则，禁止重写分析性内容，实质性矛盾需用户确认。
+- **做了什么：** 全面同步文档状态（旧 7 份文档替换为新 5 份文档体系），建立文档同步规范和保护规则，删除 superpowers 一次性文档，新增迭代上下文记录机制（PROJECT_STATUS 最新更新日志 + Claude Memory），新增提示词工程化方案文档。
+- **改了哪些文件：** docs/product/ 全部替换，README.md、CLAUDE.md 更新引用，docs/superpowers/ 删除，docs/ai-workflows/prompt-engineering-plan.md 新建。
+- **关键决策：** 文档同步采用最小改动原则，禁止重写分析性内容，实质性矛盾需用户确认。提示词工程化方案确认可行，待实施。
 - **下一步：** 继续阶段三前端 Canvas 白底卡片合成。口径见 DEVELOPMENT_GUIDE.md。
 
 ---
