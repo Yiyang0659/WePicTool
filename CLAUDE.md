@@ -143,11 +143,11 @@ npm run lint
 ### 文档索引
 
 - `README.md` — 项目总览、目录结构、本地测试、CloudBase 接入和阶段一验收。
-- `docs/product/PRD.md` — 产品需求、MVP 范围、开发红线。
-- `docs/product/stage-roadmap.md` — 阶段零到阶段五的路线和进入条件。
-- `docs/product/development-playbook.md` — 开发者/AI 助手任务口径，按阶段拆分。
-- `docs/product/iteration-handoff-2026-07-08.md` — 最新迭代交接日志和下一步建议。
-- `docs/product/technical-architecture.md` — 目录职责、任务契约、结果结构、状态规划。
+- `docs/product/PRD.md` — 产品需求、用户画像、MVP 定义、功能需求（F-01~F-55）、开发红线。
+- `docs/product/PROJECT_STATUS.md` — 当前阶段、已完成功能、待完成功能、历史更新。
+- `docs/product/TECHNICAL_SPEC.md` — 技术选型、系统架构、数据模型、接口定义、处理流程、状态机、错误处理。
+- `docs/product/DEVELOPMENT_GUIDE.md` — 开发任务模板、当前阶段任务口径、验收标准、环境配置。
+- `docs/product/ARCHIVED.md` — 历史决策、已过时内容、迭代日志、归档 RESTful 接口设计。
 - `docs/ai-workflows/classification-prompt.md` — 阶段二 AI 分类提示词。
 - `docs/ai-workflows/matting-prompt.md` — 阶段三抠图提示词。
 - `docs/ai-workflows/matting-api-evaluation.md` — 阶段三抠图 API 评估标准。
@@ -177,7 +177,7 @@ npm run lint
 
 ## 当前迭代方向
 
-项目当前处于阶段三：阶段二 AI 分类已完成（DashScope `qwen-vl-plus`），阶段三抠图已接入（DashScope `qwen-image-2.0`），白底卡片合成待实现。小程序 UI 已升级为底部三 Tab（首页 / 记录 / 我的），结果页为白色聊天风格，新增深色微信预览页。详细交接内容见 `docs/product/iteration-handoff-2026-07-08.md`。
+项目当前处于阶段三：阶段二 AI 分类已完成（DashScope `qwen-vl-plus`），阶段三抠图已接入（DashScope `qwen-image-2.0`），白底卡片合成待实现。小程序 UI 已升级为底部三 Tab（首页 / 记录 / 我的），结果页为白色聊天风格，新增深色微信预览页。详细状态见 `docs/product/PROJECT_STATUS.md`，历史决策见 `docs/product/ARCHIVED.md`。
 
 默认的继续推进口径：
 
@@ -198,24 +198,22 @@ npm run lint
 
 | 变更类型 | 必须更新的文档 |
 |----------|---------------|
-| 阶段里程碑完成 | `docs/product/PRD.md`（当前工程状态、功能范围表、不在当前阶段）、`docs/product/stage-roadmap.md`（完成情况）、`README.md`（当前阶段、版本包含/不包含、目录说明） |
-| AI 工作流接入或变更 | `docs/ai-workflows/` 下对应提示词文档、`matting-api-evaluation.md`、`workflow-backlog.md`（更新状态）、`docs/ai-workflows/README.md`（当前文件列表）、`docs/product/development-playbook.md`（当前阶段说明） |
-| 新页面或重大 UI 变更 | `docs/product/technical-architecture.md`（目录职责）、`CLAUDE.md`（高层架构）、`README.md`（目录说明） |
-| 新增或删除文件/目录 | `README.md`（目录说明）+ `docs/product/technical-architecture.md`（如涉及小程序核心模块） |
-| 迭代交接 | `docs/product/iteration-handoff-*.md`（新建或追加），同时同步上述所有文档 |
-| 技术决策变更（如 API 选型、架构调整） | 对应架构文档 + `development-playbook.md` 任务口径 |
+| 阶段里程碑完成 | `docs/product/PRD.md`（功能需求状态列）、`docs/product/PROJECT_STATUS.md`（已完成功能、待完成功能）、`README.md`（当前阶段、版本包含/不包含、目录说明） |
+| AI 工作流接入或变更 | `docs/ai-workflows/` 下对应提示词文档、`matting-api-evaluation.md`、`workflow-backlog.md`（更新状态）、`docs/ai-workflows/README.md`（当前文件列表）、`docs/product/DEVELOPMENT_GUIDE.md`（当前阶段说明） |
+| 新页面或重大 UI 变更 | `docs/product/TECHNICAL_SPEC.md`（目录职责）、`CLAUDE.md`（高层架构）、`README.md`（目录说明） |
+| 新增或删除文件/目录 | `README.md`（目录说明）+ `docs/product/TECHNICAL_SPEC.md`（如涉及小程序核心模块） |
+| 迭代交接 | `docs/product/ARCHIVED.md`（迭代日志追加），同时同步上述所有文档 |
+| 技术决策变更（如 API 选型、架构调整） | `docs/product/TECHNICAL_SPEC.md` + `docs/product/DEVELOPMENT_GUIDE.md` 任务口径 + `docs/product/ARCHIVED.md`（历史决策记录） |
 
 ### 提交前 Checklist
 
 每次提交代码前，对照检查：
 
-- [ ] PRD「当前工程状态」是否反映最新代码能力。
-- [ ] PRD「不在当前阶段」是否已移除已完成的条目。
-- [ ] PRD「功能范围」表的状态列是否准确。
-- [ ] stage-roadmap 对应阶段的完成情况 checkbox 是否更新。
+- [ ] PRD「功能需求」表的状态列是否反映最新代码能力。
+- [ ] PROJECT_STATUS.md「已完成功能」和「待完成功能」是否准确。
 - [ ] README「当前阶段」和「当前版本包含/不包含」是否准确。
 - [ ] README「目录说明」是否与实际目录结构一致（新增/删除的文件和目录）。
-- [ ] development-playbook「当前阶段说明」是否准确。
+- [ ] DEVELOPMENT_GUIDE.md「当前阶段说明」是否准确。
 - [ ] 相关 AI 工作流文档的状态标注是否与实际一致。
 - [ ] `docs/ai-workflows/README.md` 的「当前文件」列表是否完整。
 - [ ] `docs/ai-workflows/workflow-backlog.md` 各工作流的状态标注是否准确。
@@ -230,4 +228,4 @@ npm run lint
 **状态：** 一句话描述当前阶段进展
 ```
 
-交接文档按日期命名：`iteration-handoff-YYYY-MM-DD.md`，在其中追加补充内容时标注日期。
+交接文档：历史决策和迭代日志统一记录在 `docs/product/ARCHIVED.md`，按日期追加。
