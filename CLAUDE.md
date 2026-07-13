@@ -182,3 +182,52 @@ npm run lint
 默认的继续推进口径：
 
 > 继续 WePicTool 阶段三迭代：在前端 Canvas 实现白底卡片合成（比例、主体居中、浅色衣物兜底），验证抠图效果。
+
+## 文档同步规范
+
+每次实现阶段性功能后，必须同步更新相关文档，确保文档与代码状态一致。
+
+### 触发时机
+
+以下情况必须执行文档同步：
+1. 一个阶段的里程碑功能完成后（如抠图接入、Canvas 合成完成）。
+2. 迭代交接前（写交接笔记时同步更新其他文档）。
+3. 发现文档与代码不一致时。
+
+### 变更类型 → 对应文档映射
+
+| 变更类型 | 必须更新的文档 |
+|----------|---------------|
+| 阶段里程碑完成 | `docs/product/PRD.md`（当前工程状态、功能范围表、不在当前阶段）、`docs/product/stage-roadmap.md`（完成情况）、`README.md`（当前阶段、版本包含/不包含、目录说明） |
+| AI 工作流接入或变更 | `docs/ai-workflows/` 下对应提示词文档、`matting-api-evaluation.md`、`workflow-backlog.md`（更新状态）、`docs/ai-workflows/README.md`（当前文件列表）、`docs/product/development-playbook.md`（当前阶段说明） |
+| 新页面或重大 UI 变更 | `docs/product/technical-architecture.md`（目录职责）、`CLAUDE.md`（高层架构）、`README.md`（目录说明） |
+| 新增或删除文件/目录 | `README.md`（目录说明）+ `docs/product/technical-architecture.md`（如涉及小程序核心模块） |
+| 迭代交接 | `docs/product/iteration-handoff-*.md`（新建或追加），同时同步上述所有文档 |
+| 技术决策变更（如 API 选型、架构调整） | 对应架构文档 + `development-playbook.md` 任务口径 |
+
+### 提交前 Checklist
+
+每次提交代码前，对照检查：
+
+- [ ] PRD「当前工程状态」是否反映最新代码能力。
+- [ ] PRD「不在当前阶段」是否已移除已完成的条目。
+- [ ] PRD「功能范围」表的状态列是否准确。
+- [ ] stage-roadmap 对应阶段的完成情况 checkbox 是否更新。
+- [ ] README「当前阶段」和「当前版本包含/不包含」是否准确。
+- [ ] README「目录说明」是否与实际目录结构一致（新增/删除的文件和目录）。
+- [ ] development-playbook「当前阶段说明」是否准确。
+- [ ] 相关 AI 工作流文档的状态标注是否与实际一致。
+- [ ] `docs/ai-workflows/README.md` 的「当前文件」列表是否完整。
+- [ ] `docs/ai-workflows/workflow-backlog.md` 各工作流的状态标注是否准确。
+
+### 文档版本标注规范
+
+每份文档头部统一使用：
+
+```markdown
+**版本：** v{主版本}.{次版本}
+**日期：** YYYY-MM-DD
+**状态：** 一句话描述当前阶段进展
+```
+
+交接文档按日期命名：`iteration-handoff-YYYY-MM-DD.md`，在其中追加补充内容时标注日期。

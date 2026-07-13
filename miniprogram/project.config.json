@@ -43,7 +43,7 @@
     "ignoreUploadUnusedFiles": true
   },
   "compileType": "miniprogram",
-  "libVersion": "3.3.4",
+  "libVersion": "3.16.2",
   "appid": "wxf16280c0ba5c507d",
   "projectname": "WePicTool",
   "condition": {},

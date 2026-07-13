@@ -5,6 +5,7 @@
 ## 当前文件
 
 - `classification-prompt.md`：阶段二图片部件识别提示词和返回格式。
+- `matting-prompt.md`：阶段三抠图提示词和调用方式（DashScope qwen-image-2.0）。
 - `matting-api-evaluation.md`：阶段三抠图 API 选型与测试标准。
 - `workflow-backlog.md`：后续 AI 工作流优先级和验收标准。
 

@@ -29,8 +29,8 @@ AI / 图像服务
 | `miniprogram/pages/preview/` | 微信预览页（非 Tab）：深色微信聊天风格，堆叠卡片、展开/收起、滑动切换 |
 | `miniprogram/app.json` | 全局页面路由与底部 Tab（首页 / 记录 / 我的）配置 |
 | `miniprogram/config/env.js` | CloudBase 环境 ID 和本地预览开关 |
-| `miniprogram/utils/task.js` | 阶段一任务规则、mock 分组、发送能力判断 |
-| `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 DashScope AI 分类，后续承接抠图 |
+| `miniprogram/utils/task.js` | 任务规则、mock 分组、发送能力判断、图片尺寸计算 |
+| `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 DashScope AI 分类 + 阶段三抠图（qwen-image-2.0） |
 | `docs/product/` | 产品定义、阶段路线、开发手册、技术架构 |
 | `docs/ai-workflows/` | 后续 AI 提示词、服务评估、工作流积累 |
 
