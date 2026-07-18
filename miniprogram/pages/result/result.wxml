@@ -35,7 +35,7 @@
           <view class="card-preview">
             <image
               class="card-preview-img {{expanded.tops ? 'card-preview-img-hidden' : ''}}"
-              src="{{getDisplayUrl(groups.tops[0])}}"
+              src="{{groups.tops[0].displayUrl}}"
               mode="aspectFit"
               lazy-load="true"
             />
@@ -58,20 +58,27 @@
           <scroll-view class="expanded-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
             <view class="expanded-list">
               <view class="expanded-item" wx:for="{{groups.tops}}" wx:key="resultId">
-                <image
-                  class="expanded-img"
-                  src="{{getDisplayUrl(item)}}"
-                  mode="aspectFill"
-                  bindtap="onPreviewGroupImage"
-                  data-group="tops"
-                  data-index="{{index}}"
-                  lazy-load="true"
-                />
+                <view class="expanded-img-wrap">
+                  <image
+                    class="expanded-img"
+                    src="{{item.displayUrl}}"
+                    mode="aspectFill"
+                    bindtap="onPreviewGroupImage"
+                    data-group="tops"
+                    data-index="{{index}}"
+                    lazy-load="true"
+                  />
+                  <view class="compose-mask" wx:if="{{item.composeStatus === 'composing'}}">
+                    <text class="compose-mask-text">生成中…</text>
+                  </view>
+                  <view class="matting-badge" wx:if="{{item.matted === false}}">已用原图</view>
+                </view>
                 <view class="expanded-actions">
                   <view class="expanded-action expanded-action-primary" bindtap="onToggleOriginal" data-group="tops" data-index="{{index}}">
                     {{item.showMode === 'original' ? '白底' : '原图'}}
                   </view>
                   <view class="expanded-action" bindtap="onChangeCategory" data-group="tops" data-index="{{index}}">改分类</view>
+                  <view class="expanded-action expanded-action-retry" wx:if="{{item.composeStatus === 'fail' || item.matted === false}}" bindtap="onRetryItem" data-group="tops" data-index="{{index}}">重做</view>
                 </view>
               </view>
             </view>
@@ -88,7 +95,7 @@
           <view class="card-preview">
             <image
               class="card-preview-img {{expanded.bottoms ? 'card-preview-img-hidden' : ''}}"
-              src="{{getDisplayUrl(groups.bottoms[0])}}"
+              src="{{groups.bottoms[0].displayUrl}}"
               mode="aspectFit"
               lazy-load="true"
             />
@@ -111,20 +118,27 @@
           <scroll-view class="expanded-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
             <view class="expanded-list">
               <view class="expanded-item" wx:for="{{groups.bottoms}}" wx:key="resultId">
-                <image
-                  class="expanded-img"
-                  src="{{getDisplayUrl(item)}}"
-                  mode="aspectFill"
-                  bindtap="onPreviewGroupImage"
-                  data-group="bottoms"
-                  data-index="{{index}}"
-                  lazy-load="true"
-                />
+                <view class="expanded-img-wrap">
+                  <image
+                    class="expanded-img"
+                    src="{{item.displayUrl}}"
+                    mode="aspectFill"
+                    bindtap="onPreviewGroupImage"
+                    data-group="bottoms"
+                    data-index="{{index}}"
+                    lazy-load="true"
+                  />
+                  <view class="compose-mask" wx:if="{{item.composeStatus === 'composing'}}">
+                    <text class="compose-mask-text">生成中…</text>
+                  </view>
+                  <view class="matting-badge" wx:if="{{item.matted === false}}">已用原图</view>
+                </view>
                 <view class="expanded-actions">
                   <view class="expanded-action expanded-action-primary" bindtap="onToggleOriginal" data-group="bottoms" data-index="{{index}}">
                     {{item.showMode === 'original' ? '白底' : '原图'}}
                   </view>
                   <view class="expanded-action" bindtap="onChangeCategory" data-group="bottoms" data-index="{{index}}">改分类</view>
+                  <view class="expanded-action expanded-action-retry" wx:if="{{item.composeStatus === 'fail' || item.matted === false}}" bindtap="onRetryItem" data-group="bottoms" data-index="{{index}}">重做</view>
                 </view>
               </view>
             </view>
@@ -141,7 +155,7 @@
           <view class="card-preview">
             <image
               class="card-preview-img {{expanded.shoes ? 'card-preview-img-hidden' : ''}}"
-              src="{{getDisplayUrl(groups.shoes[0])}}"
+              src="{{groups.shoes[0].displayUrl}}"
               mode="aspectFit"
               lazy-load="true"
             />
@@ -164,20 +178,27 @@
           <scroll-view class="expanded-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
             <view class="expanded-list">
               <view class="expanded-item" wx:for="{{groups.shoes}}" wx:key="resultId">
-                <image
-                  class="expanded-img"
-                  src="{{getDisplayUrl(item)}}"
-                  mode="aspectFill"
-                  bindtap="onPreviewGroupImage"
-                  data-group="shoes"
-                  data-index="{{index}}"
-                  lazy-load="true"
-                />
+                <view class="expanded-img-wrap">
+                  <image
+                    class="expanded-img"
+                    src="{{item.displayUrl}}"
+                    mode="aspectFill"
+                    bindtap="onPreviewGroupImage"
+                    data-group="shoes"
+                    data-index="{{index}}"
+                    lazy-load="true"
+                  />
+                  <view class="compose-mask" wx:if="{{item.composeStatus === 'composing'}}">
+                    <text class="compose-mask-text">生成中…</text>
+                  </view>
+                  <view class="matting-badge" wx:if="{{item.matted === false}}">已用原图</view>
+                </view>
                 <view class="expanded-actions">
                   <view class="expanded-action expanded-action-primary" bindtap="onToggleOriginal" data-group="shoes" data-index="{{index}}">
                     {{item.showMode === 'original' ? '白底' : '原图'}}
                   </view>
                   <view class="expanded-action" bindtap="onChangeCategory" data-group="shoes" data-index="{{index}}">改分类</view>
+                  <view class="expanded-action expanded-action-retry" wx:if="{{item.composeStatus === 'fail' || item.matted === false}}" bindtap="onRetryItem" data-group="shoes" data-index="{{index}}">重做</view>
                 </view>
               </view>
             </view>
@@ -194,7 +215,7 @@
           <view class="card-preview">
             <image
               class="card-preview-img {{expanded.others ? 'card-preview-img-hidden' : ''}}"
-              src="{{getDisplayUrl(groups.others[0])}}"
+              src="{{groups.others[0].displayUrl}}"
               mode="aspectFit"
               lazy-load="true"
             />
@@ -215,7 +236,7 @@
               <view class="expanded-item" wx:for="{{groups.others}}" wx:key="resultId">
                 <image
                   class="expanded-img"
-                  src="{{item.url}}"
+                  src="{{item.displayUrl}}"
                   mode="aspectFill"
                   bindtap="onPreviewGroupImage"
                   data-group="others"
@@ -268,6 +289,13 @@
         </view>
       </view>
       <view class="primary-action">
+        <!-- 比例切换 -->
+        <view class="ratio-bar" bindtap="onChangeRatio">
+          <text class="ratio-label">输出比例</text>
+          <text class="ratio-status" wx:if="{{composing}}">卡片生成中…</text>
+          <text class="ratio-value">{{ratio}}</text>
+          <text class="ratio-arrow">›</text>
+        </view>
         <!-- 新增：微信发送预览按钮 -->
         <view class="preview-btn" bindtap="onWechatPreview">
           <text class="preview-btn-text">📱 微信发送预览</text>
@@ -327,4 +355,25 @@
       <view class="action-cancel" bindtap="onCloseGroupSaveSheet">取消</view>
     </view>
   </view>
+
+  <!-- 比例选择弹窗 -->
+  <view class="action-mask {{showRatioSheet ? 'action-mask-show' : ''}}" wx:if="{{showRatioSheet}}" bindtap="onCloseRatioSheet">
+    <view class="action-panel" catchtap="onActionPanelTap">
+      <view class="action-title">选择输出比例</view>
+      <view class="action-list">
+        <view class="action-item {{ratio === item.key ? 'action-item-active' : ''}}" wx:for="{{ratioOptions}}" wx:key="key" bindtap="onSelectRatio" data-index="{{index}}">
+          <text class="action-icon">{{item.icon}}</text>
+          <view class="action-content">
+            <view class="action-name">{{item.label}}</view>
+            <view class="action-desc">{{item.desc}}</view>
+          </view>
+          <text class="action-check" wx:if="{{ratio === item.key}}">✓</text>
+        </view>
+      </view>
+      <view class="action-cancel" bindtap="onCloseRatioSheet">取消</view>
+    </view>
+  </view>
+
+  <!-- 隐藏 canvas：用于前端合成白底卡片 -->
+  <canvas type="2d" id="cardComposer" class="composer-canvas"></canvas>
 </view>

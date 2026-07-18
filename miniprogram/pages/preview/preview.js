@@ -79,7 +79,9 @@ Page({
   _getUrl: function (item) {
     if (!item) return '';
     if (typeof item === 'string') return item;
-    return item.url || item.fileId || item.localPath || '';
+    // 优先使用合成后的白底卡片
+    if (item.composedUrl) return item.composedUrl;
+    return item.url || item.mattedUrl || item.fileId || item.localPath || '';
   },
 
   // 堆叠样式计算

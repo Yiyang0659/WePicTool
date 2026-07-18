@@ -1,11 +1,18 @@
 // pages/result/result.js
 const { normalizeTaskGroups, buildSendability, GROUP_META, createMockTask } = require('../../utils/task');
+const { composeCard, DEFAULT_OPTIONS } = require('../../utils/cardComposer');
 
 const CHANGE_CATEGORY_OPTIONS = [
   { key: 'tops', label: '上衣组' },
   { key: 'bottoms', label: '下装组' },
   { key: 'shoes', label: '鞋子组' },
   { key: 'others', label: '未处理素材区' }
+];
+
+const RATIO_OPTIONS = [
+  { key: '1:1', label: '1:1', icon: '⬜', desc: '正方形，适合头像/商品' },
+  { key: '4:5', label: '4:5', icon: '📱', desc: '竖版，适合朋友圈/小红书' },
+  { key: '3:4', label: '3:4', icon: '📷', desc: '竖版，通用穿搭展示' }
 ];
 
 const GROUP_INFO = {
@@ -17,6 +24,32 @@ const GROUP_INFO = {
 
 const RECORDS_KEY = 'wepictool_records';
 const MAX_RECORDS = 20;
+
+// 计算单条结果的展示图（WXML 不支持调用 Page 方法，必须落到数据字段上）
+function computeDisplayUrl(item) {
+  if (!item) return '';
+  // 用户显式切换到原图
+  if (item.showMode === 'original') {
+    return item.originalUrl || item.url || item.fileId || item.localPath || '';
+  }
+  // 合成后的白底卡片优先
+  if (item.composedUrl) return item.composedUrl;
+  // 其次是云存储的抠图结果
+  if (item.mattedUrl) return item.mattedUrl;
+  return item.url || item.fileId || item.localPath || '';
+}
+
+// 给分组内每条结果补充 displayUrl / composeStatus 视图字段
+function decorateGroups(groups) {
+  const decorated = {};
+  Object.keys(groups || {}).forEach((key) => {
+    decorated[key] = (groups[key] || []).map((item) => Object.assign({}, item, {
+      displayUrl: computeDisplayUrl(item),
+      composeStatus: item.composeStatus || ''
+    }));
+  });
+  return decorated;
+}
 
 Page({
   data: {
@@ -39,8 +72,18 @@ Page({
     changeCategoryOptions: CHANGE_CATEGORY_OPTIONS.map(item => item.label),
     showActionSheet: false,
     showGroupSaveSheet: false,
-    availableGroups: []
+    availableGroups: [],
+    ratio: DEFAULT_OPTIONS.ratio,
+    ratioOptions: RATIO_OPTIONS,
+    showRatioSheet: false,
+    composing: false
   },
+
+  _composerCanvas: null,
+  _composerReady: false,
+  _composeToken: 0,
+  _composeChain: null,
+  _pendingTask: null,
 
   onLoad: function (options) {
     const that = this;
@@ -49,6 +92,8 @@ Page({
     }
 
     this.setData({ chatTime: this.formatChatTime(new Date()) });
+
+    this.initComposerCanvas();
 
     const eventChannel = this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
@@ -60,8 +105,39 @@ Page({
     }
   },
 
+  onReady: function () {
+    // onLoad 时页面可能尚未渲染完成，canvas 节点拿不到则在这里补一次
+    if (!this._composerReady) {
+      this.initComposerCanvas();
+    }
+  },
+
+  initComposerCanvas: function (retryCount) {
+    const that = this;
+    const attempt = retryCount || 0;
+    const query = wx.createSelectorQuery();
+    query.select('#cardComposer').fields({ node: true, size: true }).exec((res) => {
+      if (!res || !res[0] || !res[0].node) {
+        if (attempt < 2) {
+          setTimeout(() => that.initComposerCanvas(attempt + 1), 300);
+        } else {
+          console.warn('cardComposer canvas 初始化失败');
+        }
+        return;
+      }
+      that._composerCanvas = res[0].node;
+      that._composerReady = true;
+
+      // 如果初始化时任务数据已经到达，补执行合成
+      if (that._pendingTask) {
+        that._pendingTask = null;
+        that.composeAllCards(that.data.groups);
+      }
+    });
+  },
+
   parseTaskResult: function (task) {
-    const groups = normalizeTaskGroups(task.groups || {});
+    const groups = decorateGroups(normalizeTaskGroups(task.groups || {}));
     const totalCount = this.calculateTotalCount(groups);
     const isEmpty = totalCount === 0;
 
@@ -71,6 +147,205 @@ Page({
       this.hasSavedRecord = true;
       this.saveRecordToStorage(task);
     }
+
+    // 触发白底卡片合成
+    if (this._composerReady) {
+      this.composeAllCards(this.data.groups);
+    } else {
+      this._pendingTask = this.data.groups;
+    }
+  },
+
+  // 所有合成任务都经过这个串行队列：
+  // 1) 共享同一个 canvas，并行绘制会互相污染
+  // 2) 避免 iOS/Android 同时处理多张 1024px 大图导致内存峰值
+  _enqueueCompose: function (taskFn) {
+    const chain = this._composeChain || Promise.resolve();
+    const run = chain.then(() => taskFn());
+    this._composeChain = run.then(() => undefined, () => undefined);
+    return run;
+  },
+
+  composeAllCards: function (groups) {
+    if (!groups || !this._composerReady) return;
+    const that = this;
+    const ratio = this.data.ratio;
+    const token = ++this._composeToken;
+    const processable = ['tops', 'bottoms', 'shoes'];
+
+    const jobs = [];
+    processable.forEach((groupKey) => {
+      (groups[groupKey] || []).forEach((item, index) => {
+        // 已按当前比例合成成功的跳过，避免移动分类等场景重复合成
+        if (item.composeStatus === 'done' && item.composedRatio === ratio && item.composedUrl) return;
+        jobs.push({ groupKey, index, item });
+      });
+    });
+
+    if (jobs.length === 0) {
+      this.setData({ composing: false });
+      return;
+    }
+
+    this.setData({ composing: true });
+
+    const runNext = (cursor) => {
+      if (that._composeToken !== token) return; // 已被更新的合成任务（如切换比例）取代
+      if (cursor >= jobs.length) {
+        that.setData({ composing: false });
+        return;
+      }
+      const job = jobs[cursor];
+      that.setData({ [`groups.${job.groupKey}[${job.index}].composeStatus`]: 'composing' });
+      that._enqueueCompose(() => that.composeItem(job.groupKey, job.index, job.item, ratio))
+        .then((res) => {
+          if (that._composeToken !== token) return;
+          that.applyComposeSuccess(res.groupKey, res.index, res);
+        })
+        .catch((err) => {
+          if (that._composeToken !== token) return;
+          that.applyComposeFailure(job.groupKey, job.index, err);
+        })
+        .then(() => runNext(cursor + 1));
+    };
+
+    runNext(0);
+  },
+
+  composeItem: function (groupKey, index, item, ratio) {
+    if (!item) return Promise.reject(new Error('item 为空'));
+
+    // 优先用抠图结果（matted/ 透明主体图）合成；抠图失败的图用原图兜底，不影响整批
+    const sourceUrl = item.mattedUrl || item.url || item.fileId || item.localPath;
+    if (!sourceUrl) return Promise.reject(new Error('无可用图片源'));
+
+    return composeCard(this._composerCanvas, {
+      sourceUrl: sourceUrl,
+      category: groupKey,
+      ratio: ratio,
+      background: '#FFFFFF',
+      enhanceLightColor: true,
+      canvasSize: 1024
+    }).then((result) => ({
+      groupKey,
+      index,
+      tempFilePath: result.tempFilePath,
+      ratio: result.ratio,
+      width: result.width,
+      height: result.height
+    }));
+  },
+
+  applyComposeSuccess: function (groupKey, index, res) {
+    const base = `groups.${groupKey}[${index}]`;
+    const current = (this.data.groups[groupKey] || [])[index];
+    const merged = Object.assign({}, current, {
+      composedUrl: res.tempFilePath,
+      composedRatio: res.ratio,
+      composeStatus: 'done'
+    });
+    this.setData({
+      [`${base}.composedUrl`]: res.tempFilePath,
+      [`${base}.composedRatio`]: res.ratio,
+      [`${base}.composeStatus`]: 'done',
+      [`${base}.composeError`]: '',
+      [`${base}.displayUrl`]: computeDisplayUrl(merged)
+    });
+  },
+
+  applyComposeFailure: function (groupKey, index, err) {
+    console.warn(`白底卡片合成失败 ${groupKey}[${index}]:`, err);
+    const base = `groups.${groupKey}[${index}]`;
+    this.setData({
+      [`${base}.composeStatus`]: 'fail',
+      [`${base}.composeError`]: (err && err.message) || '合成失败'
+    });
+  },
+
+  // 失败图「重做」入口
+  onRetryItem: function (e) {
+    const groupKey = e.currentTarget.dataset.group;
+    const index = parseInt(e.currentTarget.dataset.index, 10);
+    const item = (this.data.groups[groupKey] || [])[index];
+    if (!item) return;
+
+    // 抠图失败且存在云端原图：先重走一次云端抠图，再重新合成
+    const cloudSource = this.getCloudSource(item);
+    if (item.matted === false && cloudSource && wx.cloud) {
+      this.retryMatting(groupKey, index, item, cloudSource);
+      return;
+    }
+    // 否则仅重新合成（合成失败重试 / 本地预览图无云端源）
+    this.retryCompose(groupKey, index, item);
+  },
+
+  getCloudSource: function (item) {
+    if (!item) return '';
+    if (item.originalFileId && item.originalFileId.indexOf('cloud://') === 0) return item.originalFileId;
+    if (item.originalUrl && item.originalUrl.indexOf('cloud://') === 0) return item.originalUrl;
+    if (item.fileId && item.fileId.indexOf('cloud://') === 0) return item.fileId;
+    return '';
+  },
+
+  retryCompose: function (groupKey, index, item) {
+    const that = this;
+    if (!this._composerReady) {
+      wx.showToast({ title: '合成器未就绪，请稍后重试', icon: 'none' });
+      return;
+    }
+    const base = `groups.${groupKey}[${index}]`;
+    this.setData({ [`${base}.composeStatus`]: 'composing' });
+    this._enqueueCompose(() => that.composeItem(groupKey, index, item, that.data.ratio))
+      .then((res) => that.applyComposeSuccess(groupKey, index, res))
+      .catch((err) => that.applyComposeFailure(groupKey, index, err));
+  },
+
+  // 单图重调 processOutfit 做一次真实抠图重做；仍失败则原图合成兜底
+  retryMatting: function (groupKey, index, item, cloudSource) {
+    const that = this;
+    const base = `groups.${groupKey}[${index}]`;
+    this.setData({ [`${base}.composeStatus`]: 'composing' });
+    wx.showLoading({ title: '正在重做抠图...', mask: true });
+    wx.cloud.callFunction({
+      name: 'processOutfit',
+      data: {
+        images: [{
+          imageId: item.sourceImageId || 'retry_image_1',
+          fileId: cloudSource,
+          url: cloudSource
+        }]
+      },
+      success: (res) => {
+        wx.hideLoading();
+        const result = res && res.result && res.result.results && res.result.results[0];
+        const latest = (that.data.groups[groupKey] || [])[index] || item;
+        if (result && result.matted && result.mattedUrl) {
+          const merged = Object.assign({}, latest, {
+            matted: true,
+            type: 'matted',
+            mattedUrl: result.mattedUrl,
+            mattedFileId: result.mattedFileId || result.mattedUrl
+          });
+          that.setData({
+            [`${base}.matted`]: true,
+            [`${base}.type`]: 'matted',
+            [`${base}.mattedUrl`]: result.mattedUrl,
+            [`${base}.mattedFileId`]: result.mattedFileId || result.mattedUrl
+          }, () => that.retryCompose(groupKey, index, merged));
+          return;
+        }
+        // 抠图仍失败：保留原图合成兜底，不阻断其他结果
+        wx.showToast({ title: '抠图仍失败，已用原图合成', icon: 'none' });
+        that.retryCompose(groupKey, index, latest);
+      },
+      fail: (err) => {
+        wx.hideLoading();
+        console.warn('重做抠图失败:', err);
+        const latest = (that.data.groups[groupKey] || [])[index] || item;
+        wx.showToast({ title: '抠图重做失败，已用原图合成', icon: 'none' });
+        that.retryCompose(groupKey, index, latest);
+      }
+    });
   },
 
   calculateTotalCount: function (groups) {
@@ -84,13 +359,37 @@ Page({
   },
 
   getDisplayUrl: function (item) {
+    return computeDisplayUrl(item);
+  },
+
+  getSaveUrl: function (item) {
     if (!item) return '';
-    if (item.matted) {
-      var mode = item.showMode || 'matted';
-      if (mode === 'original' && item.originalUrl) return item.originalUrl;
-      return item.mattedUrl || item.url || item.originalUrl || '';
+    // 保存时优先用合成后的白底卡片
+    if (item.composedUrl) return item.composedUrl;
+    return this.getDisplayUrl(item);
+  },
+
+  // 比例切换
+  onChangeRatio: function () {
+    this.setData({ showRatioSheet: true });
+  },
+
+  onCloseRatioSheet: function () {
+    this.setData({ showRatioSheet: false });
+  },
+
+  onSelectRatio: function (e) {
+    const index = parseInt(e.currentTarget.dataset.index, 10);
+    const selected = RATIO_OPTIONS[index];
+    if (!selected || selected.key === this.data.ratio) {
+      this.setData({ showRatioSheet: false });
+      return;
     }
-    return item.url || item.fileId || item.localPath || '';
+
+    this.setData({ ratio: selected.key, showRatioSheet: false }, () => {
+      // 切换比例后整批重新合成（旧任务通过 token 自动作废）
+      this.composeAllCards(this.data.groups);
+    });
   },
 
   onToggleExpand: function (e) {
@@ -102,10 +401,14 @@ Page({
     const groupKey = e.currentTarget.dataset.group;
     const index = parseInt(e.currentTarget.dataset.index, 10);
     const item = this.data.groups[groupKey][index];
-    if (!item || !item.matted) return;
-    var current = item.showMode || 'matted';
-    var next = current === 'matted' ? 'original' : 'matted';
-    this.setData({ [`groups.${groupKey}[${index}].showMode`]: next });
+    if (!item) return;
+    var current = item.showMode || 'composed';
+    var next = current === 'composed' ? 'original' : 'composed';
+    var merged = Object.assign({}, item, { showMode: next });
+    this.setData({
+      [`groups.${groupKey}[${index}].showMode`]: next,
+      [`groups.${groupKey}[${index}].displayUrl`]: computeDisplayUrl(merged)
+    });
   },
 
   onChangeCategory: function (e) {
@@ -155,11 +458,28 @@ Page({
         type: targetGroupKey
       });
     }
+    // 分组锚点变化，旧的合成结果不再适用
+    item.composedUrl = '';
+    item.composedRatio = '';
+    item.composeStatus = '';
     groups[targetGroupKey].push(item);
 
-    const normalizedGroups = normalizeTaskGroups(groups);
+    // 取消进行中的整批合成：移动后各组索引已变化，旧任务的写入位置会错位
+    this._composeToken += 1;
+    ['tops', 'bottoms', 'shoes'].forEach((key) => {
+      (groups[key] || []).forEach((groupItem) => {
+        if (groupItem.composeStatus === 'composing') groupItem.composeStatus = '';
+      });
+    });
+
+    const normalizedGroups = decorateGroups(normalizeTaskGroups(groups));
     const totalCount = this.calculateTotalCount(normalizedGroups);
     this.setData({ groups: normalizedGroups, totalCount, isEmpty: totalCount === 0 });
+
+    // 按新分组锚点重新合成未完成项（已按当前比例合成好的会被跳过）
+    if (this._composerReady) {
+      this.composeAllCards(this.data.groups);
+    }
 
     wx.showToast({ title: `已移到${this.getCategoryLabel(targetGroupKey)}`, icon: 'none' });
   },
@@ -190,7 +510,8 @@ Page({
         navRes.eventChannel.emit('acceptTaskData', {
           task: {
             taskId: that.data.taskId,
-            groups: that.data.groups
+            groups: that.data.groups,
+            ratio: that.data.ratio
           }
         });
       }
@@ -221,6 +542,9 @@ Page({
     this.setData({ showActionSheet: false });
     const allUrls = this.getAllImageUrls();
     if (allUrls.length === 0) return;
+    if (this.data.composing) {
+      wx.showToast({ title: '白底卡片生成中，已生成的优先保存', icon: 'none' });
+    }
     this.saveImagesSequentially(allUrls, '全部图片保存完成');
   },
 
@@ -246,6 +570,9 @@ Page({
     this.setData({ showGroupSaveSheet: false });
     const urls = this.getGroupUrls(groupKey);
     if (urls.length === 0) return;
+    if (this.data.composing) {
+      wx.showToast({ title: '白底卡片生成中，已生成的优先保存', icon: 'none' });
+    }
     this.saveImagesSequentially(urls, `${GROUP_INFO[groupKey].title}保存完成`);
   },
 
@@ -256,7 +583,7 @@ Page({
   },
 
   getGroupUrls: function (groupName) {
-    return (this.data.groups[groupName] || []).map(item => this.getDisplayUrl(item)).filter(Boolean);
+    return (this.data.groups[groupName] || []).map(item => this.getSaveUrl(item)).filter(Boolean);
   },
 
   saveImagesSequentially: function (urls, successTitle) {

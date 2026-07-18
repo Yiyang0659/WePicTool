@@ -283,8 +283,52 @@ page {
 
 .expanded-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   margin-top: 12rpx;
   gap: 12rpx;
+}
+
+/* 合成状态：图片容器 / 生成中遮罩 / 抠图失败角标 */
+.expanded-img-wrap {
+  position: relative;
+  width: 200rpx;
+  height: 200rpx;
+}
+
+.compose-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.65);
+  border-radius: 12rpx;
+}
+
+.compose-mask-text {
+  font-size: 22rpx;
+  color: #666666;
+}
+
+.matting-badge {
+  position: absolute;
+  left: 8rpx;
+  bottom: 8rpx;
+  font-size: 20rpx;
+  color: #d48806;
+  background-color: rgba(255, 247, 230, 0.95);
+  padding: 2rpx 10rpx;
+  border-radius: 8rpx;
+}
+
+.expanded-action-retry {
+  color: #ff3b30;
+  background-color: rgba(255, 59, 48, 0.08);
+  border-color: rgba(255, 59, 48, 0.3);
 }
 
 .expanded-action {
@@ -394,6 +438,46 @@ page {
   width: 100%;
 }
 
+/* 比例切换条 */
+.ratio-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 72rpx;
+  background-color: #f7f7f7;
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+}
+
+.ratio-label {
+  font-size: 26rpx;
+  color: #666666;
+}
+
+.ratio-status {
+  font-size: 22rpx;
+  color: #999999;
+  margin-left: 16rpx;
+}
+
+.ratio-value {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #07c160;
+  flex: 1;
+  text-align: right;
+  margin-right: 12rpx;
+}
+
+.ratio-arrow {
+  font-size: 28rpx;
+  color: #999999;
+  transform: rotate(90deg);
+}
+
 /* 微信发送预览按钮 */
 .preview-btn {
   display: flex;
@@ -440,6 +524,17 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: #ffffff;
+}
+
+/* 隐藏 canvas：用于前端合成白底卡片 */
+.composer-canvas {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* 底部弹窗 */
@@ -502,6 +597,10 @@ page {
   background-color: #f5f5f5;
 }
 
+.action-item-active {
+  background-color: rgba(7, 193, 96, 0.08);
+}
+
 .action-icon {
   font-size: 44rpx;
   margin-right: 24rpx;
@@ -510,6 +609,7 @@ page {
 .action-content {
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
 
 .action-name {
@@ -521,6 +621,12 @@ page {
 .action-desc {
   font-size: 24rpx;
   color: #999999;
+}
+
+.action-check {
+  font-size: 32rpx;
+  color: #07c160;
+  margin-left: 16rpx;
 }
 
 .action-cancel {
