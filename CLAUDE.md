@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-WePicTool 是一个微信小程序，用于帮助用户生成穿搭参考图。用户选择 1–9 张衣服/鞋子图片后，小程序会进行压缩并上传到微信云开发（CloudBase），云函数返回分组结果（上衣组/下装组/鞋子组/未处理素材区），用户可以保存到相册并回微信发送给朋友参考。
+WePicTool 是一个微信小程序，定位为**微信「合并发送 / 叠图」玩法生成器**——穿搭白底卡是旗舰功能，玩法模板库是长期资产（2026-07-18 定位升级，详见 `docs/product/PLAYBOOK.md`）。穿搭主链路：用户选择 1–9 张衣服/鞋子图片后，小程序会进行压缩并上传到微信云开发（CloudBase），云函数返回分组结果（上衣组/下装组/鞋子组/未处理素材区），前端 Canvas 合成白底卡片，用户可以保存到相册并回微信发送给朋友参考。
 
 本仓库同时包含一个 AI Studio / Vite 演示应用（位于 `src/` 和 `dist/`），但真正交付的产品是 `miniprogram/` 下的微信小程序。`src/` 和 `dist/` 不是小程序上传的必需内容，已被 `project.config.json` 忽略。
 
@@ -84,6 +84,10 @@ npm run lint
   - 包含 `createMockTask`、`buildSendability`、`normalizeTaskGroups`、`calculateTargetSize`、`isCloudPermissionError`。
   - `buildSendability` 判断每组是否能形成微信叠图效果，阈值为 3 张。当每组都不足 3 张但总素材数不少于 3 张时，会展示降级提示。
 
+- `miniprogram/utils/cardComposer.js`
+  - 前端 Canvas 白底卡片合成工具：1:1 / 4:5 / 3:4 三种比例、分组视觉锚点（上衣偏中上 / 下装偏中下 / 鞋子居中偏下）、主体最长边占画布 78%-86%、浅色衣物轻阴影 + 细描边兜底。
+  - 结果页通过串行合成队列调用（避免共享 canvas 污染和内存风险）。
+
 - `miniprogram/cloudfunctions/processOutfit/index.js`
   - 云函数入口。已完成阶段二 AI 分类（DashScope `qwen-vl-plus`）和阶段三抠图（DashScope `qwen-image-2.0`）。
   - 抠图结果上传到云存储 `matted/` 目录，返回 `mattedUrl` 供前端展示。
@@ -144,6 +148,7 @@ npm run lint
 
 - `README.md` — 项目总览、目录结构、本地测试、CloudBase 接入和阶段一验收。
 - `docs/product/PRD.md` — 产品需求、用户画像、MVP 定义、功能需求（F-01~F-55）、开发红线。
+- `docs/product/PLAYBOOK.md` — 叠图玩法实现手册：平台事实、统一叠图管线、9 个模块实现卡（对标效果/输入输出/技术路径/验收标准）、阶段六~九上线节奏、埋点方案。
 - `docs/product/PROJECT_STATUS.md` — 当前阶段、已完成功能、待完成功能、历史更新。
 - `docs/product/TECHNICAL_SPEC.md` — 技术选型、系统架构、数据模型、接口定义、处理流程、状态机、错误处理。
 - `docs/product/DEVELOPMENT_GUIDE.md` — 开发任务模板、当前阶段任务口径、验收标准、环境配置。
@@ -156,7 +161,7 @@ npm run lint
 
 - MVP 不做登录、历史记录、付费、账号体系。
   - 注：当前已加入**本地轻量记录**（`pages/record`），数据仅存设备本地、不同步、不上云、不关联账号，属于体验增强而非历史账号体系。
-- 不把表情包、心情状态图、日常合集放入主入口。
+- 新玩法红线（2026-07-18 起，详见 PLAYBOOK 第 2 章）：所有新玩法必须走统一叠图管线；整蛊只做可爱反转；用户输入文字必须过 msgSecCheck；不加水印；每叠最少 3 张卡。旧的"不把表情包、心情状态图、日常合集放入主入口"限制已随定位升级解除，但这些形态必须作为叠图玩法模板实现，不做独立功能。
 - 不构建复杂画布编辑器。
 - 不承诺多图一键直发微信聊天。
 - 单张图片失败不能阻断整批任务。
@@ -177,11 +182,11 @@ npm run lint
 
 ## 当前迭代方向
 
-项目当前处于阶段三：阶段二 AI 分类已完成（DashScope `qwen-vl-plus`），阶段三抠图已接入（DashScope `qwen-image-2.0`），白底卡片合成待实现。小程序 UI 已升级为底部三 Tab（首页 / 记录 / 我的），结果页为白色聊天风格，新增深色微信预览页。详细状态见 `docs/product/PROJECT_STATUS.md`，历史决策见 `docs/product/ARCHIVED.md`。
+项目定位已升级为**微信叠图玩法生成器**（2026-07-18），穿搭白底卡是旗舰功能。当前处于阶段三收尾：阶段二 AI 分类已完成（DashScope `qwen-vl-plus`），阶段三抠图已接入（DashScope `qwen-image-2.0`），前端 Canvas 白底卡片合成已实现（cardComposer.js + 结果页比例切换 + 失败重做），**待真机验收**。详细状态见 `docs/product/PROJECT_STATUS.md`，玩法规划见 `docs/product/PLAYBOOK.md`，历史决策见 `docs/product/ARCHIVED.md`。
 
 默认的继续推进口径：
 
-> 继续 WePicTool 阶段三迭代：在前端 Canvas 实现白底卡片合成（比例、主体居中、浅色衣物兜底），验证抠图效果。
+> 先完成阶段三真机验收（保存相册、比例切换、浅色衣物可辨认度、iOS+Android 内存），通过后按 PLAYBOOK.md 进入阶段六（大字滑卡 + 剧情滑卡模板引擎）。
 
 ## 文档同步规范
 
