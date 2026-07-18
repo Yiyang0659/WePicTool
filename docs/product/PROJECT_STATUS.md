@@ -8,6 +8,8 @@
 
 **阶段三：白底卡片生成** — 进行中
 
+> 产品定位已于 2026-07-18 升级为"微信叠图玩法生成器"，玩法实现口径见 `PLAYBOOK.md`。
+
 - 阶段一工程骨架：已完成
 - 阶段二 AI 分类：已完成
 - 阶段三抠图：已接入（DashScope qwen-image-2.0）
@@ -109,6 +111,13 @@
 
 > 本区块记录每次迭代的上下文，供新窗口快速了解上次做了什么。
 
+### 2026-07-18（定位升级）
+
+- **做了什么：** 产品定位升级为"微信叠图玩法生成器"——穿搭白底卡是旗舰功能，玩法模板库是长期资产。新增 `docs/product/PLAYBOOK.md`（平台事实、统一 6 段叠图管线、9 个模块实现卡、阶段六~九上线节奏）；PRD 定位章节最小改写并替换红线；TECHNICAL_SPEC 新增第 12 节叠图玩法管线技术规格；README 文档入口更新；删除 `docs/WePicTool_功能模块规划.md`（内容已全部并入 PLAYBOOK，避免双份真相源）。
+- **改了哪些文件：** docs/product/PLAYBOOK.md（新增）、docs/product/PRD.md、docs/product/TECHNICAL_SPEC.md、docs/product/PROJECT_STATUS.md、README.md、docs/WePicTool_功能模块规划.md（删除）。
+- **关键决策：** 翻页动画采纳"素材库先行 + 云托管 ffmpeg 自定义抽帧"双路线（云托管为容器制可跑 ffmpeg，绕开 CloudBase 云函数原生模块限制；路线②上线前需做抽帧验证）；回流引导卡进入统一底座（末卡"用 WePicTool 做同款"，可开关，埋点单独统计）；≥3 张硬约束（不足自动补封面卡/引导卡）；资料打包"按时间分组"降级（`wx.chooseMedia` 拿不到可靠拍摄时间，v1 只做手动分组，时间分组标记待验证）；保存文件名编号（01、02……）+ 发送引导教用户按编号勾选，是控制叠图顺序的唯一手段。
+- **下一步：** 阶段三真机验收（iOS + Android），通过后按 `PLAYBOOK.md` 进入阶段六（大字滑卡 + 剧情滑卡）。
+
 ### 2026-07-18
 
 - **做了什么：** 完成阶段三前端 Canvas 白底卡片合成开发。结果页接入 cardComposer（串行合成队列 + 取消机制），支持 1:1 / 4:5 / 3:4 比例切换并整批重合成，白底卡片接入单张/按组保存链路，抠图失败图显示「重做」按钮（单图重调 processOutfit），浅色衣物轻阴影+细描边兜底生效；修复 WXML 函数调用绑定不渲染的关键 bug，preview 页优先展示合成卡片。check:syntax、check:miniprogram 均通过。
@@ -127,4 +136,4 @@
 
 ## 8. 下次迭代入口
 
-见 `DEVELOPMENT_GUIDE.md`「当前阶段任务口径」。
+阶段三真机验收（iOS + Android，口径见 `DEVELOPMENT_GUIDE.md` 阶段三验收标准）→ 通过后按 `PLAYBOOK.md` 阶段六执行（大字滑卡 + 剧情滑卡）。

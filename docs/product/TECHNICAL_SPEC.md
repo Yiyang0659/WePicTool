@@ -1,8 +1,8 @@
 # WePicTool 技术方案设计
 
-**版本：** v2.0
-**日期：** 2026-07-13
-**状态：** 覆盖阶段一到阶段三已有接口与实现
+**版本：** v2.1
+**日期：** 2026-07-18
+**状态：** 覆盖阶段一到阶段三已有接口与实现；新增第 12 节叠图玩法管线技术规格（定位升级）
 
 ---
 
@@ -537,6 +537,82 @@ cloud://cloud1-d0g1blfsde474b168/
 | 大图片上传慢 | 无进度提示 | 分片上传或进度回调 |
 | 图片清理策略 | 云存储文件无自动过期 | 配置 CloudBase 过期规则（24-72 小时） |
 | 前端 Canvas 大图内存 | 待验证 | 监控 iOS/Android 内存占用，必要时降级 |
+
+---
+
+## 12. 叠图玩法管线技术规格
+
+> 2026-07-18 定位升级新增。本节定义统一叠图管线的技术契约，玩法实现口径见 `PLAYBOOK.md` 第 3、4 章。以下能力除已标注"已有"的组件外均为待实现。
+
+### 12.1 玩法模板注册表
+
+每个玩法是一个注册项，新玩法 = 新增注册项并接入管线既有组件：
+
+```js
+// miniprogram/utils/playTemplates.js（待新增）
+{
+  id: 'big-text',              // 玩法唯一 ID，同时作为埋点 moduleId
+  name: '大字滑卡',
+  inputType: 'text',           // text | images | template-params | mixed
+  composeFn: 'composeBigText', // 卡片生成函数名（前端 Canvas）
+  cardCountRule: '每张 1 个字',
+  minCards: 3,                 // ≥3 张硬约束（微信合并展示触发下限）
+  fallbackStrategy: 'padCoverGuide', // 不足 minCards 时自动补封面卡 + 引导卡
+  trackDimension: { moduleId: 'big-text', templateId: null }
+}
+```
+
+### 12.2 6 段管线与现有代码对应关系
+
+| 管线段 | 职责 | 对应代码 / 复用情况 |
+| --- | --- | --- |
+| 1. 输入器 | 选图 / 文字 / 模板参数 | 各玩法页面新增；图片输入复用 `pages/index` 的 `wx.chooseMedia` + 压缩链路 |
+| 2. 卡片生成器 | 前端 Canvas 批量渲染卡片 | 复用 `miniprogram/utils/cardComposer.js`（导出 `composeCard`、`RATIO_MAP`、`GROUP_ANCHOR`、`DEFAULT_OPTIONS`）；文字类玩法按同一模式新增 compose 函数 |
+| 3. 叠图预览 | 微信聊天效果预览 | 复用 `pages/preview`（深色微信聊天风格：堆叠卡片、展开/收起、滑动切换），通过 `eventChannel` 传入图组数据 |
+| 4. 编号保存 | 文件名 01、02…… 控制发送顺序 | 复用 `pages/result` 的 `saveImagesSequentially(urls, successTitle)`，需抽为通用组件并叠加文件名编号 |
+| 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 在现有发送引导（`pages/result` 保存完成后的引导）基础上改版为通用浮层组件 |
+| 6. 回流引导卡 | 末卡"用 WePicTool 做同款"，可开关 | 新增回流卡生成器（Canvas 模板），开关状态本地存储，埋点单独统计 |
+
+### 12.3 msgSecCheck 云函数接入点
+
+- 所有用户输入文字（大字滑卡文案、剧情滑卡称呼、盲盒抽卡自定义选项等）在生成卡片前统一过 `msgSecCheck`。
+- 接入点放**云函数侧统一封装**：在 `cloudfunctions/` 新增（或在 `processOutfit` 旁独立）一个内容安全检测函数，前端在"生成"动作前调用；检测不通过则拦截并提示修改，不落盘、不生成卡片。
+- 前端不得绕过该检测直接渲染用户文字到卡片。
+
+### 12.4 翻页动画云托管 ffmpeg 备注
+
+- 路线①素材库先行：预置动作帧序列，纯前端，无云端依赖。
+- 路线②自定义抽帧：走**云托管**（容器制，可跑 ffmpeg）执行视频/GIF 抽帧并回传帧序列，绕开 CloudBase 云函数不支持原生 C++ 模块的限制（与 sharp 错误码 145 同因，见 1.1 节）。
+- 帧数甜点区间 8–12 帧，上限 24 帧。
+- 路线②上线前必须完成一次云托管抽帧验证（耗时 / 回传体积 / 费用），验证结论回填 `PROJECT_STATUS.md`。
+
+### 12.5 埋点事件总表
+
+已有 8 个事件（阶段五口径）：
+
+| 事件 | 说明 |
+| --- | --- |
+| `task_created` | 任务创建 |
+| `classification_completed` | AI 分类完成 |
+| `category_changed` | 用户改分类 |
+| `task_completed` | 任务完成 |
+| `group_saved` | 按组保存 |
+| `result_saved` | 结果保存 |
+| `share_guide_clicked` | 点击分享/发送引导 |
+| `retry_triggered` | 触发重试/重做 |
+
+定位升级新增 6 个事件：
+
+| 事件 | 说明 |
+| --- | --- |
+| `module_entered` | 进入某功能模块（带模块 ID） |
+| `template_used` | 使用某玩法模板（带模板 ID） |
+| `stack_saved` | 一叠图保存完成（带张数、玩法类型） |
+| `send_guide_completed` | 看完发送引导并去发送 |
+| `reflow_card_impression` | 回流引导卡随叠图生成/预览曝光 |
+| `reflow_card_toggled` | 用户打开/关闭回流引导卡开关 |
+
+玩法漏斗：`module_entered` → `template_used` → `stack_saved` → `send_guide_completed` → 分享转化。
 
 ---
 
