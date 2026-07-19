@@ -695,3 +695,42 @@ expanded --点单张--> viewer（黑底大图，点任意处关闭）
 | 分组预览 | 按组展示结果 | 返回结果元数据 | 用户看不懂怎么发微信，分类后组内不足 3 张 | 模拟微信叠图效果 + 发送效果校验 + 降级提醒 |
 | 轻编辑 | 改分类、删除、排序、重做 | 按参数重新渲染 | 状态复杂 | 编辑项收敛为固定参数 |
 | 保存/分享 | 下载本地临时路径，调用保存能力 | 无或生成最终图 | 批量保存失败、授权失败 | 队列保存，失败重试，授权引导 |
+
+
+---
+
+## 附录 B：抠图模型备选清单（2026-07-19 实测）
+
+### B.1 当前在用
+
+- **默认模型：`qwen-image-edit-plus`**（写在 `processOutfit/index.js` 的 `MATTING_MODEL` 默认值里）
+- 云函数环境变量 `DASHSCOPE_MATTING_MODEL` 可覆盖默认值，**优先级最高**——改模型不用重新部署代码，但反过来：若环境变量残留旧值，改代码默认值不会生效。
+- 分类模型固定为 `qwen-vl-plus`（不在本附录范围）。
+
+### B.2 可用模型（与云函数请求形态兼容，实测出图正常）
+
+实测条件：真实 API Key、multimodal-generation 同步端点、浅色 T 恤商品图；结果图均去背干净、纯白底、浅色衣物轮廓完整（存于 `scripts/.matting-test-out/`，可用 `scripts/test-matting-models.cjs` 复测）。
+
+| 优先级 | 模型 | 单张耗时 | 免费额度（2026-07-19） | 备注 |
+| --- | --- | --- | --- | --- |
+| 1（当前默认） | `qwen-image-edit-plus` | ~7s | 剩 100/100，2026-08-31 过期 | 速度快、额度满，首选 |
+| 2 | `qwen-image-2.0` | ~5s | **仅剩 10/100**，2026-08-31 过期 | 最快但额度告急，只作应急 |
+| 3 | `qwen-image-edit` | ~17.5s | 剩 99/100，2026-08-31 过期 | 质量与 plus 相当，慢 |
+| 4 | `qwen-image-2.0-pro` | ~15s | 剩 98/100，2026-08-31 过期 | 备用 |
+
+> 额度为全账号共享、会随调用消耗，切换前建议先到百炼「用量 & 费用 → 免费额度」页确认最新余量。
+> 账号开启了「免费额度用完即停（FreeTierOnly）」：某模型额度耗尽后调用返回 **403 `AllocationQuota.FreeTierOnly`**，表现为结果页全部卡片「已用原图」——出现此症状先查额度再换模型。
+
+### B.3 不可用模型（勿选）
+
+| 模型 | 失败原因 |
+| --- | --- |
+| `wanx-v1` | 文生图模型，走 text2image image-synthesis 异步任务 API，与本端点不兼容，报 400 `InvalidParameter: url error`（额度 500 再多也用不了） |
+| `qwen-image-edit-plus-2025-11-25` | 快照型号未开放，报 400 `InvalidParameter: Model not exist.` |
+
+### B.4 换模型操作（二选一）
+
+1. **免部署**：开发者工具 → 云开发控制台 → 云函数 → `processOutfit` → 配置 → 环境变量，把 `DASHSCOPE_MATTING_MODEL` 改为上表任一可用模型名，保存即生效；
+2. **改代码**：改 `processOutfit/index.js` 中 `MATTING_MODEL` 默认值，然后重新「上传并部署」。
+
+换完后建议本地先验证：`DASHSCOPE_API_KEY=sk-xxx node scripts/test-matting-models.cjs [图片路径]`。

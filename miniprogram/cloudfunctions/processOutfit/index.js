@@ -260,8 +260,12 @@ async function classifyImageWithDashScope(imageInput, apiKey) {
 
 const MATTING_PROMPT = '对这张图片进行抠图，去除原背景，将背景替换为纯白色，保留主体的完整轮廓，确保边缘干净';
 
-// 抠图模型：默认 wanx-v1（2026-07-19 起试用），可在云函数环境变量 DASHSCOPE_MATTING_MODEL 中覆盖
-const MATTING_MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'wanx-v1';
+// 抠图模型：默认 qwen-image-edit-plus（2026-07-19 本地批量实测：qwen-image-edit / qwen-image-edit-plus /
+// qwen-image-2.0 / qwen-image-2.0-pro 均可用，edit-plus 速度最快约 7s/张 且免费额度充足；
+// wanx-v1 是文生图模型，与本端点不兼容，已弃用）。
+// 可在云函数环境变量 DASHSCOPE_MATTING_MODEL 中覆盖——注意该变量优先级最高，
+// 若被设成 wanx-v1 等不兼容模型，改代码默认值也不会生效
+const MATTING_MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'qwen-image-edit-plus';
 
 async function mattingImageWithDashScope(imageInput, apiKey) {
   const maxRetries = 1;
@@ -318,6 +322,10 @@ async function mattingImageWithDashScope(imageInput, apiKey) {
       throw new Error('抠图未返回图片');
     } catch (err) {
       console.error(`抠图${attempt > 0 ? '重试' : ''}失败:`, err.message);
+      if (err.response) {
+        console.error('DashScope 抠图错误状态码:', err.response.status);
+        console.error('DashScope 抠图错误响应:', JSON.stringify(err.response.data));
+      }
 
       // 限流错误（429）等待更久再重试
       if (err.response && err.response.status === 429 && attempt < maxRetries) {

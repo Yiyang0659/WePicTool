@@ -145,6 +145,23 @@
 - **关键决策：** 记录去重以 taskId 为唯一键而非 recordId/时间戳；预览页亮色为默认（用户口径"背景改为白色"），暗色不删仅作切换项。
 - **下一步：** 真机核对：记录页查看往返不再重复、预览页返回/主题切换/长按手势；阶段三真机验收仍是阻塞项。
 
+### 2026-07-19（抠图模型批量实测：默认切 qwen-image-edit-plus）
+
+- **背景：** 用户反馈生图仍全是「已用原图」。排查确认代码默认已是 `qwen-image-edit`，但线上疑似未重新部署，或云函数环境变量 `DASHSCOPE_MATTING_MODEL` 仍残留 `wanx-v1`（该变量优先级高于代码默认值）。
+- **实测（新增 `scripts/test-matting-models.cjs` 批量对比，真实 API Key、与云函数同请求形态、浅色 T 恤商品图）：** `qwen-image-edit` ✅(17.5s)、`qwen-image-edit-plus` ✅(7.0s)、`qwen-image-2.0-pro` ✅(14.8s)、`qwen-image-2.0` ✅(5.1s)、`qwen-image-edit-plus-2025-11-25` ❌(400 Model not exist)。四张结果图目检均去背干净、纯白底、浅色衣物轮廓完整。
+- **默认模型切换：** `qwen-image-edit` → `qwen-image-edit-plus`——速度快 2.5 倍（7s vs 17.5s，9 张批量时显著降低云函数超时风险）、免费额度满额 100/100、质量相当。
+- **改了哪些文件：** `miniprogram/cloudfunctions/processOutfit/index.js`（默认模型 + 注释强调环境变量优先级陷阱）、`scripts/test-matting-models.cjs`（新增批量测试脚本）、`scripts/test-wanx.cjs`（默认模型对齐）、`.gitignore`（忽略测试输出目录）、`docs/product/TECHNICAL_SPEC.md`（新增附录 B「抠图模型备选清单」，含各模型耗时/额度/切换方法，供额度不足时换模型参考）；本文件。
+- **下一步：** ① 开发者工具检查 processOutfit 环境变量，若 `DASHSCOPE_MATTING_MODEL=wanx-v1` 则删除；② 重新「上传并部署」processOutfit；③ 真机全链路验收（阶段三阻塞项）。
+
+### 2026-07-19（抠图模型修复：wanx-v1 → qwen-image-edit）
+
+- **背景：** 真机验收发现所有卡片均显示「已用原图」——分类正常（分组正确），抠图全部失败走兜底。
+- **根因：** 当日早些时候应用户要求把抠图模型切换为 `wanx-v1`，但 wanx-v1 是文生图模型，官方走 text2image image-synthesis 异步任务 API，与云函数使用的 multimodal-generation 同步端点不兼容。本地 `scripts/test-wanx.cjs` 实测：wanx-v1 报 400 `InvalidParameter: url error`。
+- **实测结论（同请求形态、真实 API Key）：** `qwen-image-edit` ✅、`qwen-image-edit-plus` ✅、`qwen-image-2.0` ✅、`qwen-image-2.0-pro` ✅、`wanx-v1` ❌。结果图已下载目检，去背干净、纯白底。
+- **额度考量：** 百炼免费额度页显示 `qwen-image-2.0` 仅剩 10/100（账号开了 FreeTierOnly，耗尽即 403）；`qwen-image-edit` 剩 99/100，`qwen-image-edit-plus` 剩 100/100，故默认选 `qwen-image-edit`。
+- **改了哪些文件：** `miniprogram/cloudfunctions/processOutfit/index.js`（默认模型改 qwen-image-edit + 抠图失败日志补齐 DashScope 状态码/响应体，与分类阶段对齐）、`scripts/test-wanx.cjs`（默认模型与文案对齐）；本文件。
+- **下一步：** 开发者工具重新「上传并部署」processOutfit 后真机全链路验收；额度告警时可用环境变量 `DASHSCOPE_MATTING_MODEL=qwen-image-edit-plus` 无部署切换。
+
 ### 2026-07-19（品牌图标 + tabBar 图标 + 确认页可编辑）
 
 - **做了什么：** 按用户验收反馈做三处修正。① 首页品牌区图标由 👗（电商衣橱感）改为 CSS 绘制的三卡扇形叠图小图标（淡主色底卡 ×2 + 渐变顶卡），贴合"微信叠图"定位。② tabBar 三 tab 补齐真实图标：脚本 `scripts/gen-tabbar-icons.py`（PIL 4x 超采样）生成 home/record/profile 线条图标各两套（#999 常态 + #4f6bf5 选中），替换原纯色占位方块；`app.json` 的 `selectedColor` 由微信绿 `#07C160` 改为主色 `#4f6bf5` 与新设计统一。③ 确认页缩略图网格新增「添加图片」虚线卡（未满 9 张显示，点击 `onAddMedia` 追加选图，count 动态 = 9 − 已选数）+ 每张缩略图右上角 × 移除角标（`onRemoveImage`，删空自动回退 home 步骤），确认阶段可直接增删编辑已选图片。check:syntax、check:miniprogram 均通过。

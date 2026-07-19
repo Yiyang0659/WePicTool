@@ -1,17 +1,19 @@
 /**
- * 本地测试：wanx-v1 抠图模型连通性
+ * 本地测试：抠图模型连通性（默认 qwen-image-edit-plus）
  * 请求形态与云函数 processOutfit 的 mattingImageWithDashScope 完全一致
  * （multimodal-generation 端点 + 图片 base64 + 抠图提示词）。
+ * 批量对比多个模型请用 scripts/test-matting-models.cjs
  *
  * 用法：
  *   DASHSCOPE_API_KEY=sk-xxx node scripts/test-wanx.cjs [图片路径或URL]
+ *   可用 DASHSCOPE_MATTING_MODEL=<模型名> 换模型
  */
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 
 const API_KEY = process.env.DASHSCOPE_API_KEY || '';
-const MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'wanx-v1';
+const MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'qwen-image-edit-plus';
 const ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
 const MATTING_PROMPT = '对这张图片进行抠图，去除原背景，将背景替换为纯白色，保留主体的完整轮廓，确保边缘干净';
 
@@ -72,7 +74,7 @@ async function main() {
     const imageItem = Array.isArray(content) ? content.find(i => i && i.image) : null;
     if (imageItem) {
       console.log('✅ 返回了结果图片 URL（前 100 字符）:', String(imageItem.image).substring(0, 100));
-      console.log('→ wanx-v1 可按当前云函数请求形态正常出图');
+      console.log(`→ ${MODEL} 可按当前云函数请求形态正常出图`);
     } else {
       console.log('⚠️ 请求成功但未返回图片，完整响应：');
       console.log(JSON.stringify(response.data, null, 2));

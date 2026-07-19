@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# 抠图模型本地测试输出
+scripts/.matting-test-out/
+
+# 工具会话状态（含 token/pid，不入库）
+.superpowers/
