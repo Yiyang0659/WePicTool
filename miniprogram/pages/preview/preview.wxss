@@ -1,89 +1,55 @@
 /* pages/preview/preview.wxss */
-/* 微信折叠卡片 1:1（契约 §12.6）：亮色为基准，.wx.dark 覆盖为暗色 */
+/* 白底微信发送预演：固定手势舞台让不同图片比例不改变消息流高度 */
 
 page {
-  background-color: #000000;
   height: 100%;
+  background-color: #ffffff;
 }
 
 .wx {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #EDEDED;
+  background-color: #ffffff;
 }
 
-.wx.dark {
-  background-color: #000000;
-}
-
-/* ========== 顶部提示条 + 亮暗切换 ========== */
-.wx-disclaimer {
+.wx-status {
   flex: none;
-  position: relative;
+  height: 44px;
+  padding: 0 16px;
+  padding-top: constant(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top);
   display: flex;
   align-items: center;
-  justify-content: center;
-  background-color: #fff7dd;
-  color: #8a6d1d;
-  font-size: 10px;
-  line-height: 1.4;
-  padding: 4px 8px;
-  padding-top: calc(4px + constant(safe-area-inset-top));
-  padding-top: calc(4px + env(safe-area-inset-top));
+  justify-content: space-between;
+  box-sizing: border-box;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-/* 锚定到提示条左缘：提示条内容区与右上角系统胶囊（custom 导航下仍常驻）同高，
-   居中放置会被系统胶囊压住右半部分导致点不动 */
-.theme-toggle {
-  position: absolute;
-  left: 10px;
-  bottom: 0;
-  z-index: 2;
-  border: 1px solid rgba(138, 109, 29, 0.4);
-  background-color: rgba(255, 255, 255, 0.6);
-  color: #8a6d1d;
-  font-size: 10px;
-  border-radius: 99px;
-  padding: 3px 10px;
-}
-
-.wx.dark .wx-disclaimer {
-  background-color: #2c2614;
-  color: #d8b84a;
-}
-
-.wx.dark .theme-toggle {
-  border-color: rgba(216, 184, 74, 0.45);
-  background-color: rgba(0, 0, 0, 0.3);
-  color: #d8b84a;
-}
-
-/* ========== 微信导航栏 ========== */
 .wx-nav {
   flex: none;
   height: 46px;
   display: flex;
   align-items: center;
-  background-color: #F7F7F7;
-  border-bottom: 1px solid #E2E2E2;
+  background-color: #ffffff;
+  border-bottom: 1px solid #eeeeee;
   padding: 0 10px;
 }
 
-/* 返回键热区：44px 宽 × 导航全高。原实现用 .name{margin-left:-18px} 视觉居中，
-   标题层压住仅 ~20px 宽的返回键（同级同级层后绘制者拦截点击）导致 onBack 收不到 tap；
-   改为 back/dots 对称定宽，标题天然居中，无重叠 */
-.wx-nav .back {
+.wx-nav .back,
+.wx-nav .dots {
   flex: none;
   width: 44px;
   align-self: stretch;
   display: flex;
   align-items: center;
-  position: relative;
-  z-index: 2;
-  font-size: 24px;
-  line-height: 1;
   color: #111111;
+}
+
+.wx-nav .back {
+  font-size: 28px;
   padding-left: 2px;
   box-sizing: border-box;
 }
@@ -91,37 +57,20 @@ page {
 .wx-nav .name {
   flex: 1;
   text-align: center;
+  color: #111111;
   font-size: 15px;
   font-weight: 600;
-  color: #111111;
 }
 
 .wx-nav .dots {
-  flex: none;
-  width: 44px;
-  text-align: right;
+  justify-content: flex-end;
   font-size: 16px;
-  color: #111111;
   letter-spacing: 1px;
 }
 
-.wx.dark .wx-nav {
-  background-color: #1B1B1D;
-  border-bottom-color: #2C2C2E;
-}
-
-.wx.dark .wx-nav .back,
-.wx.dark .wx-nav .dots {
-  color: #f2f2f2;
-}
-
-.wx.dark .wx-nav .name {
-  color: #f2f2f2;
-}
-
-/* ========== 聊天区 ========== */
 .wx-body {
   flex: 1;
+  background-color: #ffffff;
 }
 
 .wx-body-inner {
@@ -130,21 +79,17 @@ page {
 }
 
 .wx-time {
-  text-align: center;
-  font-size: 11px;
-  color: rgba(0, 0, 0, 0.32);
   margin: 2px 0 12px;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.32);
+  font-size: 11px;
 }
 
-.wx.dark .wx-time {
-  color: rgba(255, 255, 255, 0.35);
-}
-
-/* ========== 消息行 ========== */
 .msg {
   display: flex;
   align-items: flex-start;
-  margin-bottom: 14px;
+  min-height: 122px;
+  margin-bottom: 4px;
 }
 
 .msg.me {
@@ -153,142 +98,26 @@ page {
 
 .avatar {
   flex: none;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
   overflow: hidden;
-}
-
-.msg .avatar {
-  margin-right: 8px;
+  font-size: 18px;
 }
 
 .msg.me .avatar {
-  margin-right: 0;
   margin-left: 8px;
-}
-
-.avatar.friend {
-  background-color: #c9d6e8;
-}
-
-.avatar.mine {
+  margin-top: 12px;
   background-color: #9ed97a;
 }
 
-.bubble {
-  max-width: 62%;
-  background-color: #FFFFFF;
-  border-radius: 6px;
-  padding: 9px 11px;
-  font-size: 14px;
-  color: #111111;
-  line-height: 1.45;
-  position: relative;
-}
-
-.msg.friend .bubble::before {
-  content: "";
-  position: absolute;
-  left: -5px;
-  top: 12px;
-  width: 0;
-  height: 0;
-  border: 5px solid transparent;
-  border-right-color: #FFFFFF;
-  border-left: 0;
-}
-
-.wx.dark .bubble {
-  background-color: #2A2A2C;
-  color: #F0F0F0;
-}
-
-.wx.dark .msg.friend .bubble::before {
-  border-right-color: #2A2A2C;
-}
-
-/* ========== 折叠牌堆：卡宽屏宽 58%、右对齐、圆角 12px ========== */
 .stackmsg {
   position: relative;
 }
 
-.stackwrap {
-  position: relative;
-  flex: none;
-  width: 58vw;
-}
-
-/* 比例高度（vw 精确标定，兼容无 aspect-ratio 的老机型） */
-.ar11 { height: 58vw; }
-.ar45 { height: 72.5vw; }
-.ar34 { height: 77.33vw; }
-
-.stk {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: 12px;
-  overflow: hidden;
-  background-color: #fafafa;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  transition: transform 250ms cubic-bezier(0.2, 0.8, 0.3, 1), opacity 220ms ease;
-  will-change: transform;
-}
-
-/* 牌堆向右扇形露边：后卡 translateX(+8/+16px)、scale(.97/.94)，只露右边条 */
-.stk.pos-front { transform: none; z-index: 3; }
-.stk.pos-g1 { transform: translateX(8px) scale(0.97); z-index: 2; }
-.stk.pos-g2 { transform: translateX(16px) scale(0.94); z-index: 1; }
-
-/* 拖动中禁用过渡；飞出 220ms ease-in */
-.stk.dragging { transition: none; z-index: 5; }
-.stk.flying { transition: transform 220ms ease-in, opacity 220ms ease-in; z-index: 5; }
-
-/* 飞出卡瞬移入尾：关过渡复位 */
-.stk.noanim { transition: none !important; }
-
-.card-img {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-/* ========== 「展开 N」胶囊：悬浮在卡片左侧聊天背景区 ========== */
-.expand-cap {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 6;
-  background-color: rgba(0, 0, 0, 0.55);
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: 99px;
-  padding: 6px 12px;
-  white-space: nowrap;
-}
-
-.expand-cap:active {
-  background-color: rgba(0, 0, 0, 0.7);
-}
-
-.wx.dark .expand-cap {
-  background-color: rgba(72, 72, 76, 0.78);
-}
-
-.wx.dark .expand-cap:active {
-  background-color: rgba(92, 92, 96, 0.9);
-}
-
-/* ========== 分组名标签 ========== */
 .stackmsg-content {
   display: flex;
   flex-direction: column;
@@ -296,40 +125,79 @@ page {
 }
 
 .group-label {
-  font-size: 11px;
-  color: rgba(0, 0, 0, 0.45);
-  margin-bottom: 3px;
+  height: 12px;
+  margin-bottom: 2px;
   text-align: right;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 10px;
 }
 
-.wx.dark .group-label {
-  color: rgba(255, 255, 255, 0.45);
-}
-
-/* ========== 展开态：独立消息行（同宽卡片 + 各自右侧头像） ========== */
+/* 稳定舞台由内联 stageStyle 注入：图片再高也不推挤下一组 */
+.stackwrap,
 .xcard {
   position: relative;
   flex: none;
-  width: 58vw;
-  border-radius: 12px;
-  overflow: hidden;
-  background-color: #fafafa;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  overflow: visible;
 }
 
-/* 入场 200ms ease-out 淡入 + translateY(8px→0)，stagger 40ms（内联 delay） */
-.xrow.enter {
-  animation: xin 200ms ease-out both;
+/* 节点占满稳定舞台；节点只用 transform 补位，内部卡片独立等比居中 */
+.stk {
+  position: absolute;
+  inset: 0;
+  transition: transform 240ms cubic-bezier(.18, .82, .2, 1), opacity 210ms ease;
+  will-change: transform, opacity;
 }
+
+.stk.pos-front { transform: none; z-index: 3; }
+.stk.pos-g1 { transform: translateX(-8px) rotate(-0.7deg) scale(0.97); z-index: 2; }
+.stk.pos-g2 { transform: translateX(13px) rotate(1.1deg) scale(0.94); z-index: 1; }
+.stk.dragging { transition: none; z-index: 5; }
+.stk.flying { transition: transform 220ms cubic-bezier(.3, 0, .8, .2), opacity 180ms ease; z-index: 5; }
+.stk.noanim { transition: none !important; }
+
+.stack-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 7px;
+  background-color: #fafafa;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+}
+
+.card-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 胶囊紧贴牌堆左侧，但保留 16px 防止与图片重叠 */
+.expand-cap {
+  position: absolute;
+  left: 40px;
+  top: 56px;
+  z-index: 6;
+  border-radius: 99px;
+  padding: 6px 11px;
+  background-color: rgba(0, 0, 0, 0.62);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.expand-cap:active { background-color: rgba(0, 0, 0, 0.76); }
+
+/* 展开态沿用同一固定舞台，避免不同来源图比例改变聊天流宽高 */
+.xrow.enter { animation: xin 220ms cubic-bezier(.2, .8, .2, 1) both; }
+.xrow.leave { animation: xout 180ms ease-in both; }
 
 @keyframes xin {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
-}
-
-/* 收起反向 180ms ease-in，stagger 30ms 逆序（内联 delay） */
-.xrow.leave {
-  animation: xout 180ms ease-in both;
 }
 
 @keyframes xout {
@@ -337,13 +205,9 @@ page {
   to { opacity: 0; transform: translateY(8px); }
 }
 
-/* ========== 图片加载失败占位兜底 ========== */
 .img-fallback {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -353,91 +217,61 @@ page {
   font-size: 11px;
 }
 
-.img-fallback .ic {
-  font-size: 26px;
-  margin-bottom: 4px;
-}
+.img-fallback .ic { margin-bottom: 4px; font-size: 26px; }
 
-/* ========== 微信输入栏 ========== */
 .wx-inputbar {
   flex: none;
   display: flex;
   align-items: center;
-  background-color: #F7F7F7;
-  border-top: 1px solid #E2E2E2;
   padding: 8px 10px calc(8px + constant(safe-area-inset-bottom));
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid #eeeeee;
+  background-color: #ffffff;
 }
 
 .wx-inputbar .ic {
   width: 26px;
   height: 26px;
   flex: none;
+  margin-right: 9px;
+  color: #3b3b3b;
   font-size: 22px;
   line-height: 26px;
   text-align: center;
-  color: #3b3b3b;
-  margin-right: 9px;
 }
 
-.wx-inputbar .ic:last-child {
-  margin-right: 0;
-}
+.wx-inputbar .ic:last-child { margin-right: 0; }
 
 .wx-inputbar .field {
   flex: 1;
   height: 34px;
-  background-color: #FFFFFF;
-  border-radius: 5px;
   margin-right: 9px;
+  border-radius: 5px;
+  background-color: #f3f3f3;
 }
 
-.wx.dark .wx-inputbar {
-  background-color: #1B1B1D;
-  border-top-color: #2C2C2E;
-}
-
-.wx.dark .wx-inputbar .field {
-  background-color: #2A2A2C;
-}
-
-.wx.dark .wx-inputbar .ic {
-  color: #c8c8cc;
-}
-
-/* ========== 大图查看：全屏黑底，点任意处关闭 ========== */
 .viewer {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 60;
-  background-color: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
+  background-color: #000000;
 }
 
-.vimg {
-  width: 82vw;
-}
-
-.vimg.ar11 { height: 82vw; }
-.vimg.ar45 { height: 102.5vw; }
-.vimg.ar34 { height: 109.33vw; }
+.vimg { max-width: 82vw; max-height: 78vh; }
 
 .vtip {
   position: absolute;
+  right: 0;
   bottom: 40px;
   left: 0;
-  right: 0;
-  text-align: center;
   color: rgba(255, 255, 255, 0.5);
   font-size: 11px;
+  text-align: center;
 }
 
-/* ========== 空态 ========== */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -446,12 +280,5 @@ page {
   padding: 60px 20px;
 }
 
-.empty-icon {
-  font-size: 50px;
-  margin-bottom: 15px;
-}
-
-.empty-text {
-  font-size: 14px;
-  color: #999999;
-}
+.empty-icon { margin-bottom: 15px; font-size: 50px; }
+.empty-text { color: #999999; font-size: 14px; }

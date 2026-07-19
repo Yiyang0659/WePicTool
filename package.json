@@ -10,7 +10,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "node --test tests/*.test.cjs",
-    "check:syntax": "node --check miniprogram/utils/task.js && node --check miniprogram/pages/index/index.js && node --check miniprogram/pages/result/result.js && node --check miniprogram/cloudfunctions/processOutfit/index.js",
+    "check:syntax": "node --check miniprogram/utils/task.js && node --check miniprogram/utils/previewLayout.js && node --check miniprogram/pages/index/index.js && node --check miniprogram/pages/result/result.js && node --check miniprogram/pages/preview/preview.js && node --check miniprogram/cloudfunctions/processOutfit/index.js",
     "check:miniprogram": "node scripts/check-miniprogram.mjs"
   },
   "dependencies": {

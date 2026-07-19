@@ -4,6 +4,9 @@
 var taskUtils = require('../../utils/task');
 var normalizeTaskGroups = taskUtils.normalizeTaskGroups;
 var GROUP_META = taskUtils.GROUP_META;
+var previewLayout = require('../../utils/previewLayout');
+var buildPreviewStage = previewLayout.buildPreviewStage;
+var orderCardsFromFront = previewLayout.orderCardsFromFront;
 
 var GROUP_ORDER = ['tops', 'bottoms', 'shoes', 'others'];
 var RATIO_CLASS = { '1:1': 'ar11', '4:5': 'ar45', '3:4': 'ar34' };
@@ -17,12 +20,14 @@ var ROTATE_RIGHT = { 'pos-front': 'pos-g1', 'pos-g1': 'pos-g2', 'pos-g2': 'pos-f
 var DIR_LOCK_PX = 8;        // 首次位移超 8px 判定方向
 var ROTATE_PER_PX = 0.025;  // 跟手旋转系数 dx * 0.025°
 var ROTATE_MAX = 6;         // 旋转上限 ±6°
-var FLICK_VELOCITY = 0.3;   // 速度阈值 0.3px/ms（最近 120ms 采样）
+var FLICK_VELOCITY = 0.28;  // 速度阈值 0.28px/ms（最近 120ms 采样）
 var VELOCITY_WINDOW = 120;  // 速度采样窗口 ms
-var DISTANCE_RATIO = 0.25;  // 位移阈值：卡宽 25%
+var DISTANCE_RATIO = 0.2;   // 位移阈值：卡宽 20%
 var FLY_DURATION = 220;     // 飞出 220ms ease-in
 var FLY_BUFFER = 30;        // 飞出动画落地缓冲
-var ENTER_STAGGER = 40;     // 展开 stagger 40ms
+var FLY_DISTANCE_RATIO = 1.3;
+var FLY_ROTATE = 18;
+var ENTER_STAGGER = 45;     // 展开 stagger 45ms
 var LEAVE_STAGGER = 30;     // 收起 stagger 30ms 逆序
 var LEAVE_DURATION = 180;   // 收起单行动画 180ms ease-in
 
@@ -30,8 +35,7 @@ Page({
   data: {
     taskId: '',
     chatTime: '',
-    theme: 'light',         // 默认亮色（#EDEDED 底）；暗色仅作为可切换选项保留
-    ratioClass: 'ar11',
+    ratio: '4:5',
     groupList: [],
     totalCount: 0,
     isEmpty: false,
@@ -39,7 +43,8 @@ Page({
     viewer: { show: false, url: '' }
   },
 
-  _cardW: 200,              // 卡宽 px（屏宽 58%，onLoad 标定）
+  _cardW: 200,              // 固定手势舞台宽 px（屏宽 50%，onLoad 标定）
+  _windowWidth: 375,
   _gesture: null,           // 当前手势（单指单手势）
   _animating: {},           // gi -> 飞出/补位动画进行中
   _collapseTimers: {},
@@ -53,7 +58,7 @@ Page({
     }
     this.setData({ chatTime: this._formatTime(new Date()) });
 
-    // 卡宽 = 屏宽 58%（与 WXSS 的 58vw 一致）
+    // 固定手势舞台 = 屏宽 50%，图片比例变化不改变消息行高度
     var info = null;
     try {
       info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
@@ -61,7 +66,8 @@ Page({
       info = null;
     }
     if (info && info.windowWidth) {
-      this._cardW = info.windowWidth * 0.58;
+      this._windowWidth = info.windowWidth;
+      this._cardW = info.windowWidth * 0.5;
     }
 
     var eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
@@ -79,19 +85,17 @@ Page({
 
   // 输入兼容两种形态：
   // 1) 现有调用方 result.js：{ task: { taskId, groups: { tops: [...] }, ratio } }
-  // 2) 契约 §12.6 直连形态：{ groups: [{ name, cards: [{ url, num }] }], theme, ratio }
+  // 2) 契约 §12.6 直连形态：{ groups: [{ name, cards: [{ url, num }] }], ratio }
   _acceptInput: function (data) {
     if (!data) return;
     if (Object.prototype.toString.call(data.groups) === '[object Array]') {
-      if (data.theme === 'light' || data.theme === 'dark') this.setData({ theme: data.theme });
-      if (data.ratio && RATIO_CLASS[data.ratio]) this.setData({ ratioClass: RATIO_CLASS[data.ratio] });
-      this._renderGroups(this._normalizeContractGroups(data.groups));
+      if (data.ratio && RATIO_CLASS[data.ratio]) this.setData({ ratio: data.ratio });
+      this._renderGroups(this._normalizeContractGroups(data.groups), data.ratio || this.data.ratio);
       return;
     }
     if (data.task) {
       var task = data.task;
-      if (task.ratio && RATIO_CLASS[task.ratio]) this.setData({ ratioClass: RATIO_CLASS[task.ratio] });
-      if (task.theme === 'light' || task.theme === 'dark') this.setData({ theme: task.theme });
+      if (task.ratio && RATIO_CLASS[task.ratio]) this.setData({ ratio: task.ratio });
       var groups = normalizeTaskGroups(task.groups || {});
       var named = [];
       for (var i = 0; i < GROUP_ORDER.length; i++) {
@@ -100,13 +104,13 @@ Page({
         var cards = [];
         for (var j = 0; j < items.length; j++) {
           var url = this._getUrl(items[j]);
-          if (url) cards.push({ url: url });
+          if (url) cards.push(Object.assign({}, items[j], { url: url }));
         }
         if (cards.length > 0) {
           named.push({ name: (GROUP_META[key] || {}).title || key, cards: cards });
         }
       }
-      this._renderGroups(named);
+      this._renderGroups(named, task.ratio || this.data.ratio);
     }
   },
 
@@ -117,8 +121,9 @@ Page({
       var rawCards = Array.isArray(g.cards) ? g.cards : [];
       var cards = [];
       for (var j = 0; j < rawCards.length; j++) {
-        var url = rawCards[j] && rawCards[j].url;
-        if (url) cards.push({ url: url });
+        var source = rawCards[j] || {};
+        var url = source.url;
+        if (url) cards.push(Object.assign({}, source, { url: url }));
       }
       if (cards.length > 0) named.push({ name: g.name || '', cards: cards });
     }
@@ -126,7 +131,7 @@ Page({
   },
 
   // 每组一份独立状态：固定节点 + 位置轮转 + 手势/展开/收起标记
-  _renderGroups: function (namedGroups) {
+  _renderGroups: function (namedGroups, fallbackRatio) {
     var list = [];
     var total = 0;
     for (var i = 0; i < namedGroups.length; i++) {
@@ -134,10 +139,14 @@ Page({
       var cards = [];
       for (var j = 0; j < g.cards.length; j++) {
         if (!g.cards[j].url) continue;
+        var stage = buildPreviewStage(g.cards[j], fallbackRatio || this.data.ratio || '4:5', this._windowWidth);
         cards.push({
           url: g.cards[j].url,
           num: ('0' + (cards.length + 1)).slice(-2),
-          err: false
+          err: false,
+          ratio: stage.ratio,
+          cardStyle: stage.cardStyle,
+          stageStyle: 'width: ' + stage.stageWidth + 'px; height: ' + stage.stageHeight + 'px;'
         });
       }
       if (cards.length === 0) continue;
@@ -147,20 +156,17 @@ Page({
       var nodeCount = Math.min(3, cards.length);
       var nodes = [];
       for (var k = 0; k < nodeCount; k++) {
-        nodes.push({ url: cards[k].url, num: cards[k].num, err: false, pos: POS_CLASSES[k] });
+        nodes.push({
+          url: cards[k].url,
+          num: cards[k].num,
+          err: false,
+          cardStyle: cards[k].cardStyle,
+          pos: POS_CLASSES[k]
+        });
       }
 
       // 展开态第 2~N 张（独立消息行），stagger 延迟预计算（WXML 不能调方法）
-      var rest = [];
-      for (var r = 1; r < cards.length; r++) {
-        rest.push({
-          url: cards[r].url,
-          num: cards[r].num,
-          err: false,
-          enterDelay: r * ENTER_STAGGER,
-          leaveDelay: (cards.length - 1 - r) * LEAVE_STAGGER
-        });
-      }
+      var rest = this._buildRest(cards);
 
       list.push({
         key: 'group_' + i,
@@ -175,7 +181,8 @@ Page({
         noanimIdx: -1,
         expanded: false,
         leaving: false,
-        rest: rest
+        rest: rest,
+        stageStyle: cards[0].stageStyle
       });
     }
     this._gesture = null;
@@ -196,10 +203,23 @@ Page({
     return item.url || item.mattedUrl || item.fileId || item.localPath || '';
   },
 
-  _formatTime: function (d) {
-    var h = d.getHours();
-    var m = d.getMinutes().toString().padStart(2, '0');
-    return (h < 12 ? '上午 ' : '下午 ') + h.toString().padStart(2, '0') + ':' + m;
+  _buildRest: function (cards) {
+    var rest = [];
+    for (var i = 1; i < cards.length; i++) {
+      rest.push({
+        url: cards[i].url,
+        num: cards[i].num,
+        err: cards[i].err,
+        cardStyle: cards[i].cardStyle,
+        enterDelay: i * ENTER_STAGGER,
+        leaveDelay: (cards.length - 1 - i) * LEAVE_STAGGER
+      });
+    }
+    return rest;
+  },
+
+  _formatTime: function () {
+    return '中午12:00';
   },
 
   _gi: function (e) {
@@ -322,7 +342,7 @@ Page({
     this.setData(u);
   },
 
-  // 飞出 ±1.2×卡宽 + rotate ±6° + 渐隐（220ms ease-in），随后循环入尾
+  // 飞出 ±1.3×卡宽 + rotate ±18° + 渐隐，随后循环入尾
   _flyOut: function (gi, dir) {
     var that = this;
     var g = this.data.groupList[gi];
@@ -334,7 +354,7 @@ Page({
     u['groupList[' + gi + '].dragging'] = false;
     u['groupList[' + gi + '].flying'] = true;
     u['groupList[' + gi + '].dragStyle'] =
-      'transform: translateX(' + dir * 1.2 * W + 'px) rotate(' + dir * ROTATE_MAX + 'deg); opacity: 0;';
+      'transform: translateX(' + dir * FLY_DISTANCE_RATIO * W + 'px) rotate(' + dir * FLY_ROTATE + 'deg); opacity: 0;';
     this.setData(u);
 
     setTimeout(function () {
@@ -348,7 +368,13 @@ Page({
           ? (nd.pos === 'pos-front' ? 'pos-g1' : 'pos-front')
           : (map[nd.pos] || nd.pos);
         if (pos === 'pos-front') frontIdx = i;
-        return { url: nd.url, num: nd.num, err: nd.err, pos: pos };
+        return {
+          url: nd.url,
+          num: nd.num,
+          err: nd.err,
+          cardStyle: nd.cardStyle,
+          pos: pos
+        };
       });
 
       // 飞出卡瞬移入尾（noanim 关过渡），其余卡由 class 过渡自动补位
@@ -377,8 +403,11 @@ Page({
     var that = this;
 
     if (!g.expanded) {
-      // 展开：第 1 张留原位，第 2~N 张 wx:if 渲染为独立消息行，stagger 入场
+      // 展开必须从当前顶层开始，避免用户翻页后视觉跳回最初的第 1 张。
+      var orderedCards = orderCardsFromFront(g.cards, g.nodes, g.frontIdx);
       var u = {};
+      u['groupList[' + gi + '].cards'] = orderedCards;
+      u['groupList[' + gi + '].rest'] = this._buildRest(orderedCards);
       u['groupList[' + gi + '].expanded'] = true;
       this.setData(u);
       return;
@@ -587,11 +616,6 @@ Page({
     else if (d.kind === 'card') u['groupList[' + gi + '].cards[' + parseInt(d.ci, 10) + '].err'] = true;
     else return;
     this.setData(u);
-  },
-
-  // ============ 亮 / 暗切换 ============
-  onToggleTheme: function () {
-    this.setData({ theme: this.data.theme === 'dark' ? 'light' : 'dark' });
   },
 
   onBack: function () {
