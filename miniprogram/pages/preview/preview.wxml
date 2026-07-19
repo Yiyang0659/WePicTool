@@ -1,92 +1,146 @@
 <!--pages/preview/preview.wxml-->
-<view class="preview-page">
-  <!-- 顶部导航栏 -->
-  <view class="custom-nav">
-    <view class="nav-safe-area">
-      <view class="nav-content">
-        <view class="nav-back" bindtap="onBack">
-          <text class="nav-back-icon">‹</text>
-        </view>
-        <view class="nav-title">小助手</view>
-        <view class="nav-more">···</view>
-      </view>
-    </view>
+<!-- 微信折叠卡片 1:1（契约 §12.6）：牌堆扇形露边 / 左侧「展开 N」胶囊 / 跟手滑动 / 展开独立消息行 -->
+<view class="wx {{theme === 'dark' ? 'dark' : ''}}">
+
+  <!-- 顶部提示条 + 亮暗切换 -->
+  <view class="wx-disclaimer">
+    <text>模拟预览，实际效果以微信为准</text>
+    <view class="theme-toggle" bindtap="onToggleTheme">{{theme === 'dark' ? '☀️ 切亮色' : '🌙 切暗色'}}</view>
   </view>
 
-  <!-- 聊天内容区 -->
-  <scroll-view class="chat-scroll" scroll-y="true" enhanced="true" show-scrollbar="false">
-    <view class="chat-container">
-      <!-- 时间戳 -->
-      <view class="chat-time">上午 {{chatTime}}</view>
+  <!-- 微信导航栏 -->
+  <view class="wx-nav">
+    <view class="back" bindtap="onBack">‹</view>
+    <view class="name">小助手</view>
+    <view class="dots">···</view>
+  </view>
 
-      <!-- 每个分组一条消息 -->
-      <block wx:for="{{groupList}}" wx:key="key">
-        <view class="chat-row">
-          <!-- 头像（最右侧） -->
-          <view class="sender-avatar">😎</view>
+  <!-- 聊天区：判定为横向滑动后 scrollLock 锁定纵向滚动（判定前保持可滚） -->
+  <scroll-view class="wx-body" scroll-y="{{!scrollLock}}" enhanced="true" show-scrollbar="{{false}}">
+    <view class="wx-body-inner">
+      <view class="wx-time">{{chatTime}}</view>
 
-          <!-- 消息内容区 -->
-          <view class="message-body">
-            <!-- 胶囊按钮 -->
+      <view class="msg friend">
+        <view class="avatar friend">👩</view>
+        <view class="bubble">帮我看看明天穿哪件？</view>
+      </view>
+
+      <!-- 每个分组一条折叠卡消息，纵向排列 -->
+      <block wx:for="{{groupList}}" wx:for-item="g" wx:for-index="gi" wx:key="key">
+
+        <!-- 消息行：定位容器，胶囊悬浮在卡片左侧聊天背景区 -->
+        <view class="msg me stackmsg">
+          <view class="avatar mine">😎</view>
+
+          <!-- 折叠态：固定三节点牌堆，只轮转 pos-front / pos-g1 / pos-g2 -->
+          <view
+            wx:if="{{!g.expanded}}"
+            class="stackwrap {{ratioClass}}"
+            data-gi="{{gi}}"
+            bindtouchstart="onStackTouchStart"
+            bindtouchmove="onStackTouchMove"
+            bindtouchend="onStackTouchEnd"
+            bindtouchcancel="onStackTouchCancel"
+            bindlongpress="onStackLongPress"
+          >
             <view
-              class="expand-pill {{pillAnimating[item.key] ? 'pill-animating' : ''}}"
-              bindtap="onToggleExpand"
-              data-group="{{item.key}}"
+              wx:for="{{g.nodes}}"
+              wx:for-item="nd"
+              wx:for-index="ni"
+              wx:key="index"
+              class="stk {{nd.pos}} {{ni === g.frontIdx && g.dragging ? 'dragging' : ''}} {{ni === g.frontIdx && g.flying ? 'flying' : ''}} {{ni === g.noanimIdx ? 'noanim' : ''}}"
+              style="{{ni === g.frontIdx ? g.dragStyle : ''}}"
             >
-              <text class="pill-text">{{expanded[item.key] ? '收起' : '展开 ' + item.items.length}}</text>
-            </view>
-
-            <!-- 图片列表容器：所有图片始终在 DOM，class 切换堆叠 ↔ 展开 -->
-            <view class="card-list {{expanded[item.key] ? 'card-list-expanded' : 'card-list-collapsed'}}">
-              <block wx:for="{{item.items}}" wx:for-item="imgUrl" wx:for-index="imgIdx" wx:key="index">
-                <view
-                  class="card-item {{expanded[item.key] ? 'card-item-expanded' : 'card-item-collapsed'}}"
-                  data-group="{{item.key}}"
-                  data-index="{{imgIdx}}"
-                  style="{{expanded[item.key] ? '' : 'transform: translateY(' + getStackTranslateY(item.key, imgIdx, item.items.length) + 'rpx) scale(' + getStackScale(item.key, imgIdx, item.items.length) + '); opacity: ' + getStackOpacity(item.key, imgIdx, item.items.length) + '; z-index: ' + getStackZIndex(item.key, imgIdx, item.items.length) + ';'}}"
-                >
-                  <!-- 顶层卡片：包裹滑动层 -->
-                  <view
-                    wx:if="{{!expanded[item.key] && imgIdx === stackIndex[item.key]}}"
-                    class="swipe-layer"
-                    bindtouchstart="onTouchStart"
-                    bindtouchmove="onTouchMove"
-                    bindtouchend="onTouchEnd"
-                    data-group="{{item.key}}"
-                    style="transform: translateX({{slideOffset[item.key] || 0}}px);"
-                  >
-                    <image
-                      class="card-img"
-                      src="{{imgUrl}}"
-                      mode="aspectFill"
-                      lazy-load="true"
-                      bindtap="onPreviewGroupImage"
-                      data-group="{{item.key}}"
-                      data-index="{{imgIdx}}"
-                    />
-                  </view>
-
-                  <!-- 非顶层卡片或展开态 -->
-                  <block wx:if="{{expanded[item.key] || imgIdx !== stackIndex[item.key]}}">
-                    <image
-                      class="card-img"
-                      src="{{imgUrl}}"
-                      mode="aspectFill"
-                      lazy-load="true"
-                      bindtap="{{expanded[item.key] ? 'onPreviewGroupImage' : ''}}"
-                      data-group="{{item.key}}"
-                      data-index="{{imgIdx}}"
-                    />
-                    <view class="card-overlay" wx:if="{{expanded[item.key]}}">
-                      <view class="overlay-btn" catchtap="onChangeCategory" data-group="{{item.key}}" data-index="{{imgIdx}}">改分类</view>
-                    </view>
-                  </block>
-                </view>
-              </block>
+              <image
+                wx:if="{{!nd.err}}"
+                class="card-img"
+                src="{{nd.url}}"
+                mode="aspectFill"
+                lazy-load="{{true}}"
+                data-gi="{{gi}}"
+                data-kind="node"
+                data-ni="{{ni}}"
+                binderror="onImgError"
+              />
+              <view wx:else class="img-fallback">
+                <text class="ic">🖼️</text>
+                <text>图片加载失败</text>
+              </view>
             </view>
           </view>
+
+          <!-- 展开态：第 1 张留原位（同一消息行） -->
+          <view
+            wx:else
+            class="xcard {{ratioClass}}"
+            data-gi="{{gi}}"
+            data-url="{{g.cards[0].url}}"
+            bindtap="onOpenViewer"
+            bindlongpress="onCardLongPress"
+          >
+            <image
+              wx:if="{{!g.cards[0].err}}"
+              class="card-img"
+              src="{{g.cards[0].url}}"
+              mode="aspectFill"
+              lazy-load="{{true}}"
+              data-gi="{{gi}}"
+              data-kind="card"
+              data-ci="{{0}}"
+              binderror="onImgError"
+            />
+            <view wx:else class="img-fallback">
+              <text class="ic">🖼️</text>
+              <text>图片加载失败</text>
+            </view>
+          </view>
+
+          <!-- 「展开 N」/「收起」胶囊：原地切换，位置不变 -->
+          <view class="expand-cap" data-gi="{{gi}}" bindtap="onToggleCapsule">{{g.expanded ? '收起' : '展开 ' + g.n}}</view>
         </view>
+
+        <!-- 展开态：第 2~N 张独立消息行（同宽卡片 + 各自右侧头像），stagger 入场 -->
+        <block wx:if="{{g.expanded}}">
+          <view
+            wx:for="{{g.rest}}"
+            wx:for-item="cd"
+            wx:for-index="ki"
+            wx:key="num"
+            class="msg me xrow {{g.leaving ? 'leave' : 'enter'}}"
+            style="animation-delay: {{g.leaving ? cd.leaveDelay : cd.enterDelay}}ms;"
+          >
+            <view class="avatar mine">😎</view>
+            <view
+              class="xcard {{ratioClass}}"
+              data-gi="{{gi}}"
+              data-url="{{cd.url}}"
+              bindtap="onOpenViewer"
+              bindlongpress="onCardLongPress"
+            >
+              <image
+                wx:if="{{!cd.err}}"
+                class="card-img"
+                src="{{cd.url}}"
+                mode="aspectFill"
+                lazy-load="{{true}}"
+                data-gi="{{gi}}"
+                data-kind="rest"
+                data-ci="{{ki}}"
+                binderror="onImgError"
+              />
+              <view wx:else class="img-fallback">
+                <text class="ic">🖼️</text>
+                <text>图片加载失败</text>
+              </view>
+            </view>
+          </view>
+        </block>
       </block>
+
+      <view class="msg friend" wx:if="{{!isEmpty}}">
+        <view class="avatar friend">👩</view>
+        <view class="bubble">姐妹你真是个天才</view>
+      </view>
 
       <view class="empty-state" wx:if="{{isEmpty}}">
         <view class="empty-icon">📂</view>
@@ -95,25 +149,17 @@
     </view>
   </scroll-view>
 
-  <!-- 底部输入栏 -->
-  <view class="chat-input-bar">
-    <view class="input-bar-safe">
-      <view class="input-bar-inner">
-        <view class="input-icon">🎙️</view>
-        <view class="input-placeholder"></view>
-        <view class="input-icon">🎤</view>
-        <view class="input-icon">😊</view>
-        <view class="input-icon">➕</view>
-      </view>
-    </view>
+  <!-- 微信输入栏 -->
+  <view class="wx-inputbar">
+    <text class="ic">🎤</text>
+    <view class="field"></view>
+    <text class="ic">😊</text>
+    <text class="ic">➕</text>
   </view>
 
-  <!-- 底部操作栏 -->
-  <view class="bottom-bar">
-    <view class="bottom-safe-area">
-      <button class="merge-send-btn" bindtap="onBack">
-        <text class="merge-send-text">返回结果页</text>
-      </button>
-    </view>
+  <!-- 大图查看：全屏黑底，点任意处关闭 -->
+  <view class="viewer" wx:if="{{viewer.show}}" catchtap="onCloseViewer">
+    <image class="vimg {{ratioClass}}" src="{{viewer.url}}" mode="aspectFit" />
+    <view class="vtip">模拟微信大图查看 · 点任意处关闭</view>
   </view>
 </view>

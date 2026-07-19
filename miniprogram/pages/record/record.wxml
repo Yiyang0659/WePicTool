@@ -1,31 +1,50 @@
 <!--pages/record/record.wxml-->
 <view class="record-page">
-  <!-- 顶部统计 -->
-  <view class="record-header">
-    <view class="record-stat">
-      <view class="stat-item">
-        <text class="stat-num">{{totalRecords}}</text>
-        <text class="stat-label">历史记录</text>
-      </view>
-      <view class="stat-divider"></view>
-      <view class="stat-item">
-        <text class="stat-num">{{totalImages}}</text>
-        <text class="stat-label">处理图片</text>
-      </view>
+  <!-- 顶部统计条 -->
+  <view class="stats-card">
+    <view class="stat-item">
+      <text class="stat-num">{{totalRecords}}</text>
+      <text class="stat-label">历史记录</text>
     </view>
+    <view class="stat-divider"></view>
+    <view class="stat-item">
+      <text class="stat-num">{{totalImages}}</text>
+      <text class="stat-label">处理图片</text>
+    </view>
+    <view class="stat-clear" wx:if="{{totalRecords > 0}}" bindtap="onShowClearConfirm">清空</view>
   </view>
+
+  <!-- 分类 tab 条：全部 + 数据中实际出现过的玩法类型 -->
+  <scroll-view class="type-tabs" scroll-x="true" enhanced="true" show-scrollbar="{{false}}" wx:if="{{!isEmpty}}">
+    <view class="type-tabs-inner">
+      <view
+        class="type-tab {{activeType === item.type ? 'type-tab-active' : ''}}"
+        wx:for="{{typeTabs}}"
+        wx:key="type"
+        data-type="{{item.type}}"
+        bindtap="onSelectType"
+      ><text wx:if="{{item.emoji}}">{{item.emoji}} </text>{{item.label}}</view>
+    </view>
+  </scroll-view>
 
   <!-- 记录列表 -->
   <scroll-view class="record-scroll" scroll-y="true" enhanced="true" show-scrollbar="false" wx:if="{{!isEmpty}}">
     <view class="record-list">
-      <view class="date-group" wx:for="{{groupedRecords}}" wx:for-item="group" wx:key="date">
+      <view class="date-group" wx:for="{{filteredGroupedRecords}}" wx:for-item="group" wx:key="date">
         <view class="date-title">{{group.date}}</view>
 
         <view class="record-card" wx:for="{{group.records}}" wx:for-item="record" wx:key="recordId">
-          <view class="record-card-content" bindtap="onViewRecord" data-recordid="{{record.recordId}}">
+          <!-- 卡头：类型 chip + 时间 -->
+          <view class="card-head">
+            <view class="type-chip">{{record.typeEmoji}} {{record.typeLabel}}</view>
+            <view class="card-time">{{record.time}}</view>
+          </view>
+
+          <!-- 卡体：堆叠缩略图 + 摘要 -->
+          <view class="card-body" bindtap="onViewRecord" data-recordid="{{record.recordId}}">
             <view class="record-thumbnails">
               <image
-                class="record-thumb {{index > 0 ? 'record-thumb-stack' : ''}}"
+                class="record-thumb"
                 wx:for="{{record.thumbnails}}"
                 wx:for-item="thumb"
                 wx:key="*this"
@@ -37,17 +56,26 @@
             </view>
 
             <view class="record-info">
-              <view class="record-time">{{record.time}}</view>
-              <view class="record-summary">
-                <text wx:for="{{record.groupSummaryList}}" wx:key="*this" class="summary-tag">{{item}}</text>
-              </view>
+              <!-- 穿搭叠图：分组 tag 摘要 -->
+              <block wx:if="{{record.recordType === 'outfit'}}">
+                <view class="record-summary" wx:if="{{record.groupSummaryList.length > 0}}">
+                  <text wx:for="{{record.groupSummaryList}}" wx:key="*this" class="summary-tag">{{item}}</text>
+                </view>
+                <view class="record-total" wx:else>一叠 {{record.totalCount}} 张</view>
+              </block>
+              <!-- 其他玩法：一叠 N 张 + 可选摘要 -->
+              <block wx:else>
+                <view class="record-total">一叠 {{record.totalCount}} 张</view>
+                <view class="record-snippet" wx:if="{{record.snippet}}">{{record.snippet}}</view>
+              </block>
             </view>
           </view>
 
-          <view class="record-actions">
-            <view class="record-action" bindtap="onViewRecord" data-recordid="{{record.recordId}}">查看</view>
-            <view class="record-action record-action-primary" bindtap="onRegenerate" data-recordid="{{record.recordId}}">再次生成</view>
-            <view class="record-action record-action-danger" bindtap="onDeleteRecord" data-recordid="{{record.recordId}}">删除</view>
+          <!-- 卡底操作行 -->
+          <view class="card-actions">
+            <text class="action action-view" bindtap="onViewRecord" data-recordid="{{record.recordId}}">查看</text>
+            <text class="action action-regen" bindtap="onRegenerate" data-recordid="{{record.recordId}}">再次生成</text>
+            <text class="action action-del" bindtap="onDeleteRecord" data-recordid="{{record.recordId}}">删除</text>
           </view>
         </view>
       </view>
@@ -58,10 +86,12 @@
 
   <!-- 空态 -->
   <view class="empty-state" wx:if="{{isEmpty}}">
-    <view class="empty-icon">🖼️</view>
-    <view class="empty-title">暂无抠图记录</view>
-    <view class="empty-text">快去体验一键抠图功能吧</view>
-    <view class="empty-btn" bindtap="onGoHome">立即抠图</view>
+    <view class="empty-circle">
+      <text class="empty-emoji">🖼</text>
+    </view>
+    <view class="empty-title">暂无记录</view>
+    <view class="empty-text">做的每一叠图都会留在这里</view>
+    <view class="empty-btn" bindtap="onGoHome">去做穿搭叠图</view>
   </view>
 
   <!-- 清空确认弹窗 -->

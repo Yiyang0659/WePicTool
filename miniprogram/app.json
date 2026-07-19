@@ -9,12 +9,12 @@
   "window": {
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#ffffff",
-    "navigationBarTitleText": "WePicTool",
+    "navigationBarTitleText": "滑一叠",
     "navigationBarTextStyle": "black"
   },
   "tabBar": {
     "color": "#999999",
-    "selectedColor": "#07C160",
+    "selectedColor": "#4f6bf5",
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [

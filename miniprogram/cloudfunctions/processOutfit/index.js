@@ -260,11 +260,14 @@ async function classifyImageWithDashScope(imageInput, apiKey) {
 
 const MATTING_PROMPT = '对这张图片进行抠图，去除原背景，将背景替换为纯白色，保留主体的完整轮廓，确保边缘干净';
 
+// 抠图模型：默认 wanx-v1（2026-07-19 起试用），可在云函数环境变量 DASHSCOPE_MATTING_MODEL 中覆盖
+const MATTING_MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'wanx-v1';
+
 async function mattingImageWithDashScope(imageInput, apiKey) {
   const response = await axios.post(
     'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
     {
-      model: 'qwen-image-2.0',
+      model: MATTING_MODEL,
       input: {
         messages: [
           {

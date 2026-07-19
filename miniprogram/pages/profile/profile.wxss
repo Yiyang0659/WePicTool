@@ -1,32 +1,41 @@
 /* pages/profile/profile.wxss */
 
 page {
-  background-color: #f7f8fa;
+  background-color: #f6f6f8;
 }
 
 .profile-page {
   min-height: 100vh;
-  background-color: #f7f8fa;
-  padding-bottom: 60rpx;
+  background-color: #f6f6f8;
+  padding: 24rpx 24rpx calc(48rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
-/* 用户信息区 */
-.profile-header {
+/* ========== 用户白卡 ========== */
+.user-card {
   background-color: #ffffff;
-  padding: 40rpx 30rpx;
-  margin-bottom: 20rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  padding: 32rpx 28rpx;
+  margin-bottom: 24rpx;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
-.profile-user {
+.user-main {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .user-avatar {
   width: 120rpx;
   height: 120rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #4f6bf5, #6a3df0);
+  box-shadow: 0 8rpx 20rpx rgba(106, 61, 240, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -34,64 +43,113 @@ page {
   color: #ffffff;
   font-weight: 600;
   margin-right: 24rpx;
+  flex-shrink: 0;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .user-name {
-  font-size: 36rpx;
+  font-size: 32rpx;
   font-weight: 600;
-  color: #333333;
+  color: #111111;
   margin-bottom: 12rpx;
 }
 
-.user-id {
+.user-id-row {
   display: flex;
   align-items: center;
 }
 
 .user-id-text {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999999;
   margin-right: 12rpx;
 }
 
 .user-id-copy {
+  font-size: 20rpx;
+  color: #4f6bf5;
+  background-color: #eef3ff;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  line-height: 1.4;
+}
+
+.user-id-copy:active {
+  opacity: 0.7;
+}
+
+/* 数据徽标胶囊（淡绿） */
+.record-badge {
+  font-size: 20rpx;
+  color: #07a350;
+  background-color: #e6f9ee;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  line-height: 1.4;
+  flex-shrink: 0;
+  margin-top: 6rpx;
+}
+
+/* ========== 玩法预告提示卡 ========== */
+.tip-card {
+  background: linear-gradient(135deg, #eef3ff, #f4efff);
+  border-radius: 24rpx;
+  padding: 26rpx 28rpx;
+  margin-bottom: 24rpx;
+  display: flex;
+  align-items: flex-start;
+}
+
+.tip-icon {
+  font-size: 30rpx;
+  margin-right: 16rpx;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.tip-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #4a4a68;
+  line-height: 1.6;
+}
+
+.tip-strong {
+  color: #3333aa;
+  font-weight: 600;
+}
+
+/* ========== 菜单组 ========== */
+.menu-group {
+  margin-bottom: 24rpx;
+}
+
+.group-title {
   font-size: 22rpx;
-  color: #3b82f6;
-  background-color: #eff6ff;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
-}
-
-/* 分组标题 */
-.profile-section {
-  margin-bottom: 20rpx;
-}
-
-.section-title {
-  font-size: 26rpx;
   color: #999999;
-  padding: 20rpx 30rpx 16rpx;
+  padding: 0 8rpx 14rpx;
 }
 
-/* 菜单卡片 */
 .menu-card {
   background-color: #ffffff;
-  margin: 0 30rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  padding: 0 24rpx;
 }
 
 .menu-item {
   display: flex;
   align-items: center;
-  padding: 30rpx 24rpx;
+  min-height: 96rpx;
+  padding: 20rpx 0;
   border-bottom: 1rpx solid #f5f5f5;
+  box-sizing: border-box;
 }
 
 .menu-item:last-child {
@@ -99,42 +157,53 @@ page {
 }
 
 .menu-item:active {
-  background-color: #f9f9f9;
+  background-color: #fafafa;
+}
+
+.menu-icon-block {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 14rpx;
+  background-color: #f6f6f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+  flex-shrink: 0;
 }
 
 .menu-icon {
-  font-size: 36rpx;
-  margin-right: 20rpx;
-  width: 44rpx;
-  text-align: center;
+  font-size: 28rpx;
+  line-height: 1;
 }
 
 .menu-text {
   flex: 1;
-  font-size: 30rpx;
+  font-size: 28rpx;
   color: #333333;
 }
 
 .menu-extra {
-  font-size: 26rpx;
+  font-size: 24rpx;
   color: #999999;
-  margin-right: 12rpx;
+  margin-right: 10rpx;
 }
 
 .menu-arrow {
   font-size: 28rpx;
   color: #cccccc;
+  line-height: 1;
 }
 
-/* 底部版权 */
+/* ========== 底部版权 ========== */
 .profile-footer {
   text-align: center;
-  padding: 60rpx 0 40rpx;
-  font-size: 24rpx;
-  color: #cccccc;
+  padding: 40rpx 0 8rpx;
+  font-size: 22rpx;
+  color: #aaaaaa;
 }
 
-/* 反馈弹窗 */
+/* ========== 弹窗（反馈 / 关于） ========== */
 .feedback-mask,
 .about-mask {
   position: fixed;
@@ -161,13 +230,14 @@ page {
   background-color: #ffffff;
   border-radius: 24rpx;
   padding: 40rpx;
+  box-sizing: border-box;
 }
 
 .feedback-title,
 .about-name {
-  font-size: 34rpx;
+  font-size: 32rpx;
   font-weight: 600;
-  color: #333333;
+  color: #111111;
   text-align: center;
   margin-bottom: 30rpx;
 }
@@ -175,17 +245,17 @@ page {
 .feedback-textarea {
   width: 100%;
   height: 240rpx;
-  background-color: #f7f8fa;
+  background-color: #f6f6f8;
   border-radius: 16rpx;
   padding: 20rpx;
-  font-size: 28rpx;
+  font-size: 26rpx;
   color: #333333;
   box-sizing: border-box;
 }
 
 .feedback-count {
   text-align: right;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999999;
   margin-top: 12rpx;
   margin-bottom: 30rpx;
@@ -199,27 +269,33 @@ page {
 .feedback-btn {
   flex: 1;
   text-align: center;
-  padding: 22rpx 0;
-  border-radius: 12rpx;
-  font-size: 30rpx;
+  padding: 24rpx 0;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+}
+
+.feedback-btn:active {
+  opacity: 0.85;
 }
 
 .feedback-btn-cancel {
-  background-color: #f5f5f5;
-  color: #666666;
+  background-color: #f2f2f4;
+  color: #555555;
 }
 
 .feedback-btn-confirm {
-  background-color: #3b82f6;
+  background: linear-gradient(135deg, #4f6bf5, #6a3df0);
+  box-shadow: 0 8rpx 20rpx rgba(106, 61, 240, 0.22);
   color: #ffffff;
+  font-weight: 600;
 }
 
 /* 关于弹窗 */
 .about-logo {
   width: 120rpx;
   height: 120rpx;
-  border-radius: 24rpx;
-  background-color: #eff6ff;
+  border-radius: 28rpx;
+  background-color: #eef3ff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,23 +305,29 @@ page {
 
 .about-version {
   text-align: center;
-  font-size: 26rpx;
+  font-size: 24rpx;
   color: #999999;
   margin-bottom: 30rpx;
 }
 
 .about-desc {
-  font-size: 28rpx;
-  color: #666666;
-  line-height: 1.6;
+  font-size: 26rpx;
+  color: #555555;
+  line-height: 1.7;
   margin-bottom: 40rpx;
 }
 
 .about-close {
   text-align: center;
-  padding: 22rpx 0;
-  background-color: #3b82f6;
+  padding: 24rpx 0;
+  background: linear-gradient(135deg, #4f6bf5, #6a3df0);
+  box-shadow: 0 8rpx 20rpx rgba(106, 61, 240, 0.22);
   color: #ffffff;
-  border-radius: 12rpx;
-  font-size: 30rpx;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.about-close:active {
+  opacity: 0.85;
 }

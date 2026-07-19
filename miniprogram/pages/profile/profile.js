@@ -4,6 +4,7 @@ Page({
     userId: '',
     cacheSize: '0 KB',
     version: '1.0.0',
+    recordCount: 0,
     showFeedback: false,
     feedbackContent: '',
     showAbout: false
@@ -14,10 +15,26 @@ Page({
       userId: this.generateUserId()
     });
     this.updateCacheSize();
+    this.updateRecordCount();
   },
 
   onShow: function () {
     this.updateCacheSize();
+    this.updateRecordCount();
+  },
+
+  // 统计已生成次数（读取本地记录数组长度，容错为 0）
+  updateRecordCount: function () {
+    let count = 0;
+    try {
+      const records = wx.getStorageSync('wepictool_records');
+      if (Array.isArray(records)) {
+        count = records.length;
+      }
+    } catch (err) {
+      count = 0;
+    }
+    this.setData({ recordCount: count });
   },
 
   // 生成匿名用户 ID
@@ -212,14 +229,14 @@ Page({
   onPrivacy: function () {
     wx.showModal({
       title: '隐私说明',
-      content: 'WePicTool 重视您的隐私。我们仅在本地处理您选择的图片，不上传个人身份信息。图片处理需要您授权相册访问权限。历史记录仅保存在本地设备中，不会同步到云端。',
+      content: '滑一叠重视您的隐私。我们仅在本地处理您选择的图片，不上传个人身份信息。图片处理需要您授权相册访问权限。历史记录仅保存在本地设备中，不会同步到云端。',
       showCancel: false
     });
   },
 
   onShareAppMessage: function () {
     return {
-      title: 'WePicTool - 微信最快的穿搭参考图生成工具',
+      title: '滑一叠 - 做一叠图，发给朋友滑着挑',
       path: '/pages/index/index'
     };
   }

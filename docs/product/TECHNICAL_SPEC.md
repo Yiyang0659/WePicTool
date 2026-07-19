@@ -614,6 +614,75 @@ cloud://cloud1-d0g1blfsde474b168/
 
 玩法漏斗：`module_entered` → `template_used` → `stack_saved` → `send_guide_completed` → 分享转化。
 
+### 12.6 叠图预览组件技术契约（1:1 还原）
+
+> 2026-07-18 依据真机暗色模式录屏（`ui-reference/wx-merge-real-demo.mp4`）标定，高保真原型见 Blueprint Widget「WePicTool 三屏原型」（widget_7a0db4d4，其 `index.html` 为参考实现）。产品口径见 `PLAYBOOK.md` §3.4。`pages/preview` 按本节重写。
+
+**组件输入（eventChannel 传入）：**
+
+```js
+{
+  groups: [{ name: '上衣组', cards: [{ url, num: '01' }, ...] }, ...],
+  theme: 'dark' | 'light',   // 默认 dark
+  ratio: '1:1' | '4:5' | '3:4'
+}
+```
+
+**状态机：**
+
+```text
+folded ⇄ folded（滑动循环翻页）
+folded → expanded（点「展开 N」）→ folded（点「收起」）
+folded / expanded --长按--> actionSheet（保存全部 / 转发）
+expanded --点单张--> viewer（黑底大图，点任意处关闭）
+```
+
+**折叠态结构参数：**
+
+| 项 | 值 |
+| --- | --- |
+| 卡宽 | 屏宽 58%，右对齐，圆角 12px |
+| 头像 | 36px 方形、圆角 5px，与卡片顶部对齐，间距 8px |
+| 牌堆露边 | 后卡 `translateX(+8px/+16px)`、`scale(.97/.94)`、z-index 3/2/1，仅露右边条 |
+| 展开胶囊 | 悬浮于卡片左侧聊天背景区，距左缘 10px、相对消息行垂直居中；胶囊文字「展开 N」/「收起」；亮色 `rgba(0,0,0,.55)`、暗色 `rgba(72,72,76,.78)`，圆角 99px |
+| 禁用元素 | 无层叠角标、无页码（早期原型误加，已删） |
+
+**手势参数（折叠态）：**
+
+| 阶段 | 参数 |
+| --- | --- |
+| 方向锁 | 首次位移超 8px 时判定：`abs(dx) > abs(dy)` 才接管；否则交还聊天纵向滚动 |
+| 跟手 | `translateX(dx)` + `rotate(dx * 0.025°)`，clamp ±6°；拖动中禁用过渡 |
+| 翻页阈值 | `abs(dx) > 卡宽 * 0.25` 或最近 120ms 采样速度 `abs(v) > 0.3px/ms` |
+| 回弹 | 未达阈值：250ms `cubic-bezier(.2,.8,.3,1)` 回 identity |
+| 飞出 | `translateX(±1.2 * 卡宽)` + `rotate(±6°)` + opacity→0，220ms ease-in |
+| 补位 | 下一张 `translateX(+8px) scale(.97)` → identity，250ms `cubic-bezier(.2,.8,.3,1)` |
+| 循环 | 左滑 front→g2、g1→front、g2→g1；右滑反向；飞出卡瞬移入尾（`transition: none` 复位后恢复） |
+
+**展开/收起参数：**
+
+- 展开：第 1 张留原位（同一消息行），第 2~N 张 `wx:if` 渲染为独立消息行（同宽卡片 + 各自右侧头像）；入场 200ms ease-out `opacity 0→1 + translateY(8px→0)`，stagger 40ms（`animation-delay: i * 40ms`）；聊天流自然下推。
+- 收起：反向 180ms ease-in，stagger 30ms 逆序，结束后渲染回折叠态。
+- 展开态禁用牌堆手势；胶囊文案原地切换「展开 N」⇄「收起」，位置不变。
+
+**主题配色：**
+
+| 元素 | 亮色 | 暗色 |
+| --- | --- | --- |
+| 聊天背景 | `#EDEDED` | `#000` |
+| 导航/输入栏 | `#F7F7F7` / 边 `#E2E2E2` | `#1B1B1D` / 边 `#2C2C2E` |
+| 对方气泡 | `#FFF` 字 `#111` | `#2A2A2C` 字 `#F0F0F0` |
+| 时间戳 | `rgba(0,0,0,.32)` | `rgba(255,255,255,.35)` |
+
+**小程序实现口径：**
+
+- 动画只用 `transform` / `opacity`（GPU 合成层），禁止改 `width/height/top/left` 触发重排；牌堆卡 `will-change: transform`。
+- 手势用 `bindtouchstart/move/end` + 在卡片节点 `catchtouchmove` 仅在判定为横向后阻止冒泡（判定前不得 catch，否则聊天区无法纵向滚动）；或用 `movable-view` 以外的自定义实现时同此原则。
+- 三张牌堆卡为**固定节点**（不随翻页重建），只轮转位置 class（front/g1/g2），卡片内容永不变更——天然循环、补位动画由 class 过渡自动完成。
+- 展开消息行用 `wx:if` + CSS animation（stagger 用内联 `animation-delay`）；viewer 用全屏 `position: fixed` 黑底容器。
+- 每叠一个组件实例；页面接收多组时纵向排列多个折叠卡消息（组间与普通消息一致）。
+- 真机验收对照清单：封面右对齐 58% 宽、扇形只露右边、胶囊在左侧背景区不跟卡动、滑动跟手旋转、阈值/回弹手感、飞出渐隐、循环翻页、展开 stagger、亮暗两套——与真实微信并排逐项对比。
+
 ---
 
 ## 附录：用户路径到技术实现映射

@@ -111,6 +111,62 @@
 
 > 本区块记录每次迭代的上下文，供新窗口快速了解上次做了什么。
 
+### 2026-07-19（品牌定名「滑一叠」+ 新手引导方案调研）
+
+- **做了什么：** ① 小程序定名「滑一叠」（经四轮命名 swarm 交叉查重确定，发音 huá-yī-dié 有记忆点，"一叠图滑着看"即产品本身）。用户可见文案全部替换：app.json/index.json 导航标题、首页品牌区、结果页自定义导航、我的页「关于」菜单/页脚/关于弹窗（描述重写为叠图玩法口径）、隐私说明、三处分享标题（统一为"我刚用滑一叠做了一叠穿搭卡片，快来滑着帮我挑！"）、sitemap 描述、云函数 package.json。仅 `project.config.json` 的 `projectname: "WePicTool"` 保留（开发者工具本地项目标识，不影响用户）。check:syntax、check:miniprogram 均通过。② 完成新手引导市场调研（剪映剪同款/美图配方/妙鸭/多多果园/群接龙等案例），核心结论：把"朋友滑着看"的瞬间搬到小程序内（首屏仿真演示 + 示例一键体验 + 结果页朋友视角预览 + 保存后发送引导气泡）。
+- **改了哪些文件：** miniprogram/app.json、sitemap.json、pages/index/index.json/.wxml、pages/result/result.wxml/.js、pages/preview/preview.js、pages/profile/profile.js/.wxml、cloudfunctions/processOutfit/package.json；本文件。
+- **关键决策：** 中文主名「滑一叠」，WePicTool 仅作开发代号；分享话术全部围绕"滑着挑"强化接收端动作。
+- **下一步：** ① 微信认证提交名称「滑一叠」（备选：画一叠 → 发一叠）；② 按调研结论排期新手引导优化（首屏演示 GIF / 示例体验入口 / 发送引导气泡）；③ 阶段三真机验收仍是阻塞项。
+
+### 2026-07-19（抠图模型切换 wanx-v1 试用）
+
+- **做了什么：** 应用户要求，云函数 `processOutfit` 抠图模型由 `qwen-image-2.0` 改为 `wanx-v1`，并支持环境变量 `DASHSCOPE_MATTING_MODEL` 覆盖（不改代码即可换模型/回退）。新增 `scripts/test-wanx.cjs`：与云函数 mattingImageWithDashScope 完全一致的请求形态（multimodal-generation 端点 + base64 图 + 抠图提示词），用于本地验证连通性。分类模型 qwen-vl-plus 未动。语法检查通过；本地无 DASHSCOPE_API_KEY（仅存于云函数环境变量），实际 API 验证待用户配合。
+- **改了哪些文件：** miniprogram/cloudfunctions/processOutfit/index.js、scripts/test-wanx.cjs（新增）；本文件。
+- **关键决策 / 风险：** wanx-v1（通义万相文生图）官方口径走 text2image image-synthesis 异步任务 API，与当前 multimodal-generation 同步端点可能不兼容——若测试报 InvalidModel 类错误，需改用万相专用端点或回退 qwen-image-2.0（设 `DASHSCOPE_MATTING_MODEL=qwen-image-2.0` 即可，无需改代码）。
+- **下一步：** ① 本地：`DASHSCOPE_API_KEY=sk-xxx node scripts/test-wanx.cjs` 验证；② 云端：开发者工具重新「上传并部署」processOutfit 后跑全链路真机验收。
+
+### 2026-07-19（验收修复：👗图标 / 记录重复 / 预览页交互）
+
+- **做了什么：** 按用户验收反馈修三处。① 裙子 emoji 全清：record.js TYPE_META outfit 👗→👕（与结果页上衣组一致）、profile.wxml 关于弹窗 logo 👗→🖼️。② 记录重复 bug：result.js `saveRecordToStorage` 写入前按 taskId 去重（已存在同 taskId 的 taskSnapshot 直接跳过，不新增不挪位；「再次生成」走 createMockTask 新 taskId 不受影响），根因是 `hasSavedRecord` 仅页实例级防抖，从记录页打开旧快照被当成新任务重写一条。③ 预览页三问题：默认主题 dark→light（白色背景，暗色保留为可切换）；返回键失灵根因是 `.wx-nav .name` 的 `margin-left:-18px` 视觉居中 hack 盖住 20px 宽返回键——改为 back/dots 对称定宽 44px + 标题 flex:1 居中 + 返回键热区扩至 44px×全高，JS 加页面栈兜底；主题切换胶囊被系统胶囊（···⊙）压住右半——改为锚定提示条左缘绝对定位；另修展开态长按后补发 tap 误开大图（长按后 500ms 内吞掉 tap）。§12.6 手势/视觉契约（58% 卡宽、扇形露边、跟手旋转、阈值飞出、stagger、方向锁动态 scroll-y）全部保留。check:syntax、check:miniprogram 均通过。
+- **改了哪些文件：** miniprogram/pages/result/result.js、pages/record/record.js、pages/profile/profile.wxml、pages/preview/preview.js/.wxss；本文件。
+- **关键决策：** 记录去重以 taskId 为唯一键而非 recordId/时间戳；预览页亮色为默认（用户口径"背景改为白色"），暗色不删仅作切换项。
+- **下一步：** 真机核对：记录页查看往返不再重复、预览页返回/主题切换/长按手势；阶段三真机验收仍是阻塞项。
+
+### 2026-07-19（品牌图标 + tabBar 图标 + 确认页可编辑）
+
+- **做了什么：** 按用户验收反馈做三处修正。① 首页品牌区图标由 👗（电商衣橱感）改为 CSS 绘制的三卡扇形叠图小图标（淡主色底卡 ×2 + 渐变顶卡），贴合"微信叠图"定位。② tabBar 三 tab 补齐真实图标：脚本 `scripts/gen-tabbar-icons.py`（PIL 4x 超采样）生成 home/record/profile 线条图标各两套（#999 常态 + #4f6bf5 选中），替换原纯色占位方块；`app.json` 的 `selectedColor` 由微信绿 `#07C160` 改为主色 `#4f6bf5` 与新设计统一。③ 确认页缩略图网格新增「添加图片」虚线卡（未满 9 张显示，点击 `onAddMedia` 追加选图，count 动态 = 9 − 已选数）+ 每张缩略图右上角 × 移除角标（`onRemoveImage`，删空自动回退 home 步骤），确认阶段可直接增删编辑已选图片。check:syntax、check:miniprogram 均通过。
+- **改了哪些文件：** miniprogram/pages/index/index.js/.wxml/.wxss、miniprogram/app.json、miniprogram/assets/tabbar/*.png（6 枚重新生成）、scripts/gen-tabbar-icons.py（新增）；本文件。
+- **关键决策：** 品牌图标用 CSS 形状而非 emoji——现有 emoji 无"叠图"语义，CSS 三卡叠放与结果页牌堆语言一致且零素材依赖；tabBar 图标自制线条风（房子/叠卡/人像），避免外部素材版权与风格不统一。
+- **下一步：** 开发者工具核对品牌图标、tabBar 图标与确认页增删交互；阶段三真机验收仍是阻塞项。
+
+### 2026-07-19（三 Tab 页重设计：首页/记录/我的）
+
+- **做了什么：** 依据 `ui-reference` 参考图与结果页设计语言，完成三个 tab 页 UI 重设计。统一设计 token：页面底 `#f6f6f8`、白卡圆角 24rpx、唯一渐变 `#4f6bf5→#6a3df0` 仅用于主 CTA、徽标胶囊、emoji 图标。① 首页：品牌区 + 渐变旗舰主卡「穿搭叠图」（接原 onChooseMedia）+ 玩法模板 2 列宫格 ×7（大字滑卡/剧情滑卡/盲盒抽卡/拼图揭秘/翻页动画/成套搭配/滑滑换装，灰态「即将上线」占位，data.comingModules 数据驱动，点击 toast 敬请期待）+ 工具位「资料打包」+「怎么玩」说明卡；confirm 步骤逻辑原样保留仅套 token。② 记录页：新增按功能类型分类架构——TYPE_META 九类映射、分类 tab 数据驱动（全部 + 记录中实际出现的类型，随新玩法上线自动点亮）、记录卡按类型展示不同摘要（outfit 分组 tag / 其他回退「一叠 N 张」+ 摘要容错）、补回「清空」入口、空态改圆图标 + 渐变 CTA。③ 我的页：用户白卡（渐变头像 + 复制 ID + 「已生成 N 次」徽标，N 读 wepictool_records）+ 玩法预告提示卡 + 「功能」「设置与支持」两组菜单行卡。全部逻辑契约（eventChannel、storage key、跳转路径、方法名、比例/分组 key）逐条保留。check:syntax、check:miniprogram 均通过。
+- **改了哪些文件：** miniprogram/pages/index/index.js/.wxml/.wxss、pages/record/record.js/.wxml/.wxss、pages/profile/profile.js/.wxml/.wxss/.json（index.json、record.json 未动）；新增 plan.md；本文件。
+- **关键决策：** 首页宫格一次搭满 7 玩法 + 1 工具位，后续版本只做「点亮」状态不做改版；记录分类 tab 只展示数据中实际存在的类型，未上线玩法不占位；旧记录无 type 字段默认归 outfit，写入侧（result.js）暂未加 type 字段，待阶段六新玩法接入时补充。
+- **下一步：** 开发者工具本地预览核对三页视觉（首页宫格/记录分类 tab/我的徽标）；阶段三真机验收仍是阻塞项。
+
+### 2026-07-18（叠图预览 1:1 规格标定）
+
+- **做了什么：** 依据真机暗色模式录屏（`ui-reference/wx-merge-real-demo.mp4`）完成微信折叠卡 1:1 还原规格标定，并产出可交互高保真原型（Blueprint Widget「WePicTool 三屏原型」widget_7a0db4d4：确认页选比例 → 分组结果页 → 1:1 微信预览，默认暗色可切亮色）。规格已写入 PLAYBOOK §3.4（产品口径）与 TECHNICAL_SPEC §12.6（技术契约：状态机、结构/手势/动画参数表、主题配色、小程序实现口径、真机验收对照清单）；PLAYBOOK §4.1 补充确认页比例前置（处理前选、默认 4:5、结果页可补救切换不重抠）与「其他素材」组规则。
+- **改了哪些文件：** docs/product/PLAYBOOK.md、docs/product/TECHNICAL_SPEC.md、docs/product/PROJECT_STATUS.md；原型 Widget index.html（widget workspace，不进仓库）。
+- **关键决策：** 纠正早期原型 4 处与真微信不符的结构——「展开 N」胶囊悬浮在卡片左侧聊天背景区（非卡片上）、牌堆向右扇形露边（+8/+16px、scale .97/.94）、删除层叠角标与页码、卡宽 58% 圆角 12px；手势定为方向锁 + 跟手旋转 ±6°、阈值 25% 卡宽或 0.3px/ms、飞出 220ms ease-in 循环入尾；三张牌堆卡为固定节点只轮转位置 class（内容不变，天然循环）。
+- **下一步：** ~~按 §12.6 重写 `pages/preview`~~（已于当日完成，见下条）；真机并排对照 §12.6 验收清单逐项过；阶段三真机验收仍是阻塞项。
+
+### 2026-07-18（确认页 + 分组结果页实现完成）
+
+- **做了什么：** 编码代理按三屏原型（`ui-reference/wx-stack-prototype.html`，用户已验收）实现小程序的 ①② 两屏。① 确认页：index 页内步骤切换（step: home/confirm），选图后、上传前展示 4 列缩略图 + 比例分段控件（1:1/4:5/3:4 默认 4:5）+「开始处理」，比例随 task 经 eventChannel 流入结果页首次合成（历史快照兜底 4:5），并加「重新选择」退路。② 结果页：整体从白色聊天风格改为分组卡片布局——顶部提示卡、四组卡片（组名+张数+徽标：≥3 绿标「适合微信叠图」/不足 3 灰标/其他素材固定灰标「不进入穿搭叠图」）、横向缩略图带 01/02 编号角标、穿搭组整组保存、其他素材组仅说明+单图保存、底部固定栏（比例 chip + 微信预览 + 保存全部）。既有逻辑全部保留（cardComposer 串行+取消、displayUrl 模式、比例切换重合成、重做、改分类、编号保存、eventChannel 契约）；保存后发送引导从 toast 升级为 modal（教勾选「发送后合并展示」）。移除聊天气泡布局、旧 action sheet 和三个「开发中」占位按钮。check:syntax、check:miniprogram 均通过。
+- **改了哪些文件：** miniprogram/pages/index/index.js/.wxml/.wxss、pages/result/result.js/.wxml/.wxss（preview、cloudfunctions、cardComposer 未动）。
+- **关键决策 / 偏差：** 确认页「其他素材」提示为静态文案（分类在上传后发生，无法预知数量）；缩略图保留「原图/改分类/重做」小字入口（原型只有保存单图）；缩略图画框固定 4:5，比例切换只影响合成卡内容。
+- **下一步：** 开发者工具本地预览模式跑「选图 → 确认比例 → 分组卡片 → 微信预览」全链路核对视觉；然后连同 §12.6 清单一起做真机验收（阶段三阻塞项）。
+
+### 2026-07-18（pages/preview 1:1 重写完成）
+
+- **做了什么：** 编码代理按 TECHNICAL_SPEC §12.6 全量重写 `miniprogram/pages/preview/`（js/wxml/wxss）：固定三节点牌堆位置轮转、方向锁手势（动态切换 scroll-view scroll-y 替代 catchtouchmove，行为等价）、跟手旋转 ±6°、阈值 25% 卡宽或 0.3px/ms、飞出循环入尾无限翻、左侧悬浮「展开 N / 收起」胶囊、展开独立消息行 stagger 40ms、黑底 viewer、两态长按 wx.showActionSheet（保存全部走队列下载 + 授权引导）、默认暗色可切亮色。eventChannel 契约对 result.js 零破坏（兼容原 `{ task: { taskId, groups, ratio } }`，并新增 §12.6 直连形态识别）。check:syntax、check:miniprogram 均通过。
+- **改了哪些文件：** miniprogram/pages/preview/preview.js/.wxml/.wxss（其他文件未动）。
+- **关键决策 / 偏差：** ① 方向锁后用动态 scroll-y 锁定纵向滚动（WXML 事件绑定类型静态，无法中途切 catch）；② N>3 的组折叠态只在前 3 张循环，第 4~N 张走「展开 N」；③ 单位用 px 与 58vw 卡宽精确组合；④ 清理旧版非契约元素（底部返回条、展开态改分类浮层、折叠态点击 previewImage）。
+- **下一步：** 开发者工具 + 真机对照 §12.6 验收清单逐项过（58% 右对齐、扇形只露右边、胶囊不跟卡动、跟手旋转、阈值回弹、循环翻页、展开 stagger、亮暗两套）；阶段三真机验收仍是阻塞项。
+
 ### 2026-07-18（定位升级）
 
 - **做了什么：** 产品定位升级为"微信叠图玩法生成器"——穿搭白底卡是旗舰功能，玩法模板库是长期资产。新增 `docs/product/PLAYBOOK.md`（平台事实、统一 6 段叠图管线、9 个模块实现卡、阶段六~九上线节奏）；PRD 定位章节最小改写并替换红线；TECHNICAL_SPEC 新增第 12 节叠图玩法管线技术规格；README 文档入口更新；删除 `docs/WePicTool_功能模块规划.md`（内容已全部并入 PLAYBOOK，避免双份真相源）。

@@ -1,13 +1,67 @@
 // pages/index/index.js
 const { createMockTask, isCloudPermissionError } = require('../../utils/task');
 
+// 确认页输出比例选项（与结果页 RATIO_OPTIONS 保持一致）
+const CONFIRM_RATIO_OPTIONS = [
+  { key: '1:1', label: '1:1' },
+  { key: '4:5', label: '4:5' },
+  { key: '3:4', label: '3:4' }
+];
+
+// 「用示例试一叠」包内示例素材清单。
+// 顺序硬约束：3 张上衣 → 3 张下装 → 3 张鞋，
+// 与 utils/task.js 的 getMockCategory 索引分组（0-2 tops、3-5 bottoms、6-8 shoes）对齐，
+// 保证示例结果页三组全满、都有「适合微信叠图」绿标，演示效果最佳。
+// width/height/size 为素材压缩后（≤80KB）的真实值，避免运行时再逐张探测。
+const SAMPLE_FILES = [
+  { name: 'top1.jpg', width: 640, height: 640, size: 25560 },
+  { name: 'top2.jpg', width: 640, height: 800, size: 40013 },
+  { name: 'top3.jpg', width: 640, height: 959, size: 39076 },
+  { name: 'bottom1.jpg', width: 640, height: 512, size: 20671 },
+  { name: 'bottom2.jpg', width: 640, height: 960, size: 26672 },
+  { name: 'bottom3.jpg', width: 640, height: 427, size: 33402 },
+  { name: 'shoe1.jpg', width: 640, height: 457, size: 43925 },
+  { name: 'shoe2.jpg', width: 640, height: 800, size: 23610 },
+  { name: 'shoe3.jpg', width: 640, height: 640, size: 18615 }
+];
+
+// 首屏「朋友视角」演示卡轮播内容：直接复用包内示例图前 4 张（含上/下/鞋三类）
+const DEMO_SLIDES = [
+  { src: '/assets/samples/top1.jpg', num: '01' },
+  { src: '/assets/samples/bottom1.jpg', num: '02' },
+  { src: '/assets/samples/shoe1.jpg', num: '03' },
+  { src: '/assets/samples/top2.jpg', num: '04' }
+];
+
 Page({
   data: {
     loading: false,
-    loadingText: '开始处理...'
+    loadingText: '开始处理...',
+    // 步骤状态：home = 选图入口；confirm = 处理前确认（缩略图 + 比例）
+    step: 'home',
+    pickedImages: [],
+    confirmRatio: '4:5',
+    ratioOptions: CONFIRM_RATIO_OPTIONS,
+    // 首屏「朋友视角」仿真演示卡的轮播数据
+    demoSlides: DEMO_SLIDES,
+    // 玩法模板（即将上线）：数据驱动渲染，点击统一走 onComingSoon
+    comingModules: [
+      { key: 'bigtext', name: '大字滑卡', emoji: '🔤', desc: '一张一个大字，滑出惊喜' },
+      { key: 'drama', name: '剧情滑卡', emoji: '🎬', desc: '多图连播，讲出你的剧情' },
+      { key: 'blindbox', name: '盲盒抽卡', emoji: '🎁', desc: '抽到哪张看哪张，惊喜拉满' },
+      { key: 'puzzle', name: '拼图揭秘', emoji: '🧩', desc: '一块一块，拼出完整答案' },
+      { key: 'flipbook', name: '翻页动画', emoji: '🎞️', desc: '多图连翻，让照片动起来' },
+      { key: 'suit', name: '成套搭配', emoji: '🧥', desc: '一整套穿搭，一图看懂' },
+      { key: 'dressup', name: '滑滑换装', emoji: '👠', desc: '左右滑一滑，换装挑不停' }
+    ]
   },
 
-  // 选择穿搭图片
+  // 即将上线模块统一提示
+  onComingSoon: function () {
+    wx.showToast({ title: '敬请期待，即将上线', icon: 'none' });
+  },
+
+  // 选择穿搭图片：先进入确认环节，不直接上传
   onChooseMedia: function () {
     const that = this;
     wx.chooseMedia({
@@ -17,19 +71,81 @@ Page({
       success: function (res) {
         const tempFiles = res.tempFiles;
         if (tempFiles.length === 0) return;
-        
-        that.setData({
-          loading: true,
-          loadingText: '正在压缩图片...'
-        });
 
-        // 开始对所有选择的图片进行本地压缩
-        that.compressAndUploadImages(tempFiles);
+        that.setData({
+          step: 'confirm',
+          pickedImages: tempFiles
+        });
       },
       fail: function (err) {
         console.log('选择图片失败:', err);
       }
     });
+  },
+
+  // 确认页：选择输出比例（只影响白底卡片合成，不影响抠图）
+  onSelectConfirmRatio: function (e) {
+    const key = e.currentTarget.dataset.key;
+    if (!key || key === this.data.confirmRatio) return;
+    this.setData({ confirmRatio: key });
+  },
+
+  // 确认页：继续添加图片（追加到已选列表，总数不超过 9 张）
+  onAddMedia: function () {
+    const that = this;
+    const remain = 9 - this.data.pickedImages.length;
+    if (remain <= 0) {
+      wx.showToast({ title: '最多选择 9 张图片', icon: 'none' });
+      return;
+    }
+    wx.chooseMedia({
+      count: remain,
+      mediaType: ['image'],
+      sourceType: ['album', 'camera'],
+      success: function (res) {
+        const tempFiles = res.tempFiles;
+        if (!tempFiles || tempFiles.length === 0) return;
+        that.setData({
+          pickedImages: that.data.pickedImages.concat(tempFiles)
+        });
+      },
+      fail: function (err) {
+        console.log('添加图片失败:', err);
+      }
+    });
+  },
+
+  // 确认页：移除单张已选图片
+  onRemoveImage: function (e) {
+    const index = e.currentTarget.dataset.index;
+    if (index === undefined || index === null) return;
+    const pickedImages = this.data.pickedImages.slice();
+    pickedImages.splice(Number(index), 1);
+    // 删空则回退到首页步骤
+    if (pickedImages.length === 0) {
+      this.setData({ step: 'home', pickedImages: [] });
+      return;
+    }
+    this.setData({ pickedImages: pickedImages });
+  },
+
+  // 确认页：返回重新选择图片
+  onBackToHome: function () {
+    this.setData({ step: 'home', pickedImages: [] });
+  },
+
+  // 确认页：开始处理，走既有上传/AI 分类/抠图链路
+  onStartProcess: function () {
+    const tempFiles = this.data.pickedImages;
+    if (!tempFiles || tempFiles.length === 0) return;
+
+    this.setData({
+      loading: true,
+      loadingText: '正在压缩图片...'
+    });
+
+    // 开始对所有选择的图片进行本地压缩
+    this.compressAndUploadImages(tempFiles);
   },
 
   // 压缩并上传所有图片
@@ -272,11 +388,15 @@ Page({
   },
 
   navigateToResult: function (task) {
+    // 把确认页选定的输出比例随任务传给结果页，作为初始合成比例
+    const taskWithRatio = Object.assign({}, task, {
+      ratio: this.data.confirmRatio || '4:5'
+    });
     wx.navigateTo({
       url: `/pages/result/result?taskId=${task.taskId}`,
       success: function (navRes) {
         navRes.eventChannel.emit('acceptTaskData', {
-          task: task
+          task: taskWithRatio
         });
       }
     });

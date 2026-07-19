@@ -6,7 +6,7 @@ const CHANGE_CATEGORY_OPTIONS = [
   { key: 'tops', label: '上衣组' },
   { key: 'bottoms', label: '下装组' },
   { key: 'shoes', label: '鞋子组' },
-  { key: 'others', label: '未处理素材区' }
+  { key: 'others', label: '其他素材' }
 ];
 
 const RATIO_OPTIONS = [
@@ -15,12 +15,16 @@ const RATIO_OPTIONS = [
   { key: '3:4', label: '3:4', icon: '📷', desc: '竖版，通用穿搭展示' }
 ];
 
-const GROUP_INFO = {
-  tops: { title: '上衣', emoji: '👕' },
-  bottoms: { title: '下衣', emoji: '👖' },
-  shoes: { title: '鞋子', emoji: '👟' },
-  others: { title: '未处理素材', emoji: '📦' }
+// 分组卡片头部展示信息（对齐高保真原型 #screen-result）
+const GROUP_CARD_META = {
+  tops: { emoji: '👕', title: '上衣组' },
+  bottoms: { emoji: '👖', title: '下装组' },
+  shoes: { emoji: '👟', title: '鞋子组' },
+  others: { emoji: '🖼', title: '其他素材' }
 };
+
+const GROUP_ORDER = ['tops', 'bottoms', 'shoes', 'others'];
+const DEFAULT_RATIO = '4:5';
 
 const RECORDS_KEY = 'wepictool_records';
 const MAX_RECORDS = 20;
@@ -39,13 +43,14 @@ function computeDisplayUrl(item) {
   return item.url || item.fileId || item.localPath || '';
 }
 
-// 给分组内每条结果补充 displayUrl / composeStatus 视图字段
+// 给分组内每条结果补充 displayUrl / composeStatus / numLabel 视图字段
 function decorateGroups(groups) {
   const decorated = {};
   Object.keys(groups || {}).forEach((key) => {
-    decorated[key] = (groups[key] || []).map((item) => Object.assign({}, item, {
+    decorated[key] = (groups[key] || []).map((item, index) => Object.assign({}, item, {
       displayUrl: computeDisplayUrl(item),
-      composeStatus: item.composeStatus || ''
+      composeStatus: item.composeStatus || '',
+      numLabel: index < 9 ? `0${index + 1}` : `${index + 1}`
     }));
   });
   return decorated;
@@ -54,29 +59,24 @@ function decorateGroups(groups) {
 Page({
   data: {
     taskId: '',
-    chatTime: '',
     groups: {
       tops: [],
       bottoms: [],
       shoes: [],
       others: []
     },
-    expanded: {
-      tops: false,
-      bottoms: false,
-      shoes: false,
-      others: false
-    },
+    groupList: [],
     totalCount: 0,
     isEmpty: false,
     changeCategoryOptions: CHANGE_CATEGORY_OPTIONS.map(item => item.label),
-    showActionSheet: false,
-    showGroupSaveSheet: false,
-    availableGroups: [],
-    ratio: DEFAULT_OPTIONS.ratio,
+    ratio: DEFAULT_RATIO,
     ratioOptions: RATIO_OPTIONS,
     showRatioSheet: false,
-    composing: false
+    composing: false,
+    // 「朋友视角」引导卡缩略图（取第一个非空分组的前 3 张 displayUrl）
+    friendPreviewThumbs: [],
+    // 保存完成后的发送引导半屏浮层
+    showSendGuide: false
   },
 
   _composerCanvas: null,
@@ -90,8 +90,6 @@ Page({
     if (options.taskId) {
       this.setData({ taskId: options.taskId });
     }
-
-    this.setData({ chatTime: this.formatChatTime(new Date()) });
 
     this.initComposerCanvas();
 
@@ -140,8 +138,17 @@ Page({
     const groups = decorateGroups(normalizeTaskGroups(task.groups || {}));
     const totalCount = this.calculateTotalCount(groups);
     const isEmpty = totalCount === 0;
+    // 初始合成比例：确认页随任务传入；历史记录等无 ratio 的场景回退到产品默认 4:5
+    const ratio = this.isValidRatio(task && task.ratio) ? task.ratio : DEFAULT_RATIO;
 
-    this.setData({ groups, totalCount, isEmpty });
+    this.setData({
+      groups,
+      totalCount,
+      isEmpty,
+      ratio,
+      groupList: this.buildGroupList(groups),
+      friendPreviewThumbs: this.buildFriendPreviewThumbs(groups)
+    });
 
     if (!this.hasSavedRecord && task && totalCount > 0) {
       this.hasSavedRecord = true;
@@ -154,6 +161,54 @@ Page({
     } else {
       this._pendingTask = this.data.groups;
     }
+  },
+
+  isValidRatio: function (ratio) {
+    return RATIO_OPTIONS.some(option => option.key === ratio);
+  },
+
+  // 分组卡片头部视图模型：组名 + 张数 + 状态徽标（WXML 禁止函数调用，需预计算）
+  buildGroupList: function (groups) {
+    const list = [];
+    GROUP_ORDER.forEach((key) => {
+      const count = (groups[key] || []).length;
+      if (count === 0) return;
+      const meta = GROUP_CARD_META[key];
+      let badgeText;
+      let badgeClass;
+      if (key === 'others') {
+        badgeText = '不进入穿搭叠图';
+        badgeClass = 'warn';
+      } else if (count >= 3) {
+        badgeText = '适合微信叠图';
+        badgeClass = 'ok';
+      } else {
+        badgeText = '不足 3 张 · 建议普通发送';
+        badgeClass = 'warn';
+      }
+      list.push({
+        key,
+        emoji: meta.emoji,
+        title: meta.title,
+        count,
+        badgeText,
+        badgeClass,
+        saveText: `保存 ${meta.title}（${count} 张）`
+      });
+    });
+    return list;
+  },
+
+  // 「朋友视角」引导卡缩略图：按分组顺序取第一个非空组的前 3 张展示图
+  buildFriendPreviewThumbs: function (groups) {
+    for (let i = 0; i < GROUP_ORDER.length; i++) {
+      const items = groups[GROUP_ORDER[i]] || [];
+      if (items.length === 0) continue;
+      return items.slice(0, 3)
+        .map(item => item.displayUrl || computeDisplayUrl(item))
+        .filter(Boolean);
+    }
+    return [];
   },
 
   // 所有合成任务都经过这个串行队列：
@@ -352,12 +407,6 @@ Page({
     return Object.keys(groups).reduce((sum, key) => sum + (groups[key] || []).length, 0);
   },
 
-  formatChatTime: function (date) {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  },
-
   getDisplayUrl: function (item) {
     return computeDisplayUrl(item);
   },
@@ -378,6 +427,9 @@ Page({
     this.setData({ showRatioSheet: false });
   },
 
+  // 弹层面板点击拦截（防止穿透关闭）
+  onActionPanelTap: function () {},
+
   onSelectRatio: function (e) {
     const index = parseInt(e.currentTarget.dataset.index, 10);
     const selected = RATIO_OPTIONS[index];
@@ -390,11 +442,6 @@ Page({
       // 切换比例后整批重新合成（旧任务通过 token 自动作废）
       this.composeAllCards(this.data.groups);
     });
-  },
-
-  onToggleExpand: function (e) {
-    const groupKey = e.currentTarget.dataset.group;
-    this.setData({ [`expanded.${groupKey}`]: !this.data.expanded[groupKey] });
   },
 
   onToggleOriginal: function (e) {
@@ -440,8 +487,8 @@ Page({
   },
 
   getCategoryLabel: function (key) {
-    const meta = GROUP_META[key];
-    return meta ? meta.title : '未处理素材区';
+    const meta = GROUP_CARD_META[key];
+    return meta ? meta.title : '其他素材';
   },
 
   moveItemToGroup: function (sourceGroupKey, sourceIndex, targetGroupKey) {
@@ -474,7 +521,13 @@ Page({
 
     const normalizedGroups = decorateGroups(normalizeTaskGroups(groups));
     const totalCount = this.calculateTotalCount(normalizedGroups);
-    this.setData({ groups: normalizedGroups, totalCount, isEmpty: totalCount === 0 });
+    this.setData({
+      groups: normalizedGroups,
+      totalCount,
+      isEmpty: totalCount === 0,
+      groupList: this.buildGroupList(normalizedGroups),
+      friendPreviewThumbs: this.buildFriendPreviewThumbs(normalizedGroups)
+    });
 
     // 按新分组锚点重新合成未完成项（已按当前比例合成好的会被跳过）
     if (this._composerReady) {
@@ -501,7 +554,7 @@ Page({
     wx.reLaunch({ url: '/pages/index/index' });
   },
 
-  // ★ 新增：跳转微信发送预览页
+  // 跳转微信发送预览页（eventChannel 契约保持不变）
   onWechatPreview: function () {
     const that = this;
     wx.navigateTo({
@@ -518,67 +571,55 @@ Page({
     });
   },
 
-  onSendToFriend: function () {
-    wx.showShareMenu({ withShareTicket: true, menus: ['shareAppMessage', 'shareTimeline'] });
-    this.setData({ showActionSheet: true });
+  // 发送引导浮层：仅关闭（「我知道了」）
+  onCloseSendGuide: function () {
+    this.setData({ showSendGuide: false });
   },
 
-  onMergeSend: function () {
-    this.setData({ showActionSheet: true });
+  // 发送引导浮层：关闭并跳转现有微信预览页（「去看看朋友视角」）
+  onSendGuidePreview: function () {
+    this.setData({ showSendGuide: false });
+    this.onWechatPreview();
   },
 
-  onCloseActionSheet: function () {
-    this.setData({ showActionSheet: false });
+  // 保存单图（每组缩略图下方的「保存单图」按钮）
+  onSaveSingleItem: function (e) {
+    const groupKey = e.currentTarget.dataset.group;
+    const index = parseInt(e.currentTarget.dataset.index, 10);
+    const item = (this.data.groups[groupKey] || [])[index];
+    if (!item) return;
+    const url = this.getSaveUrl(item);
+    if (!url) {
+      wx.showToast({ title: '图片还在生成中，请稍候', icon: 'none' });
+      return;
+    }
+    this.saveImagesSequentially([url], '已保存到相册');
   },
 
-  onActionPanelTap: function () {},
-
-  onShareAppMessageAction: function () {
-    this.setData({ showActionSheet: false });
-    wx.showToast({ title: '点击右上角转发给朋友', icon: 'none' });
-  },
-
+  // 底部「保存全部」：按分组顺序编号 01-N 依次保存
   onSaveAllImages: function () {
-    this.setData({ showActionSheet: false });
     const allUrls = this.getAllImageUrls();
     if (allUrls.length === 0) return;
     if (this.data.composing) {
       wx.showToast({ title: '白底卡片生成中，已生成的优先保存', icon: 'none' });
     }
-    this.saveImagesSequentially(allUrls, '全部图片保存完成');
+    this.saveImagesSequentially(allUrls, '全部图片保存完成', true);
   },
 
-  onSaveByGroup: function () {
-    this.setData({ showActionSheet: false });
-    const availableGroups = Object.keys(this.data.groups)
-      .filter(key => this.data.groups[key] && this.data.groups[key].length > 0)
-      .map(key => ({
-        key,
-        title: GROUP_INFO[key].title,
-        emoji: GROUP_INFO[key].emoji,
-        count: this.data.groups[key].length
-      }));
-    this.setData({ availableGroups, showGroupSaveSheet: true });
-  },
-
-  onCloseGroupSaveSheet: function () {
-    this.setData({ showGroupSaveSheet: false });
-  },
-
+  // 穿搭组整组保存（「其他素材」组不提供整组保存入口）
   onSaveGroupByKey: function (e) {
     const groupKey = e.currentTarget.dataset.group;
-    this.setData({ showGroupSaveSheet: false });
     const urls = this.getGroupUrls(groupKey);
     if (urls.length === 0) return;
     if (this.data.composing) {
       wx.showToast({ title: '白底卡片生成中，已生成的优先保存', icon: 'none' });
     }
-    this.saveImagesSequentially(urls, `${GROUP_INFO[groupKey].title}保存完成`);
+    this.saveImagesSequentially(urls, `${GROUP_CARD_META[groupKey].title}保存完成`, true);
   },
 
   getAllImageUrls: function () {
     const urls = [];
-    Object.keys(this.data.groups).forEach(key => urls.push(...this.getGroupUrls(key)));
+    GROUP_ORDER.forEach(key => urls.push(...this.getGroupUrls(key)));
     return urls;
   },
 
@@ -586,39 +627,27 @@ Page({
     return (this.data.groups[groupName] || []).map(item => this.getSaveUrl(item)).filter(Boolean);
   },
 
-  saveImagesSequentially: function (urls, successTitle) {
+  saveImagesSequentially: function (urls, successTitle, showGuide) {
     if (!urls || urls.length === 0) return;
+    const that = this;
     wx.showLoading({ title: `正在保存 1/${urls.length} 张...`, mask: true });
-    let savedCount = 0;
     const saveNext = (index) => {
       if (index >= urls.length) {
         wx.hideLoading();
-        wx.showToast({ title: successTitle || '保存完成', icon: 'success', duration: 2000 });
+        if (showGuide) {
+          // 保存后发送引导：改为自定义半屏浮层，引导回微信勾选「发送后合并展示」
+          that.setData({ showSendGuide: true });
+        } else {
+          wx.showToast({ title: successTitle || '保存完成', icon: 'success', duration: 2000 });
+        }
         return;
       }
       wx.showLoading({ title: `正在保存 ${index + 1}/${urls.length} 张...`, mask: true });
-      this.downloadAndSaveToAlbum(urls[index])
-        .then(() => { savedCount++; saveNext(index + 1); })
-        .catch((err) => { wx.hideLoading(); this.handleSaveError(err, urls.slice(index)); });
+      that.downloadAndSaveToAlbum(urls[index])
+        .then(() => { saveNext(index + 1); })
+        .catch((err) => { wx.hideLoading(); that.handleSaveError(err, urls.slice(index)); });
     };
     saveNext(0);
-  },
-
-  onEditGroup: function () {
-    wx.showModal({
-      title: '编辑分组',
-      content: '点击各分组的"展开"后，每张图片下方都有"改分类"按钮，可以调整图片归属。',
-      confirmText: '我知道了',
-      showCancel: false
-    });
-  },
-
-  onReorder: function () {
-    wx.showToast({ title: '调整顺序功能开发中', icon: 'none' });
-  },
-
-  onSaveLongImage: function () {
-    wx.showToast({ title: '保存长图功能开发中', icon: 'none' });
   },
 
   downloadAndSaveToAlbum: function (url) {
@@ -708,6 +737,14 @@ Page({
   saveRecordToStorage: function (task) {
     try {
       const records = wx.getStorageSync(RECORDS_KEY) || [];
+      // 按 taskId 去重：同一任务（如从记录页「查看」再次打开旧 taskSnapshot）只保留首次写入的记录，
+      // 命中已存在记录时直接跳过（不新增、不挪动位置），避免列表出现同组重复记录。
+      // 去重口径：优先比对 r.taskSnapshot.taskId，兼容历史可能存在的 r.taskId 直存形态；
+      // 记录页「再次生成」会 createMockTask 产生新 taskId，视为新任务，不在去重拦截范围内。
+      const taskId = task && task.taskId;
+      if (taskId && records.some(r => (r.taskSnapshot && r.taskSnapshot.taskId === taskId) || r.taskId === taskId)) {
+        return;
+      }
       const thumbnails = this.extractThumbnails(task.groups || {});
       const groupSummary = {};
       Object.keys(task.groups || {}).forEach(key => { groupSummary[key] = (task.groups[key] || []).length; });
@@ -747,7 +784,7 @@ Page({
 
   onShareAppMessage: function () {
     return {
-      title: '我刚用 WePicTool 整理了一组穿搭参考图，快来帮我选选！',
+      title: '我刚用滑一叠做了一叠穿搭卡片，快来滑着帮我挑！',
       path: '/pages/index/index'
     };
   }

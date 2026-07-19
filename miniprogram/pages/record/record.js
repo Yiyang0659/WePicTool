@@ -11,7 +11,22 @@ Page({
     isEmpty: true,
     totalRecords: 0,
     totalImages: 0,
-    showClearConfirm: false
+    showClearConfirm: false,
+    // 玩法类型元信息：未来新玩法写入带 type 的记录后，分类 tab 自动点亮
+    TYPE_META: {
+      outfit: { label: '穿搭叠图', emoji: '👕' },
+      bigtext: { label: '大字滑卡', emoji: '🔤' },
+      story: { label: '剧情滑卡', emoji: '🎬' },
+      blindbox: { label: '盲盒抽卡', emoji: '🎁' },
+      puzzle: { label: '拼图揭秘', emoji: '🧩' },
+      pack: { label: '资料打包', emoji: '🗂️' },
+      animate: { label: '翻页动画', emoji: '🎞️' },
+      combo: { label: '成套搭配', emoji: '🧥' },
+      dressup: { label: '滑滑换装', emoji: '👠' }
+    },
+    typeTabs: [{ type: 'all', label: '全部', emoji: '' }],
+    activeType: 'all',
+    filteredGroupedRecords: []
   },
 
   onShow: function () {
@@ -26,12 +41,23 @@ Page({
       const groupedRecords = this.groupByDate(processedRecords);
       const totalImages = processedRecords.reduce((sum, record) => sum + (record.totalCount || 0), 0);
 
+      // 分类 tab：永远有「全部」，其后只追加数据中实际出现过的类型
+      const typeTabs = this.buildTypeTabs(processedRecords);
+      let activeType = this.data.activeType;
+      if (activeType !== 'all' && !typeTabs.some(tab => tab.type === activeType)) {
+        activeType = 'all';
+      }
+      const filteredRecords = this.filterByType(processedRecords, activeType);
+
       this.setData({
         records: processedRecords,
         groupedRecords: groupedRecords,
         isEmpty: processedRecords.length === 0,
         totalRecords: processedRecords.length,
-        totalImages: totalImages
+        totalImages: totalImages,
+        typeTabs: typeTabs,
+        activeType: activeType,
+        filteredGroupedRecords: this.groupByDate(filteredRecords)
       });
     } catch (err) {
       console.error('加载记录失败:', err);
@@ -40,7 +66,10 @@ Page({
         groupedRecords: [],
         isEmpty: true,
         totalRecords: 0,
-        totalImages: 0
+        totalImages: 0,
+        typeTabs: [{ type: 'all', label: '全部', emoji: '' }],
+        activeType: 'all',
+        filteredGroupedRecords: []
       });
     }
   },
@@ -48,13 +77,61 @@ Page({
   // 处理记录数据，生成展示需要的字段
   processRecords: function (records) {
     return records.map(record => {
-      const date = new Date(record.createdAt);
       const groupSummaryList = this.buildGroupSummaryList(record.groupSummary);
+      // 无 type 字段的历史记录归为穿搭叠图
+      const recordType = record.type || 'outfit';
+      const typeMeta = this.getTypeMeta(recordType);
       return Object.assign({}, record, {
         dateLabel: this.getDateLabel(record.createdAt),
         time: this.formatTime(record.createdAt),
-        groupSummaryList: groupSummaryList
+        groupSummaryList: groupSummaryList,
+        recordType: recordType,
+        typeLabel: typeMeta.label,
+        typeEmoji: typeMeta.emoji,
+        // 非穿搭类型的摘要兜底字段（防御性容错，字段缺失则为空串）
+        snippet: record.text || record.title || record.summary || ''
       });
+    });
+  },
+
+  getTypeMeta: function (type) {
+    return this.data.TYPE_META[type] || { label: '其他玩法', emoji: '✨' };
+  },
+
+  // 构建分类 tab：全部 + 数据中实际出现过的类型（按 TYPE_META 声明顺序）
+  buildTypeTabs: function (records) {
+    const present = [];
+    records.forEach(record => {
+      const t = record.recordType;
+      if (present.indexOf(t) === -1) present.push(t);
+    });
+    const order = Object.keys(this.data.TYPE_META);
+    present.sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    const tabs = [{ type: 'all', label: '全部', emoji: '' }];
+    present.forEach(t => {
+      const meta = this.getTypeMeta(t);
+      tabs.push({ type: t, label: meta.label, emoji: meta.emoji });
+    });
+    return tabs;
+  },
+
+  filterByType: function (records, activeType) {
+    if (activeType === 'all') return records;
+    return records.filter(record => record.recordType === activeType);
+  },
+
+  // 选择分类 tab
+  onSelectType: function (e) {
+    const type = e.currentTarget.dataset.type;
+    if (!type || type === this.data.activeType) return;
+    const filteredRecords = this.filterByType(this.data.records, type);
+    this.setData({
+      activeType: type,
+      filteredGroupedRecords: this.groupByDate(filteredRecords)
     });
   },
 

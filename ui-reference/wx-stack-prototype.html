@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WePicTool 三屏原型</title>
+<style>
+  :root {
+    --daimon-widget-host-safe-inline-end: 190px;
+    --daimon-widget-host-safe-block-start: 44px;
+  }
+  .kimi-host-safe-context { container-type: inline-size; }
+  .kimi-host-safe-header {
+    box-sizing: border-box;
+    min-block-size: var(--daimon-widget-host-safe-block-start, 44px);
+    padding-inline-end: var(--daimon-widget-host-safe-inline-end, 190px);
+  }
+  @container (max-width: 419px) {
+    .kimi-host-safe-header { min-block-size: 0; padding-block-start: var(--daimon-widget-host-safe-block-start, 44px); padding-inline-end: 0; }
+  }
+  [data-kimi-root] { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; overflow: visible; }
+  [data-kimi-root] * { box-sizing: border-box; min-inline-size: 0; }
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p1"],
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p2"] { display: none !important; }
+  html:not([data-daimon-size-tier="compact"]) .compact-only { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { [data-kimi-root] * { scroll-behavior: auto; transition: none !important; } }
+
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: var(--kimi-font-sans, -apple-system, "PingFang SC", sans-serif); color: var(--kimi-color-text-primary); letter-spacing: 0; }
+  main { padding: 4px 12px 14px; }
+
+  .proto-title { margin: 0; font-size: 16px; font-weight: 600; }
+  .proto-sub { margin: 2px 0 0; font-size: 12px; color: var(--kimi-color-text-tertiary); }
+
+  .compact-only {
+    margin-top: 12px; padding: 12px; border-radius: 10px;
+    background: var(--kimi-color-surface-muted); font-size: 12px; line-height: 1.6;
+    color: var(--kimi-color-text-secondary);
+  }
+
+  /* 步骤切换 */
+  .steptabs { display: flex; gap: 6px; margin: 12px 0 10px; }
+  .steptabs button {
+    flex: 1; border: 1px solid var(--kimi-color-border); background: var(--kimi-color-surface-muted);
+    color: var(--kimi-color-text-secondary); font-size: 12px; font-weight: 500;
+    padding: 7px 4px; border-radius: 8px; cursor: pointer; font-family: inherit;
+  }
+  .steptabs button.on { background: var(--kimi-color-text-primary); color: var(--kimi-color-surface); border-color: var(--kimi-color-text-primary); font-weight: 600; }
+  .steptabs button:focus-visible { outline: 2px solid var(--kimi-color-accent); outline-offset: 1px; }
+
+  /* 手机外壳 */
+  .phone {
+    margin: 0 auto; width: 100%; max-width: 375px; height: 640px;
+    border: 1.5px solid var(--kimi-color-text-primary); border-radius: 28px;
+    overflow: hidden; position: relative; background: #f6f6f8;
+    display: flex; flex-direction: column;
+  }
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; background: #f6f6f8; }
+  .screen.on { display: flex; }
+  .appnav {
+    flex: none; height: 46px; display: flex; align-items: center; gap: 8px;
+    padding: 0 14px; background: #fff; border-bottom: 1px solid #eee;
+    font-size: 15px; font-weight: 600; color: #111;
+  }
+  .appnav .back { font-size: 18px; color: #333; cursor: pointer; border: 0; background: none; padding: 2px 6px; }
+  .appbody { flex: 1; overflow-y: auto; padding: 12px 12px 76px; -webkit-overflow-scrolling: touch; }
+
+  /* 通用组件 */
+  .card { background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+  .card + .card { margin-top: 12px; }
+  .btn-grad {
+    display: block; width: 100%; border: 0; border-radius: 10px; padding: 12px;
+    background: linear-gradient(135deg, #4f6bf5, #6a3df0); color: #fff;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .btn-grad:active { opacity: .88; }
+  .btn-mini {
+    border: 1px solid #ddd; background: #fff; color: #444; font-size: 11px;
+    border-radius: 7px; padding: 5px 0; width: 100%; cursor: pointer; font-family: inherit;
+  }
+
+  /* 确认页 */
+  .confirm-head { font-size: 15px; font-weight: 600; margin: 2px 2px 10px; }
+  .picked { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .picked .pt { aspect-ratio: 1; border-radius: 9px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; align-items: center; justify-content: center; }
+  .picked .pt svg { width: 58%; height: 58%; }
+  .ratio-label { font-size: 13px; font-weight: 600; margin: 16px 2px 8px; }
+  .ratio-seg { display: flex; background: #ececf0; border-radius: 10px; padding: 3px; gap: 3px; }
+  .ratio-seg button {
+    flex: 1; border: 0; border-radius: 8px; padding: 9px 0; font-size: 13px; font-weight: 500;
+    background: transparent; color: #555; cursor: pointer; font-family: inherit;
+  }
+  .ratio-seg button.on { background: #fff; color: #111; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .ratio-note { font-size: 11px; color: #999; margin: 8px 2px 0; line-height: 1.5; }
+  .confirm-cta { margin-top: 18px; }
+  .confirm-hint { margin-top: 10px; font-size: 11px; color: #999; text-align: center; }
+
+  /* 结果页 */
+  .tipcard {
+    background: linear-gradient(135deg, #eef3ff, #f4efff); border-radius: 12px; padding: 12px;
+    font-size: 12px; color: #4a4a68; line-height: 1.6; margin-bottom: 12px;
+  }
+  .tipcard b { color: #3333aa; }
+  .group-head { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .group-head .gname { font-size: 14px; font-weight: 600; color: #111; }
+  .group-head .gcount { font-size: 12px; color: #999; }
+  .badge { margin-left: auto; font-size: 10px; font-weight: 500; padding: 3px 8px; border-radius: 99px; }
+  .badge.ok { background: #e6f9ee; color: #07a350; }
+  .badge.warn { background: #f2f2f4; color: #999; }
+  .thumbs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .thumb { flex: none; width: 96px; }
+  .thumb .pic {
+    position: relative; aspect-ratio: 4/5; border-radius: 9px; background: #fafafa;
+    border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: center;
+  }
+  .thumb .pic svg { width: 62%; height: 62%; }
+  .thumb .num {
+    position: absolute; top: 5px; left: 5px; width: 17px; height: 17px; border-radius: 50%;
+    background: rgba(0,0,0,.72); color: #fff; font-size: 10px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .thumb .btn-mini { margin-top: 6px; }
+  .group-save { margin-top: 10px; }
+  .group-note { font-size: 11px; color: #aaa; margin-top: 8px; line-height: 1.5; }
+  .result-bar {
+    position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; align-items: center;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: rgba(255,255,255,.96);
+    border-top: 1px solid #eee;
+  }
+  .ratio-chip { border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 9px 10px; font-size: 12px; color: #555; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .btn-preview {
+    flex: 1; border: 0; border-radius: 10px; padding: 11px 4px; font-size: 13px; font-weight: 600;
+    background: #111; color: #fff; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .btn-saveall {
+    flex: 1; border: 0; border-radius: 10px; padding: 11px 4px; font-size: 13px; font-weight: 600;
+    background: linear-gradient(135deg, #4f6bf5, #6a3df0); color: #fff; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+
+  /* 处理中遮罩 */
+  .processing {
+    position: absolute; inset: 0; z-index: 30; display: none;
+    background: rgba(246,246,248,.94); flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  }
+  .processing.on { display: flex; }
+  .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #d8d8e2; border-top-color: #6a3df0; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .processing p { font-size: 13px; color: #666; margin: 0; }
+
+  /* ============ 微信聊天 1:1 ============ */
+  .wx { background: #ededed; }
+  .wx-disclaimer {
+    flex: none; display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: #fff7dd; color: #8a6d1d; font-size: 10px; padding: 4px 8px; line-height: 1.4;
+  }
+  .theme-toggle {
+    border: 1px solid rgba(138,109,29,.4); background: rgba(255,255,255,.6); color: #8a6d1d;
+    font-size: 10px; border-radius: 99px; padding: 2px 8px; cursor: pointer; font-family: inherit;
+  }
+  .wx-nav {
+    flex: none; height: 46px; display: flex; align-items: center;
+    background: #f7f7f7; border-bottom: 1px solid #e2e2e2; padding: 0 10px;
+  }
+  .wx-nav .back { font-size: 20px; color: #111; cursor: pointer; border: 0; background: none; padding: 2px 8px 2px 2px; }
+  .wx-nav .name { flex: 1; text-align: center; font-size: 15px; font-weight: 600; color: #111; margin-left: -18px; }
+  .wx-nav .dots { font-size: 16px; color: #111; letter-spacing: 1px; }
+  .wx-body { flex: 1; overflow-y: auto; padding: 12px 10px 12px; }
+  .wx-time { text-align: center; font-size: 11px; color: rgba(0,0,0,.32); margin: 2px 0 12px; }
+  .msg { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 14px; }
+  .msg.me { flex-direction: row-reverse; }
+  .avatar { flex: none; width: 36px; height: 36px; border-radius: 5px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .avatar svg { width: 70%; height: 70%; }
+  .avatar.friend { background: #c9d6e8; }
+  .avatar.mine { background: #9ed97a; }
+  .bubble {
+    max-width: 62%; background: #fff; border-radius: 6px; padding: 9px 11px;
+    font-size: 14px; color: #111; line-height: 1.45; position: relative;
+  }
+  .msg:not(.me) .bubble::before {
+    content: ""; position: absolute; left: -5px; top: 12px;
+    border: 5px solid transparent; border-right-color: #fff; border-left: 0;
+  }
+
+  /* 折叠牌堆:消息行做定位容器,胶囊悬浮在左侧聊天背景区 */
+  .stackmsg { position: relative; }
+  .stackwrap { position: relative; flex: none; width: 58%; user-select: none; }
+  .ar11 { aspect-ratio: 1/1; } .ar45 { aspect-ratio: 4/5; } .ar34 { aspect-ratio: 3/4; }
+  .stk {
+    position: absolute; inset: 0; border-radius: 12px; overflow: hidden;
+    background: #fafafa; border: 1px solid rgba(0,0,0,.06);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 250ms cubic-bezier(.2,.8,.3,1), opacity 220ms ease;
+    will-change: transform;
+  }
+  .stk svg.garment { width: 55%; height: 55%; }
+  .stk.pos-front { transform: none; z-index: 3; touch-action: pan-y; }
+  .stk.pos-g1 { transform: translateX(8px) scale(.97); z-index: 2; }
+  .stk.pos-g2 { transform: translateX(16px) scale(.94); z-index: 1; }
+  .stk.dragging { transition: none; z-index: 5; }
+  .stk.flying { transition: transform 220ms ease-in, opacity 220ms ease-in; z-index: 5; }
+  .stk.noanim { transition: none !important; }
+
+  .expand-cap {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 6;
+    background: rgba(0,0,0,.55); color: #fff; font-size: 12px; font-weight: 500;
+    border-radius: 99px; padding: 6px 12px; border: 0; cursor: pointer; font-family: inherit;
+    white-space: nowrap;
+  }
+  .expand-cap:active { background: rgba(0,0,0,.7); }
+
+  .stack-hint { margin: 4px 0 10px; font-size: 10px; color: rgba(0,0,0,.38); line-height: 1.4; text-align: right; }
+
+  /* 展开态:每张图是独立消息行,各带右侧头像 */
+  .xcard {
+    flex: none; width: 58%; border-radius: 12px; overflow: hidden;
+    background: #fafafa; border: 1px solid rgba(0,0,0,.06);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .xcard svg.garment { width: 55%; height: 55%; }
+  .xrow.enter { animation: xin 200ms ease-out both; }
+  @keyframes xin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .xrow.leave { animation: xout 180ms ease-in both; }
+  @keyframes xout { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px); } }
+
+  /* 暗色聊天 */
+  .wx.dark { background: #000; }
+  .wx.dark .wx-nav { background: #1b1b1d; border-bottom-color: #2c2c2e; }
+  .wx.dark .wx-nav .back, .wx.dark .wx-nav .dots { color: #f2f2f2; }
+  .wx.dark .wx-nav .name { color: #f2f2f2; }
+  .wx.dark .wx-time { color: rgba(255,255,255,.35); }
+  .wx.dark .bubble { background: #2a2a2c; color: #f0f0f0; }
+  .wx.dark .msg:not(.me) .bubble::before { border-right-color: #2a2a2c; }
+  .wx.dark .expand-cap { background: rgba(72,72,76,.78); }
+  .wx.dark .expand-cap:active { background: rgba(92,92,96,.9); }
+  .wx.dark .stack-hint { color: rgba(255,255,255,.32); }
+  .wx.dark .wx-inputbar { background: #1b1b1d; border-top-color: #2c2c2e; }
+  .wx.dark .wx-inputbar .field { background: #2a2a2c; }
+  .wx.dark .wx-inputbar .ic { color: #c8c8cc; }
+  .wx.dark .wx-disclaimer { background: #2c2614; color: #d8b84a; }
+  .wx.dark .theme-toggle { border-color: rgba(216,184,74,.45); background: rgba(0,0,0,.3); color: #d8b84a; }
+
+  .wx-inputbar {
+    flex: none; display: flex; align-items: center; gap: 9px;
+    background: #f7f7f7; border-top: 1px solid #e2e2e2; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .wx-inputbar .ic { width: 26px; height: 26px; flex: none; color: #3b3b3b; }
+  .wx-inputbar .field { flex: 1; height: 34px; background: #fff; border-radius: 5px; }
+
+  /* 大图查看(模拟) */
+  .viewer {
+    position: absolute; inset: 0; z-index: 60; display: none;
+    background: #000; align-items: center; justify-content: center;
+  }
+  .viewer.on { display: flex; }
+  .viewer .vimg {
+    width: 82%; background: #111; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .viewer .vimg svg.garment { width: 55%; height: 55%; }
+  .viewer .vtip { position: absolute; bottom: 40px; left: 0; right: 0; text-align: center; color: rgba(255,255,255,.5); font-size: 11px; }
+
+  /* 长按动作面板 */
+  .sheet { position: absolute; inset: 0; z-index: 40; display: none; }
+  .sheet.on { display: block; }
+  .sheet .mask { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+  .sheet .panel {
+    position: absolute; left: 0; right: 0; bottom: 0; background: #f7f7f7;
+    border-radius: 12px 12px 0 0; overflow: hidden;
+  }
+  .sheet .panel button {
+    display: block; width: 100%; border: 0; background: #fff; padding: 15px;
+    font-size: 15px; color: #111; cursor: pointer; font-family: inherit;
+  }
+  .sheet .panel button + button { border-top: 1px solid #eee; }
+  .sheet .panel .cancel { margin-top: 7px; font-weight: 600; }
+
+  /* toast */
+  .toast {
+    position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%);
+    background: rgba(0,0,0,.72); color: #fff; font-size: 12px; padding: 8px 14px;
+    border-radius: 8px; z-index: 70; display: none; white-space: nowrap;
+  }
+  .toast.on { display: block; }
+
+  footer.proto-note { margin: 12px 2px 0; font-size: 11px; color: var(--kimi-color-text-tertiary); line-height: 1.6; }
+
+  @media (max-width: 339px) {
+    main { padding: 4px 6px 10px; }
+    .phone { height: 560px; border-radius: 22px; }
+  }
+</style>
+</head>
+<body>
+<main class="kimi-host-safe-context" data-kimi-root>
+  <header class="kimi-host-safe-header">
+    <h1 class="proto-title">WePicTool 三屏原型</h1>
+    <p class="proto-sub">① 确认比例 → ② 分组结果 → ③ 微信 1:1 预览,可点击、可滑动、可切暗色</p>
+  </header>
+
+  <section data-kimi-priority="p0">
+    <div class="compact-only">
+      高保真原型:确认页选比例 → 结果页四组分组卡(含「其他素材」)→ 1:1 微信聊天预览(牌堆扇形露边、跟手滑动、左侧「展开 N」胶囊、展开成独立消息行、亮暗切换)。请在更大尺寸查看完整可交互版本。
+    </div>
+
+    <div class="steptabs" role="tablist" aria-label="界面切换">
+      <button id="tab-confirm" class="on" role="tab" aria-label="确认比例">① 确认比例</button>
+      <button id="tab-result" role="tab" aria-label="分组结果">② 分组结果</button>
+      <button id="tab-wx" role="tab" aria-label="微信预览">③ 微信预览</button>
+    </div>
+
+    <div class="phone" id="phone">
+      <!-- ① 确认页 -->
+      <div class="screen on" id="screen-confirm">
+        <div class="appnav">WePicTool</div>
+        <div class="appbody">
+          <p class="confirm-head">已选 8 张图片</p>
+          <div class="picked" id="picked"></div>
+          <p class="ratio-label">输出比例(白底卡片)</p>
+          <div class="ratio-seg" role="radiogroup" aria-label="输出比例">
+            <button data-ratio="ar11" role="radio" aria-checked="false">1:1</button>
+            <button data-ratio="ar45" class="on" role="radio" aria-checked="true">4:5</button>
+            <button data-ratio="ar34" role="radio" aria-checked="false">3:4</button>
+          </div>
+          <p class="ratio-note">比例只影响白底卡片合成,不重新抠图;结果页可随时修改。</p>
+          <div class="confirm-cta"><button class="btn-grad" id="btn-start">开始处理</button></div>
+          <p class="confirm-hint">含 2 张非穿搭图片,将自动归入「其他素材」</p>
+        </div>
+      </div>
+
+      <!-- ② 结果页 -->
+      <div class="screen" id="screen-result">
+        <div class="appnav"><button class="back" data-go="screen-confirm" aria-label="返回">‹</button>WePicTool</div>
+        <div class="appbody" id="result-body">
+          <div class="tipcard">💡 <b>分组整理已完成。</b>按组保存后回微信勾选「发送后合并展示」,即可形成叠图滑动对比,方便朋友挑选!</div>
+        </div>
+        <div class="result-bar">
+          <button class="ratio-chip" id="ratio-chip" aria-label="切换输出比例">4:5 ▸</button>
+          <button class="btn-preview" data-go="screen-wx">💬 微信预览</button>
+          <button class="btn-saveall" id="btn-saveall">保存全部</button>
+        </div>
+      </div>
+
+      <!-- ③ 微信 1:1 预览 -->
+      <div class="screen wx dark" id="screen-wx">
+        <div class="wx-disclaimer">
+          <span>模拟预览,实际效果以微信为准</span>
+          <button class="theme-toggle" id="theme-toggle">☀️ 切亮色</button>
+        </div>
+        <div class="wx-nav">
+          <button class="back" data-go="screen-result" aria-label="返回结果页">‹</button>
+          <span class="name">闺蜜</span><span class="dots">···</span>
+        </div>
+        <div class="wx-body" id="wx-body">
+          <p class="wx-time">17:20</p>
+          <div class="msg">
+            <div class="avatar friend"><svg viewBox="0 0 24 24" fill="#5b7ba6"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7z"/></svg></div>
+            <div class="bubble">帮我看看明天穿哪件?</div>
+          </div>
+          <div id="stack-zone"></div>
+          <div class="msg">
+            <div class="avatar friend"><svg viewBox="0 0 24 24" fill="#5b7ba6"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7z"/></svg></div>
+            <div class="bubble">姐妹你真是个天才</div>
+          </div>
+        </div>
+        <div class="wx-inputbar">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9 10v4M15 10v4"/></svg>
+          <div class="field"></div>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8M9 9.6h.01M15 9.6h.01" stroke-linecap="round"/></svg>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+
+      <div class="viewer" id="viewer"><div class="vimg ar45" id="viewer-img"></div><p class="vtip">模拟微信大图查看 · 点任意处关闭</p></div>
+      <div class="processing" id="processing"><div class="spinner"></div><p>AI 分组 + 白底卡合成中…</p></div>
+      <div class="sheet" id="sheet"><div class="mask" id="sheet-mask"></div><div class="panel"><button data-act="save">保存全部</button><button data-act="forward">转发</button><button class="cancel" data-act="cancel">取消</button></div></div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </section>
+
+  <footer class="proto-note" data-kimi-priority="p2">
+    1:1 还原规格:牌堆向右扇形露边(+8/+16px、scale .97/.94);「展开 N」胶囊悬浮在卡片左侧聊天背景;跟手滑动带旋转,位移超 25% 卡宽或速度超 0.3px/ms 触发翻页,否则回弹;翻页后卡片循环入尾;展开后第 2~N 张作为独立消息行错峰入场(200ms、stagger 40ms);两态长按弹出「保存全部 / 转发」。
+  </footer>
+</main>
+
+<script>
+(function () {
+  var ICONS = {
+    shirt: '<svg class="garment" viewBox="0 0 24 24" fill="COLOR"><path d="M8.5 3 4 5.5 2 9l3 1.5V21h14V10.5L22 9l-2-3.5L15.5 3c-.6 1.2-1.9 2-3.5 2s-2.9-.8-3.5-2z"/></svg>',
+    pants: '<svg class="garment" viewBox="0 0 24 24" fill="COLOR"><path d="M6 2h12l1.5 20h-5L12 10 9.5 22h-5L6 2z"/></svg>',
+    shoe: '<svg class="garment" viewBox="0 0 24 24" fill="COLOR"><path d="M3 8c0 4-1 6-1 9 0 1 .8 2 2 2h16c1.2 0 2-1 2-2 0-3.5-4-4.5-6.5-6C13.5 9.6 12 8 10 8H3z"/></svg>',
+    person: '<svg class="garment" viewBox="0 0 24 24" fill="COLOR"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7z"/></svg>',
+    scene: '<svg class="garment" viewBox="0 0 24 24" fill="COLOR"><path d="M3 18 9 8l4 6 3-4 5 8H3z"/><circle cx="17.5" cy="6.5" r="2"/></svg>'
+  };
+  function icon(kind, color) { return ICONS[kind].replace('COLOR', color); }
+
+  var GROUPS = [
+    { key: 'tops', name: '👕 上衣组', status: 'ok', badge: '适合微信叠图', items: [
+      { icon: 'shirt', color: '#d9d4c8' }, { icon: 'shirt', color: '#2b2b30' }, { icon: 'shirt', color: '#8fa3c8' } ] },
+    { key: 'bottoms', name: '👖 下装组', status: 'warn', badge: '不足 3 张 · 建议普通发送', items: [
+      { icon: 'pants', color: '#c8c2b2' }, { icon: 'pants', color: '#3c4048' } ] },
+    { key: 'shoes', name: '👟 鞋子组', status: 'ok', badge: '适合微信叠图', items: [
+      { icon: 'shoe', color: '#e8e4da' }, { icon: 'shoe', color: '#333338' }, { icon: 'shoe', color: '#b98a5e' } ] },
+    { key: 'others', name: '🖼 其他素材', status: 'warn', badge: '不进入穿搭叠图', items: [
+      { icon: 'person', color: '#c9b8a8' }, { icon: 'scene', color: '#9db8d2' } ], note: '人像、风景等不属于穿搭类别的图片,仅支持保存单图;点图片可「改分类」捞回穿搭组。' }
+  ];
+
+  var PICKED = [
+    { icon: 'shirt', color: '#d9d4c8' }, { icon: 'shirt', color: '#2b2b30' }, { icon: 'shirt', color: '#8fa3c8' },
+    { icon: 'pants', color: '#c8c2b2' }, { icon: 'pants', color: '#3c4048' },
+    { icon: 'shoe', color: '#e8e4da' }, { icon: 'person', color: '#c9b8a8' }, { icon: 'scene', color: '#9db8d2' }
+  ];
+
+  var state = { ratio: 'ar45', ratioLabel: '4:5', expanded: false };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var tabs = { confirm: $('tab-confirm'), result: $('tab-result'), wx: $('tab-wx') };
+  var screens = { confirm: $('screen-confirm'), result: $('screen-result'), wx: $('screen-wx') };
+
+  function go(name) {
+    Object.keys(screens).forEach(function (k) { screens[k].classList.toggle('on', k === name); });
+    Object.keys(tabs).forEach(function (k) { tabs[k].classList.toggle('on', k === name); });
+  }
+  tabs.confirm.addEventListener('click', function () { go('confirm'); });
+  tabs.result.addEventListener('click', function () { go('result'); });
+  tabs.wx.addEventListener('click', function () { go('wx'); });
+  document.querySelectorAll('[data-go]').forEach(function (el) {
+    el.addEventListener('click', function () { go(el.getAttribute('data-go').replace('screen-', '')); });
+  });
+
+  var toastTimer = null;
+  function toast(text) {
+    var t = $('toast'); t.textContent = text; t.classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('on'); }, 1600);
+  }
+
+  /* 确认页 */
+  $('picked').innerHTML = PICKED.map(function (p) { return '<div class="pt">' + icon(p.icon, p.color) + '</div>'; }).join('');
+  document.querySelectorAll('.ratio-seg button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.ratio-seg button').forEach(function (b) { b.classList.remove('on'); b.setAttribute('aria-checked', 'false'); });
+      btn.classList.add('on'); btn.setAttribute('aria-checked', 'true');
+      state.ratio = btn.getAttribute('data-ratio');
+      state.ratioLabel = btn.textContent.trim();
+      $('ratio-chip').textContent = state.ratioLabel + ' ▸';
+      renderStack();
+    });
+  });
+  $('btn-start').addEventListener('click', function () {
+    $('processing').classList.add('on');
+    setTimeout(function () { $('processing').classList.remove('on'); go('result'); }, 750);
+  });
+
+  /* 结果页 */
+  function renderResult() {
+    var html = '';
+    GROUPS.forEach(function (g) {
+      html += '<div class="card"><div class="group-head"><span class="gname">' + g.name + '</span><span class="gcount">(' + g.items.length + ' 张)</span>' +
+        '<span class="badge ' + g.status + '">' + g.badge + '</span></div><div class="thumbs">';
+      g.items.forEach(function (it, i) {
+        html += '<div class="thumb"><div class="pic"><span class="num">' + (i + 1) + '</span>' + icon(it.icon, it.color) + '</div><button class="btn-mini" data-save="' + g.name + ' ' + (i + 1) + '">保存单图</button></div>';
+      });
+      html += '</div>';
+      if (g.key !== 'others') {
+        html += '<div class="group-save"><button class="btn-grad" data-save="' + g.name + '整组">⬇ 保存' + g.name.replace(/^[^ ]+ /, '') + ' (' + g.items.length + ' 张)</button></div>';
+      } else {
+        html += '<p class="group-note">' + g.note + '</p>';
+      }
+      html += '</div>';
+    });
+    $('result-body').insertAdjacentHTML('beforeend', html);
+    $('result-body').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-save]');
+      if (b) toast('已保存到相册(原型演示)');
+    });
+  }
+  renderResult();
+  $('ratio-chip').addEventListener('click', function () { go('confirm'); toast('重新选择输出比例'); });
+  $('btn-saveall').addEventListener('click', function () { toast('已按编号 01-08 保存全部(原型演示)'); });
+
+  /* ============ 微信折叠卡 1:1 ============ */
+  var stack = GROUPS[0].items; /* 上衣组 3 张 */
+  var POS_CLASSES = ['pos-front', 'pos-g1', 'pos-g2'];
+  var posOf = ['pos-front', 'pos-g1', 'pos-g2']; /* card i 当前位置 */
+  var cardEls = [];
+  var animating = false;
+
+  function avatarMine() {
+    return '<div class="avatar mine"><svg viewBox="0 0 24 24" fill="#3f7a2a"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7z"/></svg></div>';
+  }
+
+  function renderStack() {
+    if (state.expanded) { renderExpanded(false); } else { buildFolded(); }
+  }
+
+  /* ---- 折叠态 ---- */
+  function buildFolded() {
+    var zone = $('stack-zone');
+    zone.innerHTML =
+      '<div class="msg me stackmsg">' + avatarMine() +
+        '<div class="stackwrap ' + state.ratio + '" id="stackwrap"></div>' +
+        '<button class="expand-cap" id="expand-btn">展开 ' + stack.length + '</button>' +
+      '</div>' +
+      '<p class="stack-hint">原型提示:左右滑翻页 · 点左侧「展开 ' + stack.length + '」· 长按更多</p>';
+
+    var wrap = $('stackwrap');
+    wrap.innerHTML = stack.map(function (it, i) {
+      return '<div class="stk ' + posOf[i] + '" data-i="' + i + '">' + icon(it.icon, it.color) + '</div>';
+    }).join('');
+    cardEls = Array.prototype.slice.call(wrap.querySelectorAll('.stk'));
+    cardEls.forEach(function (el) { bindDrag(el); });
+    bindLongPress(wrap);
+    $('expand-btn').addEventListener('click', function () {
+      state.expanded = true;
+      renderExpanded(true);
+    });
+  }
+
+  function bindDrag(el) {
+    var startX = 0, startY = 0, dx = 0, decided = null, dragging = false;
+    var samples = [];
+
+    el.addEventListener('pointerdown', function (e) {
+      if (el.className.indexOf('pos-front') === -1 || animating) return;
+      startX = e.clientX; startY = e.clientY; dx = 0;
+      decided = null; dragging = false;
+      samples = [{ x: e.clientX, t: e.timeStamp }];
+      el.setPointerCapture(e.pointerId);
+    });
+
+    el.addEventListener('pointermove', function (e) {
+      if (!samples.length || animating) return;
+      var mx = e.clientX - startX, my = e.clientY - startY;
+      if (!decided && (Math.abs(mx) > 8 || Math.abs(my) > 8)) {
+        decided = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
+        if (decided === 'h') { dragging = true; el.classList.add('dragging'); }
+        else { samples = []; return; } /* 垂直:让给聊天滚动 */
+      }
+      if (dragging) {
+        dx = mx;
+        var rot = Math.max(-6, Math.min(6, dx * 0.025));
+        el.style.transform = 'translateX(' + dx + 'px) rotate(' + rot + 'deg)';
+        samples.push({ x: e.clientX, t: e.timeStamp });
+        if (samples.length > 6) samples.shift();
+      }
+    });
+
+    function release(e) {
+      if (!dragging) { samples = []; return; }
+      dragging = false;
+      el.classList.remove('dragging');
+      var W = el.offsetWidth || 200;
+      /* 速度:取最近 120ms 采样 */
+      var v = 0, last = samples[samples.length - 1];
+      for (var i = samples.length - 1; i >= 0; i--) {
+        if (last.t - samples[i].t <= 120) { v = (last.x - samples[i].x) / Math.max(1, last.t - samples[i].t); }
+        else break;
+      }
+      var dir = 0; /* -1 左, +1 右 */
+      if (Math.abs(v) > 0.3) dir = v < 0 ? -1 : 1;
+      else if (Math.abs(dx) > W * 0.25) dir = dx < 0 ? -1 : 1;
+      samples = [];
+      if (dir) flyOut(el, dir);
+      else { el.style.transform = ''; } /* 回弹:交还 CSS 过渡 */
+    }
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', function () {
+      if (dragging) { dragging = false; el.classList.remove('dragging'); el.style.transform = ''; }
+      samples = [];
+    });
+  }
+
+  function flyOut(el, dir) {
+    animating = true;
+    var W = el.offsetWidth || 200;
+    el.classList.add('flying');
+    el.style.transform = 'translateX(' + (dir * 1.2 * W) + 'px) rotate(' + (dir * 6) + 'deg)';
+    el.style.opacity = '0';
+    setTimeout(function () {
+      /* 位置轮转:左滑 front→g2、g1→front、g2→g1;右滑反向 */
+      var next = new Array(3);
+      for (var i = 0; i < 3; i++) {
+        var p = posOf[i];
+        if (dir < 0) next[i] = p === 'pos-front' ? 'pos-g2' : (p === 'pos-g1' ? 'pos-front' : 'pos-g1');
+        else next[i] = p === 'pos-front' ? 'pos-g1' : (p === 'pos-g1' ? 'pos-g2' : 'pos-front');
+      }
+      posOf = next;
+      /* 飞出的卡瞬移入尾,其余卡由 CSS 过渡补位 */
+      el.classList.remove('flying');
+      el.classList.add('noanim');
+      cardEls.forEach(function (c, i) {
+        POS_CLASSES.forEach(function (pc) { c.classList.remove(pc); });
+        c.classList.add(posOf[i]);
+      });
+      el.style.transform = '';
+      el.style.opacity = '';
+      void el.offsetWidth;
+      requestAnimationFrame(function () {
+        el.classList.remove('noanim');
+        animating = false;
+      });
+    }, 230);
+  }
+
+  /* ---- 展开态 ---- */
+  function renderExpanded(animate) {
+    var zone = $('stack-zone');
+    var html =
+      '<div class="msg me stackmsg">' + avatarMine() +
+        '<div class="xcard ' + state.ratio + '" data-view="0">' + icon(stack[0].icon, stack[0].color) + '</div>' +
+        '<button class="expand-cap" id="collapse-btn">收起</button>' +
+      '</div>';
+    for (var i = 1; i < stack.length; i++) {
+      html += '<div class="msg me xrow' + (animate ? ' enter' : '') + '"' +
+        (animate ? ' style="animation-delay:' + (i * 40) + 'ms"' : '') + '>' +
+        avatarMine() +
+        '<div class="xcard ' + state.ratio + '" data-view="' + i + '">' + icon(stack[i].icon, stack[i].color) + '</div>' +
+      '</div>';
+    }
+    html += '<p class="stack-hint">原型提示:点单张看大图 · 点「收起」还原 · 长按更多</p>';
+    zone.innerHTML = html;
+
+    $('collapse-btn').addEventListener('click', collapse);
+    zone.querySelectorAll('.xcard').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var idx = parseInt(c.getAttribute('data-view'), 10);
+        openViewer(stack[idx]);
+      });
+      bindLongPress(c);
+    });
+  }
+
+  function collapse() {
+    var rows = $('stack-zone').querySelectorAll('.xrow');
+    rows.forEach(function (r, i) {
+      r.classList.remove('enter');
+      r.style.animationDelay = ((rows.length - 1 - i) * 30) + 'ms';
+      r.classList.add('leave');
+    });
+    setTimeout(function () { state.expanded = false; buildFolded(); }, 190);
+  }
+
+  /* ---- 大图查看(模拟) ---- */
+  function openViewer(item) {
+    var v = $('viewer');
+    $('viewer-img').className = 'vimg ' + state.ratio;
+    $('viewer-img').innerHTML = icon(item.icon, item.color);
+    v.classList.add('on');
+  }
+  $('viewer').addEventListener('click', function () { $('viewer').classList.remove('on'); });
+
+  /* ---- 长按 ---- */
+  function bindLongPress(el) {
+    var timer = null, fired = false;
+    el.addEventListener('pointerdown', function () {
+      fired = false;
+      timer = setTimeout(function () { fired = true; $('sheet').classList.add('on'); }, 550);
+    });
+    ['pointerup', 'pointercancel', 'pointermove'].forEach(function (ev) {
+      el.addEventListener(ev, function () { clearTimeout(timer); });
+    });
+    el.addEventListener('click', function (e) {
+      if (fired) { e.stopPropagation(); e.preventDefault(); fired = false; }
+    }, true);
+  }
+
+  $('sheet-mask').addEventListener('click', function () { $('sheet').classList.remove('on'); });
+  document.querySelectorAll('.sheet .panel button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      $('sheet').classList.remove('on');
+      var act = b.getAttribute('data-act');
+      if (act === 'save') toast('已保存全部 ' + stack.length + ' 张(原型演示)');
+      if (act === 'forward') toast('已整体转发(原型演示)');
+    });
+  });
+
+  /* ---- 亮暗切换 ---- */
+  $('theme-toggle').addEventListener('click', function () {
+    var wx = $('screen-wx');
+    wx.classList.toggle('dark');
+    $('theme-toggle').textContent = wx.classList.contains('dark') ? '☀️ 切亮色' : '🌙 切暗色';
+  });
+
+  renderStack();
+})();
+</script>
+</body>
+</html>

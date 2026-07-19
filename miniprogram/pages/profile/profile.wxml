@@ -1,77 +1,102 @@
 <!--pages/profile/profile.wxml-->
 <view class="profile-page">
-  <!-- 用户信息区 -->
-  <view class="profile-header">
-    <view class="profile-user">
+
+  <!-- 用户白卡 -->
+  <view class="user-card">
+    <view class="user-main">
       <view class="user-avatar">微</view>
       <view class="user-info">
         <view class="user-name">微信用户</view>
-        <view class="user-id" bindtap="onCopyId">
+        <view class="user-id-row">
           <text class="user-id-text">ID: {{userId}}</text>
-          <text class="user-id-copy">复制</text>
+          <text class="user-id-copy" bindtap="onCopyId">复制</text>
         </view>
       </view>
     </view>
+    <view class="record-badge">已生成 {{recordCount}} 次</view>
   </view>
 
-  <!-- 我的功能 -->
-  <view class="profile-section">
-    <view class="section-title">我的功能</view>
+  <!-- 玩法预告提示卡 -->
+  <view class="tip-card">
+    <text class="tip-icon">💡</text>
+    <view class="tip-text">
+      <text class="tip-strong">大字滑卡、剧情滑卡</text>等更多玩法陆续上线，敬请期待
+    </view>
+  </view>
+
+  <!-- 菜单组：功能 -->
+  <view class="menu-group">
+    <view class="group-title">功能</view>
     <view class="menu-card">
       <view class="menu-item" bindtap="onContactService">
-        <text class="menu-icon">🎧</text>
+        <view class="menu-icon-block">
+          <text class="menu-icon">💬</text>
+        </view>
         <text class="menu-text">联系客服</text>
-        <text class="menu-arrow">></text>
+        <text class="menu-arrow">›</text>
       </view>
 
       <view class="menu-item" bindtap="onFeedback">
-        <text class="menu-icon">📝</text>
+        <view class="menu-icon-block">
+          <text class="menu-icon">📝</text>
+        </view>
         <text class="menu-text">反馈意见</text>
-        <text class="menu-arrow">></text>
+        <text class="menu-arrow">›</text>
       </view>
 
       <view class="menu-item" bindtap="onRecommend">
-        <text class="menu-icon">📤</text>
+        <view class="menu-icon-block">
+          <text class="menu-icon">⭐</text>
+        </view>
         <text class="menu-text">推荐给好友</text>
-        <text class="menu-arrow">></text>
+        <text class="menu-arrow">›</text>
       </view>
     </view>
   </view>
 
-  <!-- 设置与支持 -->
-  <view class="profile-section">
-    <view class="section-title">设置与支持</view>
+  <!-- 菜单组：设置与支持 -->
+  <view class="menu-group">
+    <view class="group-title">设置与支持</view>
     <view class="menu-card">
       <view class="menu-item" bindtap="onOpenAlbumSetting">
-        <text class="menu-icon">⚙️</text>
+        <view class="menu-icon-block">
+          <text class="menu-icon">🖼</text>
+        </view>
         <text class="menu-text">相册权限</text>
-        <text class="menu-arrow">></text>
+        <text class="menu-arrow">›</text>
       </view>
 
       <view class="menu-item" bindtap="onClearCache">
-        <text class="menu-icon">🗑️</text>
+        <view class="menu-icon-block">
+          <text class="menu-icon">🗑</text>
+        </view>
         <text class="menu-text">清空缓存</text>
         <text class="menu-extra">{{cacheSize}}</text>
-        <text class="menu-arrow">></text>
-      </view>
-
-      <view class="menu-item" bindtap="onAbout">
-        <text class="menu-icon">ℹ️</text>
-        <text class="menu-text">关于 WePicTool</text>
-        <text class="menu-arrow">></text>
+        <text class="menu-arrow">›</text>
       </view>
 
       <view class="menu-item" bindtap="onPrivacy">
-        <text class="menu-icon">🔒</text>
+        <view class="menu-icon-block">
+          <text class="menu-icon">🔒</text>
+        </view>
         <text class="menu-text">隐私说明</text>
-        <text class="menu-arrow">></text>
+        <text class="menu-arrow">›</text>
+      </view>
+
+      <view class="menu-item" bindtap="onAbout">
+        <view class="menu-icon-block">
+          <text class="menu-icon">ℹ️</text>
+        </view>
+        <text class="menu-text">关于 滑一叠</text>
+        <text class="menu-extra">v{{version}}</text>
+        <text class="menu-arrow">›</text>
       </view>
     </view>
   </view>
 
   <!-- 底部版权 -->
   <view class="profile-footer">
-    WePicTool · 让穿搭决定更简单
+    滑一叠 · 一叠图，发得好看
   </view>
 
   <!-- 反馈弹窗 -->
@@ -96,11 +121,11 @@
   <!-- 关于弹窗 -->
   <view class="about-mask {{showAbout ? 'about-mask-show' : ''}}" wx:if="{{showAbout}}" bindtap="onCloseAbout">
     <view class="about-panel" catchtap="onAboutPanelTap">
-      <view class="about-logo">👗</view>
-      <view class="about-name">WePicTool</view>
+      <view class="about-logo">🖼️</view>
+      <view class="about-name">滑一叠</view>
       <view class="about-version">版本 {{version}}</view>
       <view class="about-desc">
-        WePicTool 是一款帮助用户快速整理穿搭参考图的小程序。选择衣服、裤子、鞋子照片后，系统自动分类并生成白底图，方便保存到相册后分享给朋友参考。
+        滑一叠是一个微信叠图玩法生成器。选择衣服、裤子、鞋子照片后，AI 自动分类抠图、生成白底编号卡片；保存后回微信「合并发送」给朋友，朋友左右滑动就能帮你挑穿搭。大字滑卡、剧情滑卡等更多玩法陆续上线。
       </view>
       <view class="about-close" bindtap="onCloseAbout">我知道了</view>
     </view>
