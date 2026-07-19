@@ -100,31 +100,52 @@ Page({
     });
   },
 
-  onSubmitFeedback: function () {
+  onSubmitFeedback: async function () {
     const content = this.data.feedbackContent.trim();
     if (!content) {
       wx.showToast({ title: '请输入反馈内容', icon: 'none' });
       return;
     }
 
-    // 保存到本地，后续可接入客服系统
-    const feedbacks = wx.getStorageSync('wepictool_feedbacks') || [];
-    feedbacks.unshift({
-      content: content,
-      createdAt: Date.now(),
-      userId: this.data.userId
-    });
-    wx.setStorageSync('wepictool_feedbacks', feedbacks.slice(0, 50));
+    wx.showLoading({ title: '正在检查内容...' });
+    try {
+      const response = await wx.cloud.callFunction({
+        name: 'contentGuard',
+        data: { content: content }
+      });
+      const result = response && response.result;
+      if (!result || !result.ok) {
+        wx.showToast({
+          title: result && result.code === 'CONTENT_UNSAFE' ? '反馈内容请修改后重试' : '内容安全服务暂不可用',
+          icon: 'none'
+        });
+        return;
+      }
 
-    this.setData({
-      showFeedback: false,
-      feedbackContent: ''
-    });
+      // 仅在审核通过后保存到本地，后续可接入客服系统。
+      const feedbacks = wx.getStorageSync('wepictool_feedbacks') || [];
+      feedbacks.unshift({
+        content: content,
+        createdAt: Date.now(),
+        userId: this.data.userId
+      });
+      wx.setStorageSync('wepictool_feedbacks', feedbacks.slice(0, 50));
 
-    wx.showToast({
-      title: '反馈已提交',
-      icon: 'success'
-    });
+      this.setData({
+        showFeedback: false,
+        feedbackContent: ''
+      });
+
+      wx.showToast({
+        title: '反馈已提交',
+        icon: 'success'
+      });
+    } catch (err) {
+      console.error('[feedback] 内容审核调用失败:', err);
+      wx.showToast({ title: '内容安全服务暂不可用', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
 
   // 推荐给好友

@@ -1,5 +1,9 @@
 const cloud = require('wx-server-sdk');
 const axios = require('axios');
+const contentSafety = require('./contentSafety');
+const assessSecurityResponse = contentSafety.assessSecurityResponse;
+const inferImageMimeType = contentSafety.inferImageMimeType;
+const mapWithConcurrency = contentSafety.mapWithConcurrency;
 
 // 通过 wx-server-sdk 内建的 downloadFile 能力获取云存储文件 Buffer
 async function downloadCloudFile(fileId) {
@@ -20,6 +24,7 @@ cloud.init({
 
 const PROCESSABLE_GROUPS = ['tops', 'bottoms', 'shoes'];
 const OTHER_GROUP = 'others';
+const SAFETY_CONCURRENCY = 2;
 
 const GROUP_META = {
   tops: { itemLabel: '上衣' },
@@ -102,6 +107,57 @@ function normalizeImageInput(image, index) {
     width: image.width || 0,
     height: image.height || 0,
     size: image.size || 0
+  };
+}
+
+async function auditSingleImage(image) {
+  if (!image || !image.fileId || image.fileId.indexOf('cloud://') !== 0) {
+    return { ok: false, code: 'SAFETY_UNAVAILABLE' };
+  }
+
+  try {
+    const buffer = await downloadCloudFile(image.fileId);
+    const response = await cloud.openapi.security.imgSecCheck({
+      media: {
+        contentType: inferImageMimeType(image.fileId),
+        value: buffer
+      }
+    });
+    return assessSecurityResponse(response);
+  } catch (err) {
+    console.error('[contentSafety] 图片审核调用失败:', err && (err.errMsg || err.message || err));
+    return { ok: false, code: 'SAFETY_UNAVAILABLE' };
+  }
+}
+
+async function auditImages(images) {
+  const results = await mapWithConcurrency(images, SAFETY_CONCURRENCY, auditSingleImage);
+  const blocked = results.find(result => !result.ok);
+  return blocked || { ok: true, code: 'OK' };
+}
+
+async function deleteSourceFiles(images) {
+  const fileList = images
+    .map(image => image && image.fileId)
+    .filter(fileId => fileId && fileId.indexOf('cloud://') === 0);
+  if (fileList.length === 0) return;
+
+  try {
+    await cloud.deleteFile({ fileList: fileList });
+  } catch (err) {
+    console.error('[contentSafety] 删除拦截任务源图失败:', err && (err.errMsg || err.message || err));
+  }
+}
+
+function createSafetyBlockedResult(code) {
+  return {
+    status: 'blocked',
+    error: {
+      code: code,
+      message: code === 'CONTENT_UNSAFE'
+        ? '图片不符合平台内容规范，请更换后重试。'
+        : '内容安全服务暂不可用，请稍后重试。'
+    }
   };
 }
 
@@ -631,6 +687,13 @@ exports.main = async (event) => {
 
     if (normalizedImages.length === 0) {
       return createMockTask([]);
+    }
+
+    // 内容安全必须在所有 AI 调用之前完成；接口异常同样不放行。
+    const auditResult = await auditImages(normalizedImages);
+    if (!auditResult.ok) {
+      await deleteSourceFiles(normalizedImages);
+      return createSafetyBlockedResult(auditResult.code);
     }
 
     // 未配置 API Key 时退回 mock 分组

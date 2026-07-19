@@ -11,7 +11,7 @@
 | 层级 | 技术 | 说明 |
 |------|------|------|
 | 前端 | 原生微信小程序 | 无需框架，直接调用微信原生 API |
-| 后端 | CloudBase 云函数 | 单云函数 `processOutfit` 处理全链路 |
+| 后端 | CloudBase 云函数 | `processOutfit` 处理图片审核与 AI 链路，`contentGuard` 审核用户反馈文本 |
 | 云存储 | CloudBase 云存储 | 原图临时文件、结果图临时文件 |
 | AI 分类 | DashScope qwen-vl-plus | 多模态模型识别穿搭部件 |
 | AI 抠图 | DashScope qwen-image-2.0 | 去除背景替换为纯白 |
@@ -46,6 +46,7 @@
   -> 选图、压缩、上传、任务创建、进度展示、分组预览、轻编辑、保存/分享引导
 
 CloudBase 云函数 (processOutfit)
+  -> 内容安全门禁：全部图片 2 并发审核通过后才继续
   -> 阶段一：mock 分组（DASHSCOPE_API_KEY 未配置时）
   -> 阶段二：图片部件识别（DashScope qwen-vl-plus）
   -> 阶段三：抠图（DashScope qwen-image-2.0）
@@ -125,6 +126,7 @@ flowchart LR
 | `miniprogram/config/env.js` | CloudBase 环境 ID 和本地预览开关 |
 | `miniprogram/utils/task.js` | 任务规则、mock 分组、发送能力判断、图片尺寸计算 |
 | `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 AI 分类 + 阶段三抠图 |
+| `miniprogram/cloudfunctions/contentGuard/` | 云函数：使用微信内容安全接口审核用户反馈文本 |
 
 ---
 
@@ -349,6 +351,7 @@ sequenceDiagram
     FE->>ST: 上传原图/压缩图
     ST-->>FE: 返回 fileId/url
     FE->>CF: 调用 processOutfit
+    CF->>CF: 图片安全审核（最多 2 张并发，全部通过才继续）
     CF->>AI: qwen-vl-plus 图片部件识别
     AI-->>CF: 返回 category/confidence
 
@@ -573,11 +576,14 @@ cloud://cloud1-d0g1blfsde474b168/
 | 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 在现有发送引导（`pages/result` 保存完成后的引导）基础上改版为通用浮层组件 |
 | 6. 回流引导卡 | 末卡"用 WePicTool 做同款"，可开关 | 新增回流卡生成器（Canvas 模板），开关状态本地存储，埋点单独统计 |
 
-### 12.3 msgSecCheck 云函数接入点
+### 12.3 用户生成内容安全门禁
 
-- 所有用户输入文字（大字滑卡文案、剧情滑卡称呼、盲盒抽卡自定义选项等）在生成卡片前统一过 `msgSecCheck`。
-- 接入点放**云函数侧统一封装**：在 `cloudfunctions/` 新增（或在 `processOutfit` 旁独立）一个内容安全检测函数，前端在"生成"动作前调用；检测不通过则拦截并提示修改，不落盘、不生成卡片。
-- 前端不得绕过该检测直接渲染用户文字到卡片。
+- 用户上传的穿搭图片由 `processOutfit` 在调用 DashScope 前执行微信 `security.imgSecCheck`；审核按最多 2 张并发执行，必须所有图片通过后才启动分类与抠图。
+- `errCode === 0` 为通过，`errCode === 87014` 为违规；任何其他响应、限流、超时或 OpenAPI 异常均按审核服务不可用处理，默认不放行，不得降级生成 mock 结果。
+- 图片违规或审核服务异常时，云函数返回 `CONTENT_UNSAFE` 或 `SAFETY_UNAVAILABLE`，前端停留在当前页并显示非技术性提示；违规任务的 `cloud://` 源图片会尽力删除，删除失败仅记录日志且不影响拦截。
+- 意见反馈文本由独立 `contentGuard` 云函数调用 `security.msgSecCheck`；仅 `ok === true` 时才允许写入本地 `wepictool_feedbacks`，违规或安全服务异常均不保存。
+- `processOutfit/config.json` 必须声明 `security.imgSecCheck`，`contentGuard/config.json` 必须声明 `security.msgSecCheck`；客户端不得保存 AppSecret，也不得绕过云函数直连安全接口。
+- 后续新增的大字滑卡、剧情滑卡和盲盒自定义文本同样必须先走 `contentGuard`，检测不通过不得渲染、落盘或生成卡片。
 
 ### 12.4 翻页动画云托管 ffmpeg 备注
 

@@ -448,6 +448,18 @@ Page({
         clearInterval(progressTimer);
         that.setData({ loading: false, processing: false });
 
+        const safetyCode = res.result && res.result.error && res.result.error.code;
+        if (safetyCode === 'CONTENT_UNSAFE' || safetyCode === 'SAFETY_UNAVAILABLE') {
+          wx.showModal({
+            title: safetyCode === 'CONTENT_UNSAFE' ? '图片审核未通过' : '安全服务暂不可用',
+            content: safetyCode === 'CONTENT_UNSAFE'
+              ? '图片不符合平台内容规范，请更换后重试。'
+              : '暂时无法完成图片安全检查，请稍后重试。',
+            showCancel: false
+          });
+          return;
+        }
+
         if (res.result && res.result.taskId) {
           that.navigateToResult(res.result);
         } else {

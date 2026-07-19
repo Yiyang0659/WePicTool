@@ -18,7 +18,7 @@
 
 ### 图片链路
 
-`processOutfit` 在规范化输入图片、确认配置了 `DASHSCOPE_API_KEY` 后、调用 `classifyImages` 前执行 `auditImages`：
+`processOutfit` 在规范化输入图片后、调用 `classifyImages` 或任何 mock 分组前执行 `auditImages`：
 
 1. 使用现有 `cloud.downloadFile` 获取用户已上传的云存储图片 Buffer。
 2. 根据文件扩展名生成 MIME 类型，调用 `cloud.openapi.security.imgSecCheck({ media: { contentType, value: buffer } })`。

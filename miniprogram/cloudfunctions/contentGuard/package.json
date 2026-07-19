@@ -1,0 +1,10 @@
+{
+  "name": "contentGuard",
+  "version": "1.0.0",
+  "description": "滑一叠 用户文本内容安全审核",
+  "main": "index.js",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
