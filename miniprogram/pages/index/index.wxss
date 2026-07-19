@@ -83,7 +83,82 @@
   margin-top: 6rpx;
 }
 
-/* ===== 2. 旗舰主卡：穿搭叠图 ===== */
+/* ===== 2. 朋友视角仿真演示卡：模拟微信聊天 ===== */
+.demo-card {
+  background-color: #ededed;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.demo-chat-row {
+  display: flex;
+  align-items: flex-start;
+}
+
+/* 左侧头像圆点：低饱和绿，模拟微信好友头像 */
+.demo-avatar {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background-color: #8fb573;
+  margin-right: 16rpx;
+  margin-top: 4rpx;
+  flex-shrink: 0;
+}
+
+/* 右侧聊天气泡，内嵌编号卡轮播 */
+.demo-bubble {
+  flex: 1;
+  min-width: 0;
+  background-color: #ffffff;
+  border-radius: 8rpx 24rpx 24rpx 24rpx;
+  padding: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.demo-swiper {
+  width: 100%;
+  height: 360rpx;
+}
+
+/* 白底编号卡样式：白底 + 圆角 + 序号角标 */
+.demo-slide-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.demo-slide-num {
+  position: absolute;
+  top: 12rpx;
+  left: 12rpx;
+  z-index: 2;
+  background-color: #111111;
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 600;
+  border-radius: 999rpx;
+  padding: 4rpx 14rpx;
+}
+
+.demo-slide-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.demo-caption {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #333333;
+  text-align: center;
+}
+
+/* ===== 3. 旗舰主卡：穿搭叠图 ===== */
 .hero-card {
   background: linear-gradient(135deg, #4f6bf5, #6a3df0);
   border-radius: 24rpx;
@@ -123,9 +198,12 @@
 .hero-cta-row {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   margin-top: 28rpx;
+  gap: 20rpx;
 }
 
+/* 主按钮：白胶囊 + 品牌蓝字（示例体验，强调） */
 .hero-cta {
   background-color: #ffffff;
   color: #4f6bf5;
@@ -133,6 +211,22 @@
   font-weight: 600;
   border-radius: 999rpx;
   padding: 14rpx 36rpx;
+}
+
+/* 次按钮：半透明白描边胶囊（选自己的图） */
+.hero-cta-ghost {
+  background-color: rgba(255, 255, 255, 0.16);
+  border: 2rpx solid rgba(255, 255, 255, 0.65);
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 500;
+  border-radius: 999rpx;
+  padding: 12rpx 32rpx;
+}
+
+.hero-cta:active,
+.hero-cta-ghost:active {
+  opacity: 0.85;
 }
 
 /* ===== 3. 玩法模板区 ===== */
@@ -362,6 +456,12 @@
   text-align: center;
 }
 
+.loading-cancel {
+  margin-top: 24rpx;
+  font-size: 28rpx;
+  color: rgba(0,0,0,0.45);
+}
+
 /* ===== 处理前确认页 ===== */
 .confirm-section {
   width: 100%;
@@ -505,6 +605,11 @@
 /* 开始处理主按钮 */
 .confirm-cta {
   margin-top: 36rpx;
+}
+
+.confirm-cta-disabled {
+  pointer-events: none;
+  opacity: 0.55;
 }
 
 .btn-grad {

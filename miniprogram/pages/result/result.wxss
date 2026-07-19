@@ -284,6 +284,17 @@ page {
   background-color: #e8e8ec;
 }
 
+/* 跨组降级提示 */
+.cross-group-hint {
+  margin: 0 0 16rpx;
+  padding: 16rpx 20rpx;
+  background: #FFF8E1;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  color: #F57C00;
+  line-height: 1.5;
+}
+
 /* 分组卡片 */
 .card {
   background-color: #ffffff;
@@ -404,6 +415,22 @@ page {
 .compose-mask-text {
   font-size: 22rpx;
   color: #666666;
+}
+
+/* 合成中旋转动画 */
+@keyframes compose-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.compose-spinner {
+  width: 36rpx;
+  height: 36rpx;
+  border: 4rpx solid rgba(0, 0, 0, 0.1);
+  border-top-color: #4f6bf5;
+  border-radius: 50%;
+  animation: compose-spin 0.8s linear infinite;
+  margin-bottom: 8rpx;
 }
 
 /* 抠图失败兜底角标 */

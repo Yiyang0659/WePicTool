@@ -1,5 +1,5 @@
 // pages/result/result.js
-const { normalizeTaskGroups, buildSendability, GROUP_META, createMockTask } = require('../../utils/task');
+const { normalizeTaskGroups, GROUP_META, createMockTask } = require('../../utils/task');
 const { composeCard, DEFAULT_OPTIONS } = require('../../utils/cardComposer');
 
 const CHANGE_CATEGORY_OPTIONS = [
@@ -56,6 +56,20 @@ function decorateGroups(groups) {
   return decorated;
 }
 
+// 用 path-based setData 更新深层嵌套数组属性时，如果属性不存在于原数据项中，
+// 框架可能静默失败导致视图不更新。此函数通过替换整个分组数组来保证视图刷新。
+function updateGroupItem(page, groupKey, index, updates) {
+  var groups = page.data.groups;
+  var items = groups[groupKey] || [];
+  var oldItem = items[index];
+  if (!oldItem) return;
+  var newItem = Object.assign({}, oldItem, updates);
+  newItem.displayUrl = computeDisplayUrl(newItem);
+  var newItems = items.slice();
+  newItems[index] = newItem;
+  page.setData({ ['groups.' + groupKey]: newItems });
+}
+
 Page({
   data: {
     taskId: '',
@@ -73,10 +87,14 @@ Page({
     ratioOptions: RATIO_OPTIONS,
     showRatioSheet: false,
     composing: false,
+    // Canvas 合成进度：{ done: N, total: M }
+    composeProgress: null,
     // 「朋友视角」引导卡缩略图（取第一个非空分组的前 3 张 displayUrl）
     friendPreviewThumbs: [],
     // 保存完成后的发送引导半屏浮层
-    showSendGuide: false
+    showSendGuide: false,
+    // 跨组降级提示：所有有图的穿搭组均不足 3 张时展示
+    crossGroupHint: ''
   },
 
   _composerCanvas: null,
@@ -147,7 +165,8 @@ Page({
       isEmpty,
       ratio,
       groupList: this.buildGroupList(groups),
-      friendPreviewThumbs: this.buildFriendPreviewThumbs(groups)
+      friendPreviewThumbs: this.buildFriendPreviewThumbs(groups),
+      crossGroupHint: this.computeCrossGroupHint(groups)
     });
 
     if (!this.hasSavedRecord && task && totalCount > 0) {
@@ -211,6 +230,27 @@ Page({
     return [];
   },
 
+  // 跨组降级提示：遍历 tops/bottoms/shoes 三个穿搭组，
+  // 若所有有图的穿搭组（count > 0）的图片数都 < 3，返回降级提示文案；否则返回空字符串。
+  computeCrossGroupHint: function (groups) {
+    var outfitKeys = ['tops', 'bottoms', 'shoes'];
+    var hasAny = false;
+    var allBelowThree = true;
+    for (var i = 0; i < outfitKeys.length; i++) {
+      var count = (groups[outfitKeys[i]] || []).length;
+      if (count > 0) {
+        hasAny = true;
+        if (count >= 3) {
+          allBelowThree = false;
+        }
+      }
+    }
+    if (hasAny && allBelowThree) {
+      return '当前各组均不足 3 张，建议普通发送；如需叠图效果，建议每组补充到 3 张以上';
+    }
+    return '';
+  },
+
   // 所有合成任务都经过这个串行队列：
   // 1) 共享同一个 canvas，并行绘制会互相污染
   // 2) 避免 iOS/Android 同时处理多张 1024px 大图导致内存峰值
@@ -219,6 +259,13 @@ Page({
     const run = chain.then(() => taskFn());
     this._composeChain = run.then(() => undefined, () => undefined);
     return run;
+  },
+
+  _updateComposeProgress: function () {
+    var progress = this.data.composeProgress;
+    if (!progress) return;
+    var next = { done: progress.done + 1, total: progress.total };
+    this.setData({ composeProgress: next });
   },
 
   composeAllCards: function (groups) {
@@ -238,20 +285,20 @@ Page({
     });
 
     if (jobs.length === 0) {
-      this.setData({ composing: false });
+      this.setData({ composing: false, composeProgress: null });
       return;
     }
 
-    this.setData({ composing: true });
+    this.setData({ composing: true, composeProgress: { done: 0, total: jobs.length } });
 
     const runNext = (cursor) => {
       if (that._composeToken !== token) return; // 已被更新的合成任务（如切换比例）取代
       if (cursor >= jobs.length) {
-        that.setData({ composing: false });
+        that.setData({ composing: false, composeProgress: null });
         return;
       }
       const job = jobs[cursor];
-      that.setData({ [`groups.${job.groupKey}[${job.index}].composeStatus`]: 'composing' });
+      updateGroupItem(that, job.groupKey, job.index, { composeStatus: 'composing' });
       that._enqueueCompose(() => that.composeItem(job.groupKey, job.index, job.item, ratio))
         .then((res) => {
           if (that._composeToken !== token) return;
@@ -280,7 +327,8 @@ Page({
       ratio: ratio,
       background: '#FFFFFF',
       enhanceLightColor: true,
-      canvasSize: 1024
+      canvasSize: 1024,
+      isMatted: !!item.mattedUrl
     }).then((result) => ({
       groupKey,
       index,
@@ -292,29 +340,22 @@ Page({
   },
 
   applyComposeSuccess: function (groupKey, index, res) {
-    const base = `groups.${groupKey}[${index}]`;
-    const current = (this.data.groups[groupKey] || [])[index];
-    const merged = Object.assign({}, current, {
+    updateGroupItem(this, groupKey, index, {
       composedUrl: res.tempFilePath,
       composedRatio: res.ratio,
-      composeStatus: 'done'
+      composeStatus: 'done',
+      composeError: ''
     });
-    this.setData({
-      [`${base}.composedUrl`]: res.tempFilePath,
-      [`${base}.composedRatio`]: res.ratio,
-      [`${base}.composeStatus`]: 'done',
-      [`${base}.composeError`]: '',
-      [`${base}.displayUrl`]: computeDisplayUrl(merged)
-    });
+    this._updateComposeProgress();
   },
 
   applyComposeFailure: function (groupKey, index, err) {
     console.warn(`白底卡片合成失败 ${groupKey}[${index}]:`, err);
-    const base = `groups.${groupKey}[${index}]`;
-    this.setData({
-      [`${base}.composeStatus`]: 'fail',
-      [`${base}.composeError`]: (err && err.message) || '合成失败'
+    updateGroupItem(this, groupKey, index, {
+      composeStatus: 'fail',
+      composeError: (err && err.message) || '合成失败'
     });
+    this._updateComposeProgress();
   },
 
   // 失败图「重做」入口
@@ -348,8 +389,7 @@ Page({
       wx.showToast({ title: '合成器未就绪，请稍后重试', icon: 'none' });
       return;
     }
-    const base = `groups.${groupKey}[${index}]`;
-    this.setData({ [`${base}.composeStatus`]: 'composing' });
+    updateGroupItem(this, groupKey, index, { composeStatus: 'composing' });
     this._enqueueCompose(() => that.composeItem(groupKey, index, item, that.data.ratio))
       .then((res) => that.applyComposeSuccess(groupKey, index, res))
       .catch((err) => that.applyComposeFailure(groupKey, index, err));
@@ -359,7 +399,7 @@ Page({
   retryMatting: function (groupKey, index, item, cloudSource) {
     const that = this;
     const base = `groups.${groupKey}[${index}]`;
-    this.setData({ [`${base}.composeStatus`]: 'composing' });
+    updateGroupItem(this, groupKey, index, { composeStatus: 'composing' });
     wx.showLoading({ title: '正在重做抠图...', mask: true });
     wx.cloud.callFunction({
       name: 'processOutfit',
@@ -413,9 +453,12 @@ Page({
 
   getSaveUrl: function (item) {
     if (!item) return '';
-    // 保存时优先用合成后的白底卡片
-    if (item.composedUrl) return item.composedUrl;
-    return this.getDisplayUrl(item);
+    // 如果用户切换到原图模式，保存用户看到的（所见即所得）
+    if (item.showMode === 'original') {
+      return item.originalUrl || item.url || item.fileId || item.localPath || '';
+    }
+    // 合成模式下，优先合成图
+    return item.composedUrl || item.displayUrl || item.url || item.fileId || item.localPath || '';
   },
 
   // 比例切换
@@ -526,7 +569,8 @@ Page({
       totalCount,
       isEmpty: totalCount === 0,
       groupList: this.buildGroupList(normalizedGroups),
-      friendPreviewThumbs: this.buildFriendPreviewThumbs(normalizedGroups)
+      friendPreviewThumbs: this.buildFriendPreviewThumbs(normalizedGroups),
+      crossGroupHint: this.computeCrossGroupHint(normalizedGroups)
     });
 
     // 按新分组锚点重新合成未完成项（已按当前比例合成好的会被跳过）
@@ -556,6 +600,16 @@ Page({
 
   // 跳转微信发送预览页（eventChannel 契约保持不变）
   onWechatPreview: function () {
+    // 合成未完成时提示用户，避免预览页看到混合状态
+    var hasComposing = GROUP_ORDER.some(function (key) {
+      return (this.data.groups[key] || []).some(function (item) {
+        return item.composeStatus === 'composing';
+      });
+    }.bind(this));
+    if (hasComposing) {
+      wx.showToast({ title: '部分卡片仍在生成中', icon: 'none', duration: 2000 });
+    }
+
     const that = this;
     wx.navigateTo({
       url: '/pages/preview/preview?taskId=' + this.data.taskId,

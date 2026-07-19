@@ -18,17 +18,37 @@
       </view>
     </view>
 
-    <!-- 2. 旗舰主卡：穿搭叠图（唯一可用入口，走既有 onChooseMedia） -->
-    <view class="hero-card" bindtap="onChooseMedia">
+    <!-- 2. 朋友视角仿真演示卡：3 秒讲清产品是干嘛的 -->
+    <view class="demo-card">
+      <view class="demo-chat-row">
+        <view class="demo-avatar"></view>
+        <view class="demo-bubble">
+          <swiper class="demo-swiper" autoplay interval="2000" circular indicator-dots="false">
+            <swiper-item wx:for="{{demoSlides}}" wx:key="src">
+              <!-- 白底编号卡样式：白底 + 左上角黑底白字序号角标 -->
+              <view class="demo-slide-card">
+                <view class="demo-slide-num">{{item.num}}</view>
+                <image class="demo-slide-img" src="{{item.src}}" mode="aspectFit" />
+              </view>
+            </swiper-item>
+          </swiper>
+        </view>
+      </view>
+      <view class="demo-caption">朋友收到就能这样滑着看 👀</view>
+    </view>
+
+    <!-- 3. 旗舰主卡：穿搭叠图（双按钮：示例体验 + 选自己的图走既有 onChooseMedia） -->
+    <view class="hero-card">
       <view class="hero-icon">📸</view>
       <view class="hero-title">穿搭叠图</view>
       <view class="hero-desc">AI 抠图分组 · 白底编号卡 · 回微信合并发送</view>
       <view class="hero-cta-row">
-        <view class="hero-cta">开始创作</view>
+        <view class="hero-cta-ghost" catchtap="onChooseMedia">选自己的图</view>
+        <view class="hero-cta" catchtap="onTrySample">用示例试一叠</view>
       </view>
     </view>
 
-    <!-- 3. 玩法模板区 -->
+    <!-- 4. 玩法模板区 -->
     <view class="section-head">
       <view class="section-title-wrap">
         <view class="section-bar"></view>
@@ -45,7 +65,7 @@
       </view>
     </view>
 
-    <!-- 4. 工具区 -->
+    <!-- 5. 工具区 -->
     <view class="tool-card" bindtap="onComingSoon">
       <view class="tool-emoji">🗂️</view>
       <view class="tool-info">
@@ -55,7 +75,7 @@
       <view class="tool-badge">即将上线</view>
     </view>
 
-    <!-- 5. 操作说明卡 -->
+    <!-- 6. 操作说明卡 -->
     <view class="guide-card">
       <view class="section-title-wrap guide-title-wrap">
         <view class="section-bar"></view>
@@ -64,7 +84,7 @@
       <view class="guide-list">
         <view class="guide-item">
           <view class="guide-num">1</view>
-          <view class="guide-text">点击「穿搭叠图」卡片的「开始创作」，选择上衣、裤子、裙子或鞋子的照片（可混选 1-9 张）。</view>
+          <view class="guide-text">点击「穿搭叠图」卡片的「用示例试一叠」快速体验，或点「选自己的图」选择上衣、裤子、裙子或鞋子的照片（可混选 1-9 张）。</view>
         </view>
         <view class="guide-item">
           <view class="guide-num">2</view>
@@ -92,9 +112,9 @@
     <!-- 已选图片缩略图网格（4 列，白卡容器） -->
     <view class="picked-card">
       <view class="picked-grid">
-        <view class="picked-item" wx:for="{{pickedImages}}" wx:key="tempFilePath">
+        <view class="picked-item" wx:for="{{pickedImages}}" wx:key="tempFilePath" bindtap="onPreviewConfirmImage" data-index="{{index}}">
           <image class="picked-img" src="{{item.tempFilePath}}" mode="aspectFill" lazy-load="true" />
-          <!-- 单张移除：确认阶段可直接编辑已选图片 -->
+          <!-- 单张移除：catchtap 阻止冒泡，避免同时触发预览 -->
           <view class="picked-del" catchtap="onRemoveImage" data-index="{{index}}">×</view>
         </view>
         <!-- 添加图片入口：未满 9 张时显示，点击进入本地相册继续添加 -->
@@ -119,8 +139,8 @@
     <view class="ratio-note">比例只影响白底卡片合成，不重新抠图；结果页可随时修改。</view>
 
     <!-- 开始处理主按钮 -->
-    <view class="confirm-cta" bindtap="onStartProcess">
-      <view class="btn-grad">开始处理</view>
+    <view class="confirm-cta {{processing ? 'confirm-cta-disabled' : ''}}" bindtap="onStartProcess">
+      <view class="btn-grad">{{processing ? '处理中...' : '开始处理'}}</view>
     </view>
     <view class="confirm-hint">若包含人像、风景等非穿搭图片，将自动归入「其他素材」</view>
   </view>
@@ -131,6 +151,7 @@
       <view class="spinner"></view>
       <view class="loading-text">{{loadingText}}</view>
       <view class="loading-subtext">正在处理您的穿搭素材...</view>
+      <view class="loading-cancel" bindtap="onCancelProcess">取消处理</view>
     </view>
   </view>
 </view>

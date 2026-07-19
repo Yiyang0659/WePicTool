@@ -42,6 +42,11 @@
         </view>
       </view>
 
+      <!-- 跨组降级提示：所有穿搭组均不足 3 张时展示 -->
+      <view wx:if="{{crossGroupHint}}" class="cross-group-hint">
+        <text>{{crossGroupHint}}</text>
+      </view>
+
       <!-- 分组卡片 -->
       <view class="card" wx:for="{{groupList}}" wx:key="key" wx:for-item="g">
         <!-- 组头：组名 + 张数 + 状态徽标 -->
@@ -67,7 +72,8 @@
                 />
                 <view class="num">{{it.numLabel}}</view>
                 <view class="compose-mask" wx:if="{{it.composeStatus === 'composing'}}">
-                  <text class="compose-mask-text">生成中…</text>
+                  <view class="compose-spinner"></view>
+                  <text class="compose-mask-text">生成中</text>
                 </view>
                 <view class="matting-badge" wx:if="{{it.matted === false}}">已用原图</view>
               </view>
@@ -111,7 +117,7 @@
 
   <!-- 底部固定操作栏 -->
   <view class="result-bar" wx:if="{{!isEmpty}}">
-    <view class="ratio-chip" bindtap="onChangeRatio">{{composing ? '合成中…' : ratio + ' ▸'}}</view>
+    <view class="ratio-chip" bindtap="onChangeRatio">{{composing && composeProgress ? '生成中 ' + composeProgress.done + '/' + composeProgress.total : (composing ? '合成中…' : ratio + ' ▸')}}</view>
     <view class="btn-preview" bindtap="onWechatPreview">💬 微信预览</view>
     <view class="btn-saveall" bindtap="onSaveAllImages">保存全部</view>
   </view>

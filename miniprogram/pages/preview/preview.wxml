@@ -32,34 +32,66 @@
         <view class="msg me stackmsg">
           <view class="avatar mine">😎</view>
 
-          <!-- 折叠态：固定三节点牌堆，只轮转 pos-front / pos-g1 / pos-g2 -->
-          <view
-            wx:if="{{!g.expanded}}"
-            class="stackwrap {{ratioClass}}"
-            data-gi="{{gi}}"
-            bindtouchstart="onStackTouchStart"
-            bindtouchmove="onStackTouchMove"
-            bindtouchend="onStackTouchEnd"
-            bindtouchcancel="onStackTouchCancel"
-            bindlongpress="onStackLongPress"
-          >
+          <!-- 标签 + 卡片内容纵向容器 -->
+          <view class="stackmsg-content">
+            <!-- 分组名标签（Bug #19：让用户知道当前在看哪组） -->
+            <view class="group-label" wx:if="{{g.name}}">{{g.name}}</view>
+
+            <!-- 折叠态：固定三节点牌堆，只轮转 pos-front / pos-g1 / pos-g2 -->
             <view
-              wx:for="{{g.nodes}}"
-              wx:for-item="nd"
-              wx:for-index="ni"
-              wx:key="index"
-              class="stk {{nd.pos}} {{ni === g.frontIdx && g.dragging ? 'dragging' : ''}} {{ni === g.frontIdx && g.flying ? 'flying' : ''}} {{ni === g.noanimIdx ? 'noanim' : ''}}"
-              style="{{ni === g.frontIdx ? g.dragStyle : ''}}"
+              wx:if="{{!g.expanded}}"
+              class="stackwrap {{ratioClass}}"
+              data-gi="{{gi}}"
+              bindtouchstart="onStackTouchStart"
+              bindtouchmove="onStackTouchMove"
+              bindtouchend="onStackTouchEnd"
+              bindtouchcancel="onStackTouchCancel"
+              bindlongpress="onStackLongPress"
+            >
+              <view
+                wx:for="{{g.nodes}}"
+                wx:for-item="nd"
+                wx:for-index="ni"
+                wx:key="index"
+                class="stk {{nd.pos}} {{ni === g.frontIdx && g.dragging ? 'dragging' : ''}} {{ni === g.frontIdx && g.flying ? 'flying' : ''}} {{ni === g.noanimIdx ? 'noanim' : ''}}"
+                style="{{ni === g.frontIdx ? g.dragStyle : ''}}"
+              >
+                <image
+                  wx:if="{{!nd.err}}"
+                  class="card-img"
+                  src="{{nd.url}}"
+                  mode="aspectFill"
+                  lazy-load="{{true}}"
+                  data-gi="{{gi}}"
+                  data-kind="node"
+                  data-ni="{{ni}}"
+                  binderror="onImgError"
+                />
+                <view wx:else class="img-fallback">
+                  <text class="ic">🖼️</text>
+                  <text>图片加载失败</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- 展开态：第 1 张留原位（同一消息行） -->
+            <view
+              wx:else
+              class="xcard {{ratioClass}}"
+              data-gi="{{gi}}"
+              data-url="{{g.cards[0].url}}"
+              bindtap="onOpenViewer"
+              bindlongpress="onCardLongPress"
             >
               <image
-                wx:if="{{!nd.err}}"
+                wx:if="{{!g.cards[0].err}}"
                 class="card-img"
-                src="{{nd.url}}"
+                src="{{g.cards[0].url}}"
                 mode="aspectFill"
                 lazy-load="{{true}}"
                 data-gi="{{gi}}"
-                data-kind="node"
-                data-ni="{{ni}}"
+                data-kind="card"
+                data-ci="{{0}}"
                 binderror="onImgError"
               />
               <view wx:else class="img-fallback">
@@ -69,34 +101,8 @@
             </view>
           </view>
 
-          <!-- 展开态：第 1 张留原位（同一消息行） -->
-          <view
-            wx:else
-            class="xcard {{ratioClass}}"
-            data-gi="{{gi}}"
-            data-url="{{g.cards[0].url}}"
-            bindtap="onOpenViewer"
-            bindlongpress="onCardLongPress"
-          >
-            <image
-              wx:if="{{!g.cards[0].err}}"
-              class="card-img"
-              src="{{g.cards[0].url}}"
-              mode="aspectFill"
-              lazy-load="{{true}}"
-              data-gi="{{gi}}"
-              data-kind="card"
-              data-ci="{{0}}"
-              binderror="onImgError"
-            />
-            <view wx:else class="img-fallback">
-              <text class="ic">🖼️</text>
-              <text>图片加载失败</text>
-            </view>
-          </view>
-
-          <!-- 「展开 N」/「收起」胶囊：原地切换，位置不变 -->
-          <view class="expand-cap" data-gi="{{gi}}" bindtap="onToggleCapsule">{{g.expanded ? '收起' : '展开 ' + g.n}}</view>
+          <!-- 「展开 N」/「收起」胶囊：原地切换，位置不变（单张无需展开/收起） -->
+          <view class="expand-cap" wx:if="{{g.n > 1}}" data-gi="{{gi}}" bindtap="onToggleCapsule">{{g.expanded ? '收起' : '展开 ' + g.n}}</view>
         </view>
 
         <!-- 展开态：第 2~N 张独立消息行（同宽卡片 + 各自右侧头像），stagger 入场 -->

@@ -417,23 +417,41 @@ Page({
   // ============ 长按动作面板（两态：保存全部 / 转发）============
   onStackLongPress: function (e) {
     this._suppressGesture = true;
-    this._openActions(this._gi(e));
+    var gi = this._gi(e);
+    var g = this.data.groupList[gi];
+    var frontUrl = '';
+    if (g) {
+      var fi = g.frontIdx;
+      if (g.nodes[fi] && g.nodes[fi].url) frontUrl = g.nodes[fi].url;
+    }
+    this._openActions(gi, frontUrl);
   },
 
   onCardLongPress: function (e) {
     this._lastCardLongPressAt = Date.now();
-    this._openActions(this._gi(e));
+    var singleUrl = e.currentTarget.dataset.url || '';
+    this._openActions(this._gi(e), singleUrl);
   },
 
-  _openActions: function (gi) {
+  _openActions: function (gi, singleUrl) {
     var that = this;
     var g = this.data.groupList[gi];
     if (!g) return;
+    var items = singleUrl ? ['保存单张', '保存全部', '转发'] : ['保存全部', '转发'];
     wx.showActionSheet({
-      itemList: ['保存全部', '转发'],
+      itemList: items,
       success: function (res) {
-        if (res.tapIndex === 0) that._saveGroup(gi);
-        else if (res.tapIndex === 1) that._forwardGroup();
+        if (singleUrl && res.tapIndex === 0) {
+          that._saveImagesSequentially([singleUrl], '已保存 1 张');
+        } else if (singleUrl && res.tapIndex === 1) {
+          that._saveGroup(gi);
+        } else if (singleUrl && res.tapIndex === 2) {
+          that._forwardGroup();
+        } else if (!singleUrl && res.tapIndex === 0) {
+          that._saveGroup(gi);
+        } else if (!singleUrl && res.tapIndex === 1) {
+          that._forwardGroup();
+        }
       }
     });
   },

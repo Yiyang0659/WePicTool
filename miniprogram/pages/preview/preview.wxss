@@ -288,6 +288,24 @@ page {
   background-color: rgba(92, 92, 96, 0.9);
 }
 
+/* ========== 分组名标签 ========== */
+.stackmsg-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.group-label {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-bottom: 3px;
+  text-align: right;
+}
+
+.wx.dark .group-label {
+  color: rgba(255, 255, 255, 0.45);
+}
+
 /* ========== 展开态：独立消息行（同宽卡片 + 各自右侧头像） ========== */
 .xcard {
   position: relative;

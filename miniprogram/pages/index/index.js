@@ -37,6 +37,7 @@ Page({
   data: {
     loading: false,
     loadingText: '开始处理...',
+    processing: false,
     // 步骤状态：home = 选图入口；confirm = 处理前确认（缩略图 + 比例）
     step: 'home',
     pickedImages: [],
@@ -81,6 +82,106 @@ Page({
         console.log('选择图片失败:', err);
       }
     });
+  },
+
+  // 「用示例试一叠」新手体验入口
+  // 设计理由：示例模式走本地 mock 管线——零等待、零云端成本、无隐私顾虑，让新用户 10 秒看到成品。
+  onTrySample: function () {
+    const that = this;
+    wx.showLoading({ title: '正在准备示例…', mask: true });
+
+    this.prepareSampleImages()
+      .then(function (images) {
+        wx.hideLoading();
+        if (!images || images.length === 0) {
+          wx.showToast({ title: '示例资源不可用', icon: 'none' });
+          return;
+        }
+        // 复用现有 createMockTask 构造任务，标记为本地预览
+        const task = createMockTask(images);
+        task.status = 'preview';
+        task.localPreview = true;
+        wx.showToast({ title: '示例体验模式', icon: 'none' });
+        // 走既有 eventChannel 契约跳转结果页，逻辑不动
+        that.navigateToResult(task);
+      })
+      .catch(function (err) {
+        wx.hideLoading();
+        console.error('示例准备失败:', err);
+        wx.showToast({ title: '示例加载失败，请重试', icon: 'none' });
+      });
+  },
+
+  // 把 9 张包内示例图复制到用户目录（已存在则跳过复制），返回 mock 管线可用的 images 数组
+  prepareSampleImages: function () {
+    const fsm = wx.getFileSystemManager();
+    const dir = `${wx.env.USER_DATA_PATH}/samples`;
+
+    const ensureDir = new Promise(function (resolve, reject) {
+      fsm.mkdir({
+        dirPath: dir,
+        recursive: true,
+        success: function () { resolve(); },
+        fail: function (err) {
+          // 目录已存在不算失败
+          if (err && err.errMsg && err.errMsg.indexOf('already exists') !== -1) {
+            resolve();
+            return;
+          }
+          reject(err);
+        }
+      });
+    });
+
+    return ensureDir.then(function () {
+      // 单张失败整体失败（all-or-nothing），保证 3+3+3 分组映射不被打乱
+      const copyJobs = SAMPLE_FILES.map(function (file, index) {
+        const targetPath = `${dir}/${file.name}`;
+        return new Promise(function (resolve, reject) {
+          const done = function () {
+            resolve({
+              imageId: `sample_${index + 1}`,
+              localPath: targetPath,
+              url: targetPath,
+              width: file.width,
+              height: file.height,
+              size: file.size
+            });
+          };
+          // 已复制过则跳过
+          fsm.access({
+            path: targetPath,
+            success: done,
+            fail: function () {
+              fsm.readFile({
+                filePath: `/assets/samples/${file.name}`,
+                success: function (readRes) {
+                  fsm.writeFile({
+                    filePath: targetPath,
+                    data: readRes.data,
+                    success: done,
+                    fail: reject
+                  });
+                },
+                fail: reject
+              });
+            }
+          });
+        });
+      });
+      return Promise.all(copyJobs);
+    });
+  },
+
+  // 确认页：点击缩略图预览大图
+  onPreviewConfirmImage: function (e) {
+    var index = e.currentTarget.dataset.index;
+    if (index === undefined || index === null) return;
+    var pickedImages = this.data.pickedImages;
+    if (!pickedImages || pickedImages.length === 0) return;
+    var urls = pickedImages.map(function (item) { return item.tempFilePath; });
+    var current = urls[Number(index)] || urls[0];
+    wx.previewImage({ urls: urls, current: current });
   },
 
   // 确认页：选择输出比例（只影响白底卡片合成，不影响抠图）
@@ -136,16 +237,28 @@ Page({
 
   // 确认页：开始处理，走既有上传/AI 分类/抠图链路
   onStartProcess: function () {
+    if (this.data.processing) return;
+
     const tempFiles = this.data.pickedImages;
     if (!tempFiles || tempFiles.length === 0) return;
 
+    // 初始化取消标志（运行时属性，不走 setData）
+    this._cancelRequested = false;
+
     this.setData({
+      processing: true,
       loading: true,
       loadingText: '正在压缩图片...'
     });
 
     // 开始对所有选择的图片进行本地压缩
     this.compressAndUploadImages(tempFiles);
+  },
+
+  // 取消处理：设置标志位并关闭 loading 遮罩，回到确认页状态
+  onCancelProcess: function () {
+    this._cancelRequested = true;
+    this.setData({ loading: false, processing: false });
   },
 
   // 压缩并上传所有图片
@@ -159,7 +272,7 @@ Page({
     }
 
     if (!wx.cloud || !(app.globalData && app.globalData.cloudReady)) {
-      this.setData({ loading: false });
+      this.setData({ loading: false, processing: false });
       wx.showModal({
         title: '需要配置云开发',
         content: '请先在 miniprogram/config/env.js 中填写 CloudBase 云环境 ID，并在开发者工具中部署 processOutfit 云函数。',
@@ -169,43 +282,66 @@ Page({
     }
 
     const uploadTasks = [];
-    
+    const that = this;
+
+    // 1. 串行压缩（每张压缩需要 Canvas 或系统 API，不适合并发）
     for (let i = 0; i < tempFiles.length; i++) {
+      if (that._cancelRequested) return;
+
       const file = tempFiles[i];
       this.setData({
         loadingText: `压缩第 ${i + 1}/${tempFiles.length} 张图片...`
       });
 
       try {
-        // 1. 基础压缩 (最长边不超过 1600px)
         const compressedPath = await this.compressImage(file.tempFilePath);
-        
-        this.setData({
-          loadingText: `上传第 ${i + 1}/${tempFiles.length} 张...`
-        });
-
-        // 2. 上传到 CloudBase 云存储
-        const uploadResult = await this.uploadToCloudBase(compressedPath, i);
         uploadTasks.push({
-          fileId: uploadResult.fileID,
-          sourcePath: file.tempFilePath
+          filePath: compressedPath,
+          cloudPath: `outfits/${Date.now()}_${i}${compressedPath.substring(compressedPath.lastIndexOf('.')).split('?')[0] || '.jpg'}`,
+          sourcePath: file.tempFilePath,
+          fileId: null,
+          error: false
         });
       } catch (err) {
-        console.error(`处理第 ${i + 1} 张图片出错:`, err);
-        // 单张失败不能影响其他图片，这里记录失败并继续
+        console.error(`压缩第 ${i + 1} 张图片出错:`, err);
         uploadTasks.push({
-          fileId: null,
+          filePath: null,
+          cloudPath: null,
           sourcePath: file.tempFilePath,
+          fileId: null,
           error: true
         });
       }
     }
 
+    // 2. 并发上传，每批 2 张（与云函数并发度匹配）
+    const UPLOAD_CONCURRENCY = 2;
+    for (let i = 0; i < uploadTasks.length; i += UPLOAD_CONCURRENCY) {
+      if (that._cancelRequested) return;
+
+      const batch = uploadTasks.slice(i, i + UPLOAD_CONCURRENCY);
+      await Promise.all(batch.map(async function (task, batchIdx) {
+        if (task.error) return; // 跳过压缩失败的
+        const idx = i + batchIdx;
+        try {
+          that.setData({ loadingText: `上传第 ${idx + 1}/${uploadTasks.length} 张...` });
+          const res = await wx.cloud.uploadFile({ cloudPath: task.cloudPath, filePath: task.filePath });
+          task.fileId = res.fileID;
+        } catch (err) {
+          task.fileId = null;
+          task.error = true;
+          console.error(`[upload] 第 ${idx + 1} 张失败:`, err);
+        }
+      }));
+    }
+
+    if (that._cancelRequested) return;
+
     // 过滤掉完全失败的图片 ID，但保留成功的部分
     const validImages = uploadTasks.filter(item => !item.error && item.fileId);
 
     if (validImages.length === 0) {
-      this.setData({ loading: false });
+      this.setData({ loading: false, processing: false });
       wx.showModal({
         title: '处理失败',
         content: '所有图片上传均失败，请检查网络后重试。',
@@ -222,49 +358,39 @@ Page({
     this.createProcessingTask(validImages);
   },
 
-  // 模拟/原生本地图片压缩 (最长边不超过 1600px)
+  // 本地图片质量压缩。
+  // 注意：wx.compressImage 仅支持 quality 参数，不支持尺寸控制（无 width/height 参数）。
+  // 如需限制图片物理尺寸，需使用 canvas 方案或在云函数侧处理。
+  // 当前策略：quality 80 有损压缩，压缩后如仍超过 2000px 则输出警告供开发调试。
   compressImage: function (tempFilePath) {
     return new Promise((resolve, reject) => {
-      // 获取图片原始大小
-      wx.getImageInfo({
+      wx.compressImage({
         src: tempFilePath,
-        success: (res) => {
-          const { width, height } = res;
-          const maxSide = 1600;
-          
-          if (width <= maxSide && height <= maxSide) {
-            // 无需压缩，直接返回原路径
-            resolve(tempFilePath);
-            return;
-          }
-
-          // 计算等比例缩放后的宽高
-          let targetWidth = width;
-          let targetHeight = height;
-          if (width > height) {
-            targetWidth = maxSide;
-            targetHeight = Math.round((height * maxSide) / width);
-          } else {
-            targetHeight = maxSide;
-            targetWidth = Math.round((width * maxSide) / height);
-          }
-
-          // 微信提供了 wx.compressImage API，可快速进行有损压缩
-          wx.compressImage({
-            src: tempFilePath,
-            quality: 80,
-            success: (compressRes) => {
-              resolve(compressRes.tempFilePath);
+        quality: 80,
+        success: (compressRes) => {
+          const outputPath = compressRes.tempFilePath;
+          // 压缩后检查尺寸，过大则输出警告（不阻断流程）
+          wx.getImageInfo({
+            src: outputPath,
+            success: (infoRes) => {
+              const maxSide = Math.max(infoRes.width, infoRes.height);
+              if (maxSide > 2000) {
+                console.warn(
+                  `[compressImage] 压缩后图片最长边仍为 ${maxSide}px（${infoRes.width}x${infoRes.height}），` +
+                  '超过 2000px。wx.compressImage 不支持尺寸控制，如需缩放请使用 canvas 方案。'
+                );
+              }
+              resolve(outputPath);
             },
-            fail: (compressErr) => {
-              console.warn('wx.compressImage失败，降级使用原图:', compressErr);
-              resolve(tempFilePath); // 降级处理
+            fail: () => {
+              // getImageInfo 失败不阻断，直接用压缩后的路径
+              resolve(outputPath);
             }
           });
         },
-        fail: (err) => {
-          console.error('获取图片信息失败:', err);
-          resolve(tempFilePath); // 降级返回
+        fail: (compressErr) => {
+          console.warn('wx.compressImage 失败，降级使用原图:', compressErr);
+          resolve(tempFilePath);
         }
       });
     });
@@ -320,7 +446,7 @@ Page({
       },
       success: function (res) {
         clearInterval(progressTimer);
-        that.setData({ loading: false });
+        that.setData({ loading: false, processing: false });
 
         if (res.result && res.result.taskId) {
           that.navigateToResult(res.result);
@@ -334,7 +460,7 @@ Page({
       },
       fail: function (err) {
         clearInterval(progressTimer);
-        that.setData({ loading: false });
+        that.setData({ loading: false, processing: false });
         console.error('调用云函数失败:', err);
         const content = isCloudPermissionError(err)
           ? '调用云函数失败，请确保已开通云开发、填写 CloudBase 环境 ID，并部署 processOutfit 云函数。'
@@ -362,7 +488,7 @@ Page({
       .filter(item => item.url);
 
     if (images.length === 0) {
-      this.setData({ loading: false });
+      this.setData({ loading: false, processing: false });
       wx.showModal({
         title: '图片无效',
         content: '没有读取到有效图片，请重新选择。',
@@ -379,7 +505,7 @@ Page({
     task.status = 'preview';
     task.localPreview = true;
 
-    this.setData({ loading: false });
+    this.setData({ loading: false, processing: false });
     wx.showToast({
       title: '本地预览模式',
       icon: 'none'

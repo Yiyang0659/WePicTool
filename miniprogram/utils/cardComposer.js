@@ -2,6 +2,7 @@
 // 前端 Canvas 白底卡片合成工具
 // 约束：
 // - CloudBase 云函数不支持 sharp 等原生 C++ 模块，合成必须在前端完成
+// - 输出 jpg 格式（白底卡片无透明需求，jpg 体积更小）
 // - 支持 1:1 / 4:5 / 3:4 三种比例
 // - 按组使用视觉锚点：上衣偏中上、下装偏中下、鞋子居中偏下
 // - 浅色 / 白色衣物自动加轻阴影和细描边兜底
@@ -15,10 +16,10 @@ const RATIO_MAP = {
 };
 
 const GROUP_ANCHOR = {
-  tops: { yOffset: -0.04, scaleRange: [0.78, 0.86] },
-  bottoms: { yOffset: 0.04, scaleRange: [0.78, 0.86] },
-  shoes: { yOffset: 0.08, scaleRange: [0.70, 0.80] },
-  default: { yOffset: 0, scaleRange: [0.78, 0.86] }
+  tops: { yOffset: -0.04, scale: 0.82 },
+  bottoms: { yOffset: 0.04, scale: 0.82 },
+  shoes: { yOffset: 0.08, scale: 0.75 },
+  default: { yOffset: 0, scale: 0.82 }
 };
 
 const DEFAULT_OPTIONS = {
@@ -30,9 +31,11 @@ const DEFAULT_OPTIONS = {
   shadowOffsetY: 6,
   strokeColor: 'rgba(0, 0, 0, 0.06)',
   strokeWidth: 2,
-  outputFormat: 'png',
+  // 白底卡片无透明需求，用 jpg 减小体积；outputQuality 仅对 jpg 有效，png 会忽略该参数
+  outputFormat: 'jpg',
   outputQuality: 0.92,
-  canvasSize: 1024
+  canvasSize: 1024,
+  isMatted: false
 };
 
 function parseRatio(ratio) {
@@ -41,10 +44,6 @@ function parseRatio(ratio) {
 
 function getAnchor(category) {
   return GROUP_ANCHOR[category] || GROUP_ANCHOR.default;
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }
 
 // 下载网络/cloud 图片到本地临时路径
@@ -102,7 +101,7 @@ function getImageInfo(src) {
 // 计算主体在画布上的绘制参数
 function calculateDrawParams(canvasWidth, canvasHeight, imgWidth, imgHeight, category) {
   const anchor = getAnchor(category);
-  const targetScaleBase = (anchor.scaleRange[0] + anchor.scaleRange[1]) / 2;
+  const targetScaleBase = anchor.scale;
 
   const canvasAspect = canvasWidth / canvasHeight;
   const imgAspect = imgWidth / imgHeight;
@@ -127,21 +126,6 @@ function calculateDrawParams(canvasWidth, canvasHeight, imgWidth, imgHeight, cat
   return { x, y, width: drawWidth, height: drawHeight };
 }
 
-// 创建离屏 canvas（2d）
-function createOffscreenCanvas(width, height) {
-  if (wx.createOffscreenCanvas) {
-    try {
-      const canvas = wx.createOffscreenCanvas({ type: '2d', width, height });
-      if (canvas && canvas.getContext) {
-        return canvas;
-      }
-    } catch (err) {
-      console.warn('createOffscreenCanvas 失败，回退到页面 canvas', err);
-    }
-  }
-  return null;
-}
-
 // 使用传入的页面 canvas 实例合成
 function composeWithPageCanvas(canvas, options) {
   const ctx = canvas.getContext('2d');
@@ -162,7 +146,8 @@ function composeWithPageCanvas(canvas, options) {
     strokeWidth,
     outputFormat,
     outputQuality,
-    canvasSize
+    canvasSize,
+    isMatted
   } = Object.assign({}, DEFAULT_OPTIONS, options);
 
   const aspect = parseRatio(ratio);
@@ -189,30 +174,38 @@ function composeWithPageCanvas(canvas, options) {
           // 2. 计算绘制参数
           const params = calculateDrawParams(width, height, imageInfo.width, imageInfo.height, category);
 
-          // 3. 可选：轻阴影 + 细描边，增强浅色衣物可见性
+          // 3. 高质量缩放：大图缩小到 1024px 时保留纹理细节
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+
+          // 4. 可选：轻阴影 + 细描边，增强浅色衣物可见性
           if (enhanceLightColor) {
             ctx.save();
             ctx.shadowColor = shadowColor;
-            ctx.shadowBlur = shadowBlur;
+            // 抠图 PNG 的矩形阴影更明显，减小 blur 半径
+            ctx.shadowBlur = isMatted ? 8 : shadowBlur;
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = shadowOffsetY;
           }
 
-          // 4. 绘制主体
+          // 5. 绘制主体
           ctx.drawImage(img, params.x, params.y, params.width, params.height);
 
           if (enhanceLightColor) {
             ctx.restore();
 
-            // 细描边：在主体边缘绘制半透细线
-            ctx.save();
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = strokeWidth;
-            ctx.strokeRect(params.x, params.y, params.width, params.height);
-            ctx.restore();
+            // 抠图 PNG 跳过矩形描边（透明背景上矩形框非常明显）
+            if (!isMatted) {
+              // 细描边：在主体边缘绘制半透细线
+              ctx.save();
+              ctx.strokeStyle = strokeColor;
+              ctx.lineWidth = strokeWidth;
+              ctx.strokeRect(params.x, params.y, params.width, params.height);
+              ctx.restore();
+            }
           }
 
-          // 5. 导出临时文件
+          // 6. 导出临时文件
           wx.canvasToTempFilePath({
             canvas,
             fileType: outputFormat,
