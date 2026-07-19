@@ -18,7 +18,7 @@
           <view class="stackmsg-content">
             <view class="group-label" wx:if="{{g.name}}">{{g.name}}</view>
             <view
-              wx:if="{{!g.expanded}}"
+              hidden="{{g.expanded}}"
               class="stackwrap"
               style="{{g.stageStyle}}"
               data-gi="{{gi}}"
@@ -37,15 +37,15 @@
                 style="{{ni === g.frontIdx ? g.dragStyle : ''}}"
               >
                 <view class="stack-card" style="{{nd.cardStyle}}">
-                  <image wx:if="{{!nd.err}}" class="card-img" src="{{nd.url}}" mode="aspectFit" lazy-load="{{true}}" data-gi="{{gi}}" data-kind="node" data-ni="{{ni}}" binderror="onImgError" />
+                  <image wx:if="{{!nd.err}}" class="card-img" src="{{nd.url}}" mode="aspectFit" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="node" data-ni="{{ni}}" binderror="onImgError" />
                   <view wx:else class="img-fallback"><text class="ic">🖼️</text><text>图片加载失败</text></view>
                 </view>
               </view>
             </view>
 
-            <view wx:else class="xcard" style="{{g.stageStyle}}" data-gi="{{gi}}" data-url="{{g.cards[0].url}}" bindtap="onOpenViewer" bindlongpress="onCardLongPress">
+            <view hidden="{{!g.expanded}}" class="xcard" style="{{g.stageStyle}}" data-gi="{{gi}}" data-url="{{g.cards[0].url}}" bindtap="onOpenViewer" bindlongpress="onCardLongPress">
               <view class="stack-card" style="{{g.cards[0].cardStyle}}">
-                <image wx:if="{{!g.cards[0].err}}" class="card-img" src="{{g.cards[0].url}}" mode="aspectFit" lazy-load="{{true}}" data-gi="{{gi}}" data-kind="card" data-ci="{{0}}" binderror="onImgError" />
+                <image wx:if="{{!g.cards[0].err}}" class="card-img" src="{{g.cards[0].url}}" mode="aspectFit" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="card" data-ci="{{0}}" binderror="onImgError" />
                 <view wx:else class="img-fallback"><text class="ic">🖼️</text><text>图片加载失败</text></view>
               </view>
             </view>
@@ -53,17 +53,15 @@
           <view class="expand-cap" wx:if="{{g.n > 1}}" data-gi="{{gi}}" bindtap="onToggleCapsule">{{g.expanded ? '收起' : '展开 ' + g.n}}</view>
         </view>
 
-        <block wx:if="{{g.expanded}}">
-          <view wx:for="{{g.rest}}" wx:for-item="cd" wx:for-index="ki" wx:key="num" class="msg me xrow {{g.leaving ? 'leave' : 'enter'}}" style="animation-delay: {{g.leaving ? cd.leaveDelay : cd.enterDelay}}ms;">
-            <view class="avatar mine">😎</view>
-            <view class="xcard" style="{{g.stageStyle}}" data-gi="{{gi}}" data-url="{{cd.url}}" bindtap="onOpenViewer" bindlongpress="onCardLongPress">
-              <view class="stack-card" style="{{cd.cardStyle}}">
-                <image wx:if="{{!cd.err}}" class="card-img" src="{{cd.url}}" mode="aspectFit" lazy-load="{{true}}" data-gi="{{gi}}" data-kind="rest" data-ci="{{ki}}" binderror="onImgError" />
-                <view wx:else class="img-fallback"><text class="ic">🖼️</text><text>图片加载失败</text></view>
-              </view>
+        <view wx:for="{{g.rest}}" wx:for-item="cd" wx:for-index="ki" wx:key="num" hidden="{{!g.expanded}}" class="msg me xrow {{g.leaving ? 'leave' : 'enter'}}" style="animation-delay: {{g.leaving ? cd.leaveDelay : cd.enterDelay}}ms;">
+          <view class="avatar mine">😎</view>
+          <view class="xcard" style="{{g.stageStyle}}" data-gi="{{gi}}" data-url="{{cd.url}}" bindtap="onOpenViewer" bindlongpress="onCardLongPress">
+            <view class="stack-card" style="{{cd.cardStyle}}">
+              <image wx:if="{{!cd.err}}" class="card-img" src="{{cd.url}}" mode="aspectFit" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="rest" data-ci="{{ki}}" binderror="onImgError" />
+              <view wx:else class="img-fallback"><text class="ic">🖼️</text><text>图片加载失败</text></view>
             </view>
           </view>
-        </block>
+        </view>
       </block>
 
       <view class="empty-state" wx:if="{{isEmpty}}"><view class="empty-icon">📂</view><view class="empty-text">未找到有效的分组结果</view></view>

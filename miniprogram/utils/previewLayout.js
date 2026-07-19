@@ -21,8 +21,8 @@ function getAspect(card, ratio, fallbackRatio) {
 
 function buildPreviewStage(card, fallbackRatio, windowWidth) {
   var safeWindowWidth = Number(windowWidth) > 0 ? Number(windowWidth) : 375;
-  var stageWidth = Math.round(safeWindowWidth * 0.5);
-  var stageHeight = Math.min(112, Math.round(stageWidth * 0.61));
+  var stageWidth = Math.round(safeWindowWidth * 0.54);
+  var stageHeight = Math.min(150, Math.round(stageWidth * 0.74));
   var ratio = resolvePreviewRatio(card, fallbackRatio);
   var aspect = getAspect(card, ratio, fallbackRatio);
   var width = stageWidth;

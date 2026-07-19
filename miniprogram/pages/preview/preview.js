@@ -43,7 +43,7 @@ Page({
     viewer: { show: false, url: '' }
   },
 
-  _cardW: 200,              // 固定手势舞台宽 px（屏宽 50%，onLoad 标定）
+  _cardW: 200,              // 固定手势舞台宽 px（屏宽 54%，onLoad 标定）
   _windowWidth: 375,
   _gesture: null,           // 当前手势（单指单手势）
   _animating: {},           // gi -> 飞出/补位动画进行中
@@ -58,7 +58,7 @@ Page({
     }
     this.setData({ chatTime: this._formatTime(new Date()) });
 
-    // 固定手势舞台 = 屏宽 50%，图片比例变化不改变消息行高度
+    // 固定手势舞台 = 屏宽 54%，图片比例变化不改变消息行高度
     var info = null;
     try {
       info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
@@ -67,7 +67,7 @@ Page({
     }
     if (info && info.windowWidth) {
       this._windowWidth = info.windowWidth;
-      this._cardW = info.windowWidth * 0.5;
+      this._cardW = info.windowWidth * 0.54;
     }
 
     var eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();

@@ -120,7 +120,7 @@ flowchart LR
 | `miniprogram/pages/record/` | 记录 Tab：本地历史任务列表、查看、再次生成 |
 | `miniprogram/pages/profile/` | 我的 Tab：相册权限、反馈、分享、缓存清理 |
 | `miniprogram/pages/result/` | 结果页（非 Tab）：白色聊天风格，分组展示、保存、改分类、发送引导 |
-| `miniprogram/pages/preview/` | 微信预览页（非 Tab）：深色微信聊天风格，堆叠卡片、展开/收起、滑动切换 |
+| `miniprogram/pages/preview/` | 微信预览页（非 Tab）：白色微信聊天风格，比例安全的堆叠卡片、展开/收起、滑动切换 |
 | `miniprogram/app.json` | 全局页面路由与底部 Tab（首页 / 记录 / 我的）配置 |
 | `miniprogram/config/env.js` | CloudBase 环境 ID 和本地预览开关 |
 | `miniprogram/utils/task.js` | 任务规则、mock 分组、发送能力判断、图片尺寸计算 |
@@ -568,7 +568,7 @@ cloud://cloud1-d0g1blfsde474b168/
 | --- | --- | --- |
 | 1. 输入器 | 选图 / 文字 / 模板参数 | 各玩法页面新增；图片输入复用 `pages/index` 的 `wx.chooseMedia` + 压缩链路 |
 | 2. 卡片生成器 | 前端 Canvas 批量渲染卡片 | 复用 `miniprogram/utils/cardComposer.js`（导出 `composeCard`、`RATIO_MAP`、`GROUP_ANCHOR`、`DEFAULT_OPTIONS`）；文字类玩法按同一模式新增 compose 函数 |
-| 3. 叠图预览 | 微信聊天效果预览 | 复用 `pages/preview`（深色微信聊天风格：堆叠卡片、展开/收起、滑动切换），通过 `eventChannel` 传入图组数据 |
+| 3. 叠图预览 | 微信聊天效果预览 | 复用 `pages/preview`（白色微信聊天风格：比例安全堆叠卡片、展开/收起、滑动切换），通过 `eventChannel` 传入图组数据 |
 | 4. 编号保存 | 文件名 01、02…… 控制发送顺序 | 复用 `pages/result` 的 `saveImagesSequentially(urls, successTitle)`，需抽为通用组件并叠加文件名编号 |
 | 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 在现有发送引导（`pages/result` 保存完成后的引导）基础上改版为通用浮层组件 |
 | 6. 回流引导卡 | 末卡"用 WePicTool 做同款"，可开关 | 新增回流卡生成器（Canvas 模板），开关状态本地存储，埋点单独统计 |
@@ -641,11 +641,11 @@ expanded --点单张--> viewer（黑底大图，点任意处关闭）
 
 | 项 | 值 |
 | --- | --- |
-| 手势舞台 | 屏宽 50%，最大视觉高度 112px；组消息行固定 122px，比例变化不改变聊天流高度 |
+| 手势舞台 | 屏宽 54%，最大视觉高度 150px；组消息行固定 164px，比例变化不改变聊天流高度 |
 | 图片比例 | 优先 `composedRatio`，再任务 `ratio`，再源图宽高；在舞台内 `aspectFit`，不拉伸、不裁切 |
 | 头像 | 32px 方形、圆角 5px，与卡片顶部对齐，间距 8px |
 | 牌堆露边 | 后卡 `translateX(-8px) rotate(-.7deg) scale(.97)` 与 `translateX(+13px) rotate(1.1deg) scale(.94)`，z-index 3/2/1，左右均可见卡角 |
-| 展开胶囊 | 紧贴牌堆左侧（距消息行左缘 40px）、相对消息行垂直居中；文字「展开 N」/「收起」；`rgba(0,0,0,.62)`，圆角 99px |
+| 展开胶囊 | 紧贴牌堆左侧（距消息行左缘 24px）、相对消息行垂直居中；文字「展开 N」/「收起」；`rgba(0,0,0,.62)`，圆角 99px |
 | 禁用元素 | 无层叠角标、无页码（早期原型误加，已删） |
 
 **手势参数（折叠态）：**
@@ -662,8 +662,8 @@ expanded --点单张--> viewer（黑底大图，点任意处关闭）
 
 **展开/收起参数：**
 
-- 展开：第 1 张留原位（同一消息行），第 2~N 张 `wx:if` 渲染为独立消息行（同一稳定舞台 + 各自右侧头像）；入场 220ms `cubic-bezier(.2,.8,.2,1)` 的 `opacity 0→1 + translateY(10px→0)`，stagger 45ms；聊天流自然下推。
-- 收起：反向 180ms ease-in，stagger 30ms 逆序，结束后渲染回折叠态。
+- 展开：折叠牌堆、展开首张及第 2~N 张在首屏即挂载，所有预览图关闭懒加载；展开时仅以 `hidden` 切换可见性。第 1 张留原位（同一消息行），第 2~N 张作为独立消息行（同一稳定舞台 + 各自右侧头像）入场：220ms `cubic-bezier(.2,.8,.2,1)` 的 `opacity 0→1 + translateY(10px→0)`，stagger 45ms；聊天流自然下推。
+- 收起：反向 180ms ease-in，stagger 30ms 逆序，结束后仅隐藏扩展消息行，禁止销毁图片节点或触发重新解码。
 - 展开态禁用牌堆手势；胶囊文案原地切换「展开 N」⇄「收起」，位置不变。展开列表必须以当前顶层节点为第一张，不能在用户翻页后跳回初始第一张。
 
 **页面外壳：**
@@ -676,9 +676,9 @@ expanded --点单张--> viewer（黑底大图，点任意处关闭）
 - 动画只用 `transform` / `opacity`（GPU 合成层），禁止改 `width/height/top/left` 触发重排；牌堆卡 `will-change: transform`。
 - 手势用 `bindtouchstart/move/end` + 在卡片节点 `catchtouchmove` 仅在判定为横向后阻止冒泡（判定前不得 catch，否则聊天区无法纵向滚动）；或用 `movable-view` 以外的自定义实现时同此原则。
 - 三张牌堆卡为**固定节点**（不随翻页重建），只轮转位置 class（front/g1/g2），卡片内容永不变更——天然循环、补位动画由 class 过渡自动完成。
-- 展开消息行用 `wx:if` + CSS animation（stagger 用内联 `animation-delay`）；viewer 用全屏 `position: fixed` 黑底容器。
+- 展开消息行始终保留 WXML 图片节点，以 `hidden` + CSS animation（stagger 用内联 `animation-delay`）切换；viewer 用全屏 `position: fixed` 黑底容器。
 - 每叠一个组件实例；页面接收多组时纵向排列多个固定高度折叠卡消息，典型 375px 视口须同时露出上衣、下装、鞋子与输入栏。
-- 真机验收对照清单：白色外壳、12:00、50% 舞台、左右露角、比例安全适配、胶囊近牌堆、滑动跟手旋转、阈值/回弹手感、飞出渐隐、循环翻页、展开 stagger——与用户提供的真实微信视频并排逐项对比。
+- 真机验收对照清单：白色外壳、12:00、54% 舞台、左右露角、比例安全适配、胶囊近牌堆、滑动跟手旋转、阈值/回弹手感、飞出渐隐、循环翻页、展开时无白屏重载与 stagger——与用户提供的真实微信视频并排逐项对比。
 
 ---
 

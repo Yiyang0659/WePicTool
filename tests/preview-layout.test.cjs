@@ -25,18 +25,19 @@ test('prefers a card composed ratio over the task fallback', () => {
 test('keeps an unknown source image inside the stable preview stage', () => {
   assert.deepEqual(plain(buildPreviewStage({ width: 3000, height: 1000 }, '4:5', 375)), {
     ratio: 'source',
-    stageWidth: 188,
-    stageHeight: 112,
-    cardStyle: 'width: 188px; height: 63px;'
+    stageWidth: 203,
+    stageHeight: 150,
+    cardStyle: 'width: 203px; height: 68px;'
   });
 });
 
-test('keeps supported output ratios within one 50vw stage', () => {
+test('uses the enlarged 54vw preview stage while preserving ratio safety', () => {
   ['1:1', '4:5', '3:4'].forEach((ratio) => {
     const stage = buildPreviewStage({ composedRatio: ratio }, '4:5', 375);
     const height = Number(stage.cardStyle.match(/height: (\d+)px/)[1]);
-    assert.equal(stage.stageWidth, 188);
-    assert.ok(height <= 112);
+    assert.equal(stage.stageWidth, 203);
+    assert.equal(stage.stageHeight, 150);
+    assert.ok(height <= 150);
   });
 });
 
@@ -57,4 +58,13 @@ test('preview markup is the approved white 分享给好友 chat shell', () => {
   const wxml = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/preview/preview.wxml'), 'utf8');
   assert.match(wxml, /分享给好友/);
   assert.doesNotMatch(wxml, /theme-toggle|模拟预览/);
+});
+
+test('keeps preview images mounted while toggling a group', () => {
+  const wxml = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/preview/preview.wxml'), 'utf8');
+  assert.match(wxml, /hidden="\{\{g\.expanded\}\}"/);
+  assert.match(wxml, /hidden="\{\{!g\.expanded\}\}"/);
+  assert.doesNotMatch(wxml, /<view wx:else class="xcard"/);
+  assert.doesNotMatch(wxml, /<block wx:if="\{\{g\.expanded\}\}"/);
+  assert.doesNotMatch(wxml, /lazy-load="\{\{true\}\}"/);
 });

@@ -88,7 +88,7 @@ page {
 .msg {
   display: flex;
   align-items: flex-start;
-  min-height: 122px;
+  min-height: 164px;
   margin-bottom: 4px;
 }
 
@@ -177,8 +177,8 @@ page {
 /* 胶囊紧贴牌堆左侧，但保留 16px 防止与图片重叠 */
 .expand-cap {
   position: absolute;
-  left: 40px;
-  top: 56px;
+  left: 24px;
+  top: 75px;
   z-index: 6;
   border-radius: 99px;
   padding: 6px 11px;
