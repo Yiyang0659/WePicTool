@@ -557,7 +557,7 @@ cloud://cloud1-d0g1blfsde474b168/
   id: 'big-text',              // 玩法唯一 ID，同时作为埋点 moduleId
   name: '大字滑卡',
   inputType: 'text',           // text | images | template-params | mixed
-  composeFn: 'composeBigText', // 卡片生成函数名（前端 Canvas）
+  composeFn: 'text-card-renderer', // 云托管手写 PNG 渲染服务
   cardCountRule: '每张 1 个字',
   minCards: 3,                 // ≥3 张硬约束（微信合并展示触发下限）
   fallbackStrategy: 'padCoverGuide', // 不足 minCards 时自动补封面卡 + 引导卡
@@ -583,7 +583,8 @@ cloud://cloud1-d0g1blfsde474b168/
 - 图片违规或审核服务异常时，云函数返回 `CONTENT_UNSAFE` 或 `SAFETY_UNAVAILABLE`，前端停留在当前页并显示非技术性提示；违规任务的 `cloud://` 源图片会尽力删除，删除失败仅记录日志且不影响拦截。
 - 意见反馈文本由独立 `contentGuard` 云函数调用 `security.msgSecCheck`；仅 `ok === true` 时才允许写入本地 `wepictool_feedbacks`，违规或安全服务异常均不保存。
 - `processOutfit/config.json` 必须声明 `security.imgSecCheck`，`contentGuard/config.json` 必须声明 `security.msgSecCheck`；客户端不得保存 AppSecret，也不得绕过云函数直连安全接口。
-- 后续新增的大字滑卡、剧情滑卡和盲盒自定义文本同样必须先走 `contentGuard`，检测不通过不得渲染、落盘或生成卡片。
+- 大字滑卡已由云托管 `text-card-renderer` 在渲染请求内调用 `msgSecCheck`；只有审核通过后才加载授权手写字体渲染 PNG、上传 `bigtext/` 云存储目录并返回卡片。审核拒绝、不可用或任一张上传失败时不得返回部分卡片、不得写入本地记录。
+- 剧情滑卡、盲盒等后续自定义文本玩法同样必须在服务端审核，检测不通过不得渲染、落盘或生成卡片。
 
 ### 12.4 翻页动画云托管 ffmpeg 备注
 

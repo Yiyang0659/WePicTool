@@ -30,7 +30,7 @@
 
 ## 2. 当前阶段说明
 
-当前项目处于**阶段三：白底卡片生成**。
+穿搭白底卡片主链路已由用户验收通过；当前进入**阶段六：大字滑卡**。代码已完成，待云托管部署与真机验收。
 
 ### 2.1 已完成
 
@@ -39,12 +39,14 @@
 - 阶段三抠图：DashScope `qwen-image-2.0` 抠图已接入，结果存储在云存储 `matted/` 目录。
 - UI 改版：底部三 Tab + 白色聊天风格结果页 + 深色微信预览页。
 - 本地轻量记录：`pages/record` 支持查看历史、再次生成。
+- 大字滑卡：`pages/bigtext` 支持 1–20 个字符、三种主题与最少三张补卡规则；`pages/template-result` 支持保存、预览与记录。
+- `miniprogram/cloudhosting/text-card-renderer` 在云端审核文本并使用授权手写字体渲染 PNG，不使用 AI 生成内容。
 
-### 2.2 待完成
+### 2.2 阶段六待完成
 
-- 前端 Canvas 白底卡片合成（比例统一、主体居中、浅色衣物兜底）。
-- CloudBase 不支持 `sharp` 等原生 C++ 模块（错误码 145），白底卡片合成必须在前端完成。
-- 支持 1:1 / 4:5 / 3:4 比例切换。
+- 在 CloudBase 云托管将 `miniprogram/cloudhosting/text-card-renderer/` 作为本地代码部署，并取得 HTTPS 服务地址。
+- 在 `miniprogram/config/env.js` 填写 `TEXT_CARD_RENDERER_URL`，并在小程序后台配置 request 合法域名。
+- iOS 和 Android 各完成一次正常文字生成、相册保存、微信预览及违规文字拦截验收。
 
 ---
 

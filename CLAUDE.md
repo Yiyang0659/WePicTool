@@ -96,8 +96,16 @@ npm run lint
   - 抠图失败的图片保留原图，不影响整批结果。
 
 - `miniprogram/config/env.js`
-  - 集中管理 CloudBase 环境 ID 和本地预览开关。
+  - 集中管理 CloudBase 环境 ID、本地预览开关和 `TEXT_CARD_RENDERER_URL`。
   - `CLOUD_ENV_ID` 为空时启用本地预览模式。
+
+- `miniprogram/pages/bigtext/`、`miniprogram/pages/template-result/`
+  - 大字滑卡编辑和结果页。输入按 `Array.from` 限制为 1–20 个字符；1–2 个字符由 `utils/textCard.js` 补为至少三张卡。
+  - 最终 PNG 必须来自云托管手写渲染服务，不能以设备字体或前端 Canvas 代替。
+
+- `miniprogram/cloudhosting/text-card-renderer/`
+  - 云托管服务先调用微信 `msgSecCheck`，再用内置 OFL 授权手写字体渲染 PNG 并上传云存储。
+  - 入口是 `index.js`；`POST /render` 接收 `{ sourceText, themeKey }`，审核、渲染或上传失败均不得返回部分卡片。
 
 ### 数据结构
 
@@ -174,6 +182,7 @@ npm run lint
 
 - AppID 配置在 `project.config.json` 和 `miniprogram/project.config.json` 中。
 - CloudBase 环境 ID 配置在 `miniprogram/config/env.js` 中。
+- 大字滑卡服务地址也配置在该文件的 `TEXT_CARD_RENDERER_URL`；部署云托管后还需在小程序后台登记 HTTPS request 合法域名。
 - `miniprogram/app.js` 中 `traceUser` 已关闭，项目不做登录和用户追踪。
 - 真机测试或上线前需要完成：
   1. 确认 AppID 不是占位值。
@@ -183,11 +192,11 @@ npm run lint
 
 ## 当前迭代方向
 
-项目定位已升级为**微信叠图玩法生成器**（2026-07-18），穿搭白底卡是旗舰功能。当前处于阶段三收尾：阶段二 AI 分类已完成（DashScope `qwen-vl-plus`），阶段三抠图已接入（DashScope `qwen-image-2.0`），前端 Canvas 白底卡片合成已实现（cardComposer.js + 结果页比例切换 + 失败重做），**待真机验收**。详细状态见 `docs/product/PROJECT_STATUS.md`，玩法规划见 `docs/product/PLAYBOOK.md`，历史决策见 `docs/product/ARCHIVED.md`。
+项目定位已升级为**微信叠图玩法生成器**（2026-07-18）。穿搭白底卡主链路已验收；阶段六大字滑卡的编辑、审核、手写 PNG 渲染、结果、预览和记录代码已完成，**待云托管部署及 iOS/Android 真机验收**。详细状态见 `docs/product/PROJECT_STATUS.md`，玩法规划见 `docs/product/PLAYBOOK.md`，历史决策见 `docs/product/ARCHIVED.md`。
 
 默认的继续推进口径：
 
-> 先完成阶段三真机验收（保存相册、比例切换、浅色衣物可辨认度、iOS+Android 内存），通过后按 PLAYBOOK.md 进入阶段六（大字滑卡 + 剧情滑卡模板引擎）。
+> 先部署 `text-card-renderer` 并填写 `TEXT_CARD_RENDERER_URL`，再完成大字滑卡正常文字、违规文字、保存相册与微信预览的 iOS/Android 验收；通过后再进入剧情滑卡。
 
 ## 文档同步规范
 

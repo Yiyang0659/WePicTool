@@ -29,6 +29,26 @@ if (!exists('miniprogram/app.json')) {
   errors.push('缺少 miniprogram/app.json');
 }
 
+const bigtextRequiredPaths = [
+  'miniprogram/utils/textCard.js',
+  'miniprogram/utils/bigtextResponse.js',
+  'miniprogram/pages/bigtext/bigtext.js',
+  'miniprogram/pages/bigtext/bigtext.json',
+  'miniprogram/pages/bigtext/bigtext.wxml',
+  'miniprogram/pages/bigtext/bigtext.wxss',
+  'miniprogram/pages/template-result/template-result.js',
+  'miniprogram/pages/template-result/template-result.json',
+  'miniprogram/pages/template-result/template-result.wxml',
+  'miniprogram/pages/template-result/template-result.wxss',
+  'miniprogram/cloudhosting/text-card-renderer/package.json',
+  'miniprogram/cloudhosting/text-card-renderer/Dockerfile',
+  'miniprogram/cloudhosting/text-card-renderer/index.js',
+  'miniprogram/cloudhosting/text-card-renderer/fonts/MaShanZheng-Regular.ttf'
+];
+for (const relativePath of bigtextRequiredPaths) {
+  if (!exists(relativePath)) errors.push(`大字滑卡所需文件不存在: ${relativePath}`);
+}
+
 const appConfig = exists('miniprogram/app.json') ? readJson('miniprogram/app.json') : null;
 const rootProjectConfig = exists('project.config.json') ? readJson('project.config.json') : null;
 const projectConfig = exists('miniprogram/project.config.json')
