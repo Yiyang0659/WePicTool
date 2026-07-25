@@ -91,7 +91,7 @@
     </view>
     <view class="empty-title">暂无记录</view>
     <view class="empty-text">做的每一叠图都会留在这里</view>
-    <view class="empty-btn" bindtap="onGoHome">去做穿搭叠图</view>
+    <view class="empty-btn" bindtap="onGoHome">去做一叠图</view>
   </view>
 
   <!-- 清空确认弹窗 -->

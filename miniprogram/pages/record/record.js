@@ -195,8 +195,11 @@ Page({
       return;
     }
 
+    const isBigtext = record.recordType === 'bigtext';
     wx.navigateTo({
-      url: `/pages/result/result?taskId=${record.taskSnapshot.taskId}`,
+      url: isBigtext
+        ? `/pages/template-result/template-result?taskId=${record.taskSnapshot.taskId}`
+        : `/pages/result/result?taskId=${record.taskSnapshot.taskId}`,
       success: function (navRes) {
         navRes.eventChannel.emit('acceptTaskData', {
           task: record.taskSnapshot
@@ -209,7 +212,25 @@ Page({
   onRegenerate: function (e) {
     const recordId = e.currentTarget.dataset.recordid;
     const record = this.data.records.find(r => r.recordId === recordId);
-    if (!record || !record.sourceImages || record.sourceImages.length === 0) {
+    if (!record) {
+      wx.showToast({ title: '记录数据不完整', icon: 'none' });
+      return;
+    }
+
+    if (record.recordType === 'bigtext') {
+      wx.navigateTo({
+        url: '/pages/bigtext/bigtext',
+        success: function (navRes) {
+          navRes.eventChannel.emit('acceptBigtextDraft', {
+            sourceText: record.taskSnapshot && record.taskSnapshot.sourceText,
+            themeKey: record.taskSnapshot && record.taskSnapshot.themeKey
+          });
+        }
+      });
+      return;
+    }
+
+    if (!record.sourceImages || record.sourceImages.length === 0) {
       wx.showToast({ title: '原图信息已丢失', icon: 'none' });
       return;
     }
@@ -298,7 +319,9 @@ Page({
         groupSummary: groupSummary,
         thumbnails: (thumbnails || []).slice(0, 4),
         taskSnapshot: task,
-        sourceImages: sourceImages || []
+        sourceImages: sourceImages || [],
+        type: task.type || task.mode || 'outfit',
+        text: task.sourceText || ''
       };
 
       records.unshift(newRecord);

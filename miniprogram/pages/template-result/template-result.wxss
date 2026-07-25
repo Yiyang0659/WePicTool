@@ -1,0 +1,17 @@
+page { background: #f7f2ea; color: #1d1a17; }
+.page { min-height: 100vh; box-sizing: border-box; padding: 38rpx 28rpx 160rpx; }
+.hero-kicker { color: #a34d36; font-size: 24rpx; font-weight: 700; letter-spacing: 2rpx; }
+.hero-title { margin-top: 12rpx; overflow: hidden; font-family: serif; font-size: 54rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.hero-desc { margin-top: 12rpx; color: #7d7065; font-size: 25rpx; }
+.tip { margin-top: 30rpx; padding: 18rpx 22rpx; border-radius: 18rpx; background: #f0e2d3; color: #735848; font-size: 23rpx; line-height: 1.5; }
+.cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20rpx; margin-top: 28rpx; }
+.card-item { position: relative; overflow: hidden; border-radius: 20rpx; background: #fffdf8; box-shadow: 0 10rpx 24rpx rgba(70, 47, 28, .12); }
+.card-image { display: block; width: 100%; height: 320rpx; background: #eee3d7; }
+.card-index { position: absolute; top: 12rpx; left: 12rpx; min-width: 34rpx; padding: 5rpx 8rpx; border-radius: 999rpx; background: rgba(29,26,23,.72); color: #fff; font-size: 20rpx; text-align: center; }
+.card-caption { overflow: hidden; padding: 16rpx; color: #5e5147; font-size: 25rpx; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.actions { position: fixed; right: 0; bottom: 0; left: 0; display: flex; gap: 16rpx; padding: 20rpx 28rpx calc(20rpx + env(safe-area-inset-bottom)); background: rgba(247,242,234,.96); box-shadow: 0 -8rpx 20rpx rgba(80,58,38,.08); }
+.secondary, .primary, .home { padding: 25rpx 16rpx; border-radius: 999rpx; font-size: 29rpx; font-weight: 700; text-align: center; }
+.secondary { flex: 1; border: 2rpx solid #b6252d; color: #b6252d; background: #fffdf8; }
+.primary { flex: 1.2; background: #b6252d; color: #fff; }
+.empty { padding: 150rpx 30rpx; color: #8d8074; font-size: 28rpx; text-align: center; }
+.home { margin-top: 20rpx; background: #b6252d; color: #fff; }

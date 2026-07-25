@@ -7,6 +7,7 @@ var GROUP_META = taskUtils.GROUP_META;
 var previewLayout = require('../../utils/previewLayout');
 var buildPreviewStage = previewLayout.buildPreviewStage;
 var orderCardsFromFront = previewLayout.orderCardsFromFront;
+var buildBigtextPreviewGroups = previewLayout.buildBigtextPreviewGroups;
 
 var GROUP_ORDER = ['tops', 'bottoms', 'shoes', 'others'];
 var RATIO_CLASS = { '1:1': 'ar11', '4:5': 'ar45', '3:4': 'ar34' };
@@ -95,6 +96,11 @@ Page({
     }
     if (data.task) {
       var task = data.task;
+      if (task.mode === 'bigtext') {
+        this.setData({ ratio: '1:1' });
+        this._renderGroups(buildBigtextPreviewGroups(task), '1:1');
+        return;
+      }
       if (task.ratio && RATIO_CLASS[task.ratio]) this.setData({ ratio: task.ratio });
       var groups = normalizeTaskGroups(task.groups || {});
       var named = [];

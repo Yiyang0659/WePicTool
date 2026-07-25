@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="hero">
+    <view class="hero-kicker">已生成 · {{totalCount}} 张</view>
+    <view class="hero-title">{{task.sourceText || '你的大字滑卡'}}</view>
+    <view class="hero-desc">按顺序保存，发给朋友后就能左右滑着看。</view>
+  </view>
+
+  <view class="tip" wx:if="{{!isEmpty}}">点任意卡片可查看原图；手写效果以这里的最终图片为准。</view>
+  <view class="cards" wx:if="{{!isEmpty}}">
+    <view class="card-item" wx:for="{{cards}}" wx:key="cardId" data-index="{{index}}" bindtap="onPreviewCard">
+      <image class="card-image" src="{{item.url}}" mode="aspectFill" lazy-load="true" />
+      <view class="card-index">{{item.numLabel}}</view>
+      <view class="card-caption">{{item.text}}</view>
+    </view>
+  </view>
+  <view class="empty" wx:if="{{isEmpty}}">{{errorText || '正在读取卡片…'}}</view>
+
+  <view class="actions" wx:if="{{!isEmpty}}">
+    <view class="secondary" bindtap="onWechatPreview">先滑着看看</view>
+    <view class="primary" bindtap="onSaveAll">保存全部</view>
+  </view>
+  <view class="home" wx:if="{{isEmpty}}" bindtap="onBackHome">返回首页</view>
+</view>

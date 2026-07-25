@@ -51,8 +51,17 @@ function orderCardsFromFront(cards, nodes, frontIdx) {
   return sourceCards.slice(start).concat(sourceCards.slice(0, start));
 }
 
+function buildBigtextPreviewGroups(task) {
+  var sourceCards = task && Array.isArray(task.cards) ? task.cards : [];
+  var cards = sourceCards
+    .filter(function (card) { return card && card.url; })
+    .map(function (card) { return { url: card.url }; });
+  return cards.length > 0 ? [{ name: '大字滑卡', cards: cards }] : [];
+}
+
 module.exports = {
   resolvePreviewRatio: resolvePreviewRatio,
   buildPreviewStage: buildPreviewStage,
-  orderCardsFromFront: orderCardsFromFront
+  orderCardsFromFront: orderCardsFromFront,
+  buildBigtextPreviewGroups: buildBigtextPreviewGroups
 };
