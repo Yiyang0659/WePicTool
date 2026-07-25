@@ -45,7 +45,7 @@ Page({
     ratioOptions: CONFIRM_RATIO_OPTIONS,
     // 首屏「朋友视角」仿真演示卡的轮播数据
     demoSlides: DEMO_SLIDES,
-    // 玩法模板（即将上线）：数据驱动渲染，点击统一走 onComingSoon
+    // 玩法模板：大字滑卡已开放，其余模块仍在准备中。
     comingModules: [
       { key: 'bigtext', name: '大字滑卡', emoji: '🔤', desc: '一张一个大字，滑出惊喜' },
       { key: 'drama', name: '剧情滑卡', emoji: '🎬', desc: '多图连播，讲出你的剧情' },
@@ -58,8 +58,16 @@ Page({
   },
 
   // 即将上线模块统一提示
-  onComingSoon: function () {
+  onComingSoon: function (event) {
+    if (event && event.currentTarget && event.currentTarget.dataset.key === 'bigtext') {
+      this.onOpenBigtext();
+      return;
+    }
     wx.showToast({ title: '敬请期待，即将上线', icon: 'none' });
+  },
+
+  onOpenBigtext: function () {
+    wx.navigateTo({ url: '/pages/bigtext/bigtext' });
   },
 
   // 选择穿搭图片：先进入确认环节，不直接上传

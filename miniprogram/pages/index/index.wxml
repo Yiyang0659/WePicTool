@@ -57,8 +57,8 @@
       <view class="section-side">陆续上线</view>
     </view>
     <view class="module-grid">
-      <view class="module-card" wx:for="{{comingModules}}" wx:key="key" bindtap="onComingSoon">
-        <view class="module-badge">即将上线</view>
+      <view class="module-card" wx:for="{{comingModules}}" wx:key="key" bindtap="onComingSoon" data-key="{{item.key}}">
+        <view class="module-badge">{{item.key === 'bigtext' ? '开始制作' : '即将上线'}}</view>
         <view class="module-emoji">{{item.emoji}}</view>
         <view class="module-name">{{item.name}}</view>
         <view class="module-desc">{{item.desc}}</view>

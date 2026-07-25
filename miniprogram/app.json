@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/bigtext/bigtext",
     "pages/record/record",
     "pages/profile/profile",
     "pages/result/result",

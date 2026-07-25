@@ -1,0 +1,67 @@
+<view class="page">
+  <view class="hero">
+    <view class="eyebrow">默认手写体</view>
+    <view class="title">把一句话，滑成一叠</view>
+    <view class="subtitle">一张一个字。最终卡片由云端手写字体生成。</view>
+  </view>
+
+  <view class="panel input-panel">
+    <view class="panel-title">写下想说的话</view>
+    <textarea
+      class="text-input"
+      value="{{sourceText}}"
+      maxlength="20"
+      placeholder="例如：生日快乐"
+      placeholder-class="input-placeholder"
+      auto-height="true"
+      bindinput="onInput"
+    />
+    <view class="input-foot">
+      <view>支持 1–20 个字，表情也算一个字符</view>
+      <view class="counter">{{charCount}} / 20</view>
+    </view>
+  </view>
+
+  <view class="panel">
+    <view class="panel-title">选一张纸</view>
+    <view class="theme-list">
+      <view
+        class="theme-chip {{themeKey === item.key ? 'theme-chip-on' : ''}}"
+        wx:for="{{themes}}"
+        wx:key="key"
+        data-key="{{item.key}}"
+        bindtap="onSelectTheme"
+      >
+        <view class="theme-dot" style="background: {{item.background}}; color: {{item.foreground}};">字</view>
+        <view>{{item.label}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="preview-head">
+    <view class="panel-title">滑动顺序预览</view>
+    <view class="preview-note">这里是文字排版预览，非最终手写图</view>
+  </view>
+  <scroll-view class="card-scroll" scroll-x="true" enable-flex="true">
+    <view class="card-row">
+      <view
+        class="draft-card draft-{{themeKey}}"
+        wx:for="{{cardSpecs}}"
+        wx:key="order"
+      >
+        <view class="card-number">{{item.order}}</view>
+        <view class="draft-text {{item.role === 'content' ? 'draft-content' : 'draft-helper'}}">{{item.text}}</view>
+      </view>
+      <view class="empty-card" wx:if="{{!cardSpecs.length}}">输入文字后，这里会出现你的卡片</view>
+    </view>
+  </scroll-view>
+  <view class="helper-notice" wx:if="{{helperCount > 0}}">已补 {{helperCount}} 张引导卡，确保每叠至少有 3 张</view>
+  <view class="error-text" wx:if="{{errorText}}">{{errorText}}</view>
+
+  <view class="bottom-space"></view>
+  <view class="bottom-bar">
+    <view class="generate-button {{!hasSourceText || loading ? 'generate-button-disabled' : ''}}" bindtap="onGenerate">
+      {{loading ? '正在生成…' : '生成一叠'}}
+    </view>
+  </view>
+</view>
