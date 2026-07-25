@@ -1,0 +1,14 @@
+{
+  "name": "wepictool-text-card-renderer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.78",
+    "wx-server-sdk": "~2.6.3"
+  }
+}
