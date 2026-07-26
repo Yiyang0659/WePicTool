@@ -72,3 +72,26 @@ test('governance check requires today iteration log for staged product changes',
   });
   assert.ok(problems.some((item) => item.includes('docs/iterations/2026-07-26.md')));
 });
+
+test('governance check requires a README sync decision for staged product changes', async () => {
+  const rootDir = makeFixture({ identicalEntries: true, completeCurrent: true });
+  const { collectDocumentationProblems } = await loadChecker();
+  const problems = collectDocumentationProblems({
+    rootDir,
+    stagedFiles: ['miniprogram/pages/index/index.js', 'docs/iterations/2026-07-26.md'],
+    today: '2026-07-26'
+  });
+  assert.ok(problems.some((item) => item.includes('README 同步说明')));
+});
+
+test('governance check rejects a claimed README update that is not staged', async () => {
+  const rootDir = makeFixture({ identicalEntries: true, completeCurrent: true });
+  writeFile(rootDir, 'docs/iterations/2026-07-26.md', '- README 已更新：新增大字滑卡说明。\n');
+  const { collectDocumentationProblems } = await loadChecker();
+  const problems = collectDocumentationProblems({
+    rootDir,
+    stagedFiles: ['miniprogram/pages/index/index.js', 'docs/iterations/2026-07-26.md'],
+    today: '2026-07-26'
+  });
+  assert.ok(problems.some((item) => item.includes('README.md 未暂存')));
+});

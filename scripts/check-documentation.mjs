@@ -15,6 +15,8 @@ const REQUIRED_DOCUMENTS = [
 
 const REQUIRED_CURRENT_SECTIONS = ['当前阶段', '分支状态', '阻塞项', '下一步'];
 const REQUIRED_ENTRY_REFERENCES = ['docs/governance.md', 'docs/current.md', 'docs/roadmap.md'];
+const README_UPDATED_PATTERN = /README(?:\.md)?\s*已更新\s*[：:]\s*\S/u;
+const README_NOT_NEEDED_PATTERN = /README(?:\.md)?\s*无需更新\s*[：:]\s*\S/u;
 
 function normalizeText(value) {
   return value.replace(/\s+$/u, '');
@@ -46,6 +48,11 @@ export function isTrackedProductChange(filePath) {
     || filePath === 'package.json'
     || filePath === 'project.config.json'
     || filePath === 'miniprogram/project.config.json';
+}
+
+export function requiresReadmeSyncDecision(filePath) {
+  return isTrackedProductChange(filePath)
+    || /^(docs\/product\/|docs\/ai-workflows\/|docs\/history\/|docs\/superpowers\/README\.md)/u.test(filePath);
 }
 
 export function collectDocumentationProblems({ rootDir, stagedFiles = [], today = getShanghaiDate() }) {
@@ -89,6 +96,23 @@ export function collectDocumentationProblems({ rootDir, stagedFiles = [], today 
     const requiredIteration = `docs/iterations/${today}.md`;
     if (!stagedFiles.includes(requiredIteration)) {
       problems.push(`暂存产品改动时必须同时暂存当天迭代日志：${requiredIteration}`);
+    }
+  }
+
+  if (stagedFiles.some(requiresReadmeSyncDecision)) {
+    const requiredIteration = `docs/iterations/${today}.md`;
+    if (!fileExists(rootDir, requiredIteration)) {
+      problems.push(`缺少 README 同步说明所需的当天迭代日志：${requiredIteration}`);
+    } else {
+      const iterationText = readText(rootDir, requiredIteration);
+      const readmeUpdated = README_UPDATED_PATTERN.test(iterationText);
+      const readmeNotNeeded = README_NOT_NEEDED_PATTERN.test(iterationText);
+      if (!readmeUpdated && !readmeNotNeeded) {
+        problems.push('当天迭代日志缺少 README 同步说明：请写“README 已更新：原因”或“README 无需更新：原因”。');
+      }
+      if (readmeUpdated && !stagedFiles.includes('README.md')) {
+        problems.push('当天迭代日志标注 README 已更新，但 README.md 未暂存。');
+      }
     }
   }
 

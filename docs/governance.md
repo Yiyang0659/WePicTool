@@ -38,8 +38,9 @@ npm test && npm run check:syntax && npm run check:miniprogram && npm run lint &&
 ```
 
 3. 更新 `docs/current.md` 和当天 `docs/iterations/YYYY-MM-DD.md`；日志必须写实际执行的验证结果，不得写预计结果。
-4. 有关键取舍时更新 `docs/decisions.md`；功能已合并或发布且用户可感知时更新 `docs/changelog.md`。
-5. 代码、测试和相关文档在同一功能分支提交。未更新必要文档或未记录验证结果时，不得声明任务完成。
+4. 合并用户可感知的新功能、改变项目目录入口、运行方式、部署方式或当前功能范围时，必须更新 `README.md`；若无需更新，必须在当天迭代日志写明“README 无需更新：原因”。
+5. 有关键取舍时更新 `docs/decisions.md`；功能已合并或发布且用户可感知时更新 `docs/changelog.md`。
+6. 代码、测试和相关文档在同一功能分支提交。未更新必要文档或未记录验证结果时，不得声明任务完成。
 
 ## 合并前
 
@@ -50,6 +51,6 @@ npm test && npm run check:syntax && npm run check:miniprogram && npm run lint &&
 
 ## 文档检查
 
-`npm run check:docs` 会检查治理文档存在、两个入口文件完全一致、当前状态的四个固定章节，以及暂存产品改动是否同时暂存当天日志。它不会自动改写文档。
+`npm run check:docs` 会检查治理文档存在、两个入口文件完全一致、当前状态的四个固定章节，以及产品或文档结构变动是否在当天日志说明 README 已更新或无需更新；若标注已更新，也会检查 README 随提交暂存。它不会自动改写文档。
 
 产品改动包括 `miniprogram/`、`scripts/`、`tests/`、`package.json`、`project.config.json` 和 `miniprogram/project.config.json`；纯文档提交不强制创建当天迭代日志。

@@ -10,6 +10,7 @@
 
 - `main`：包含穿搭叠图主链路、既有内容安全能力和项目治理检查器；根目录两份 `project.config.json` 有用户未提交修改，本次不处理。
 - `codex/bigtext-handwrite`：包含大字滑卡和马克笔视觉实验，35 项自动化测试通过；尚未合并到 `main`、未部署云托管、未真机验收。
+- `codex/readme-sync-guard`：补充 README 同步约束与自动检查；尚未合并到 `main`。
 
 ## 阻塞项
 
