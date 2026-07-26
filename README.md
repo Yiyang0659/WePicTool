@@ -6,6 +6,8 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——穿搭白底�
 
 ## 当前阶段
 
+实时项目状态与近期优先级分别以 [docs/current.md](docs/current.md) 和 [docs/roadmap.md](docs/roadmap.md) 为准；本 README 只提供项目入口和运行说明。
+
 **阶段二 AI 分类已完成，阶段三抠图已接入，前端 Canvas 白底卡片合成已实现（待真机验收）。定位已升级为叠图玩法生成器，玩法路线见 PLAYBOOK.md。**
 
 当前版本包含：
