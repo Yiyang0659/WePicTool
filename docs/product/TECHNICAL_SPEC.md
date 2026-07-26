@@ -14,7 +14,7 @@
 | 后端 | CloudBase 云函数 | `processOutfit` 处理图片审核与 AI 链路，`contentGuard` 审核用户反馈文本 |
 | 云存储 | CloudBase 云存储 | 原图临时文件、结果图临时文件 |
 | AI 分类 | DashScope qwen-vl-plus | 多模态模型识别穿搭部件 |
-| AI 抠图 | DashScope qwen-image-2.0 | 去除背景替换为纯白 |
+| AI 抠图 | DashScope `qwen-image-edit-plus`（默认，可由环境变量覆盖） | 去除背景替换为纯白 |
 | 白底合成 | 前端 Canvas | CloudBase 不支持 sharp 等原生 C++ 模块（错误码 145） |
 | 数据持久化 | 本地 Storage | 设备本地轻量记录，不上云 |
 
@@ -49,7 +49,7 @@ CloudBase 云函数 (processOutfit)
   -> 内容安全门禁：全部图片 2 并发审核通过后才继续
   -> 阶段一：mock 分组（DASHSCOPE_API_KEY 未配置时）
   -> 阶段二：图片部件识别（DashScope qwen-vl-plus）
-  -> 阶段三：抠图（DashScope qwen-image-2.0）
+  -> 阶段三：抠图（DashScope，默认 qwen-image-edit-plus）
 
 AI / 图像服务
   -> 多模态分类、抠图 API、主体检测
@@ -330,7 +330,7 @@ const task = res.result;
    - 成功：记录 category + confidence
    - 429 限流：等待 3 秒重试 1 次
    - 其他失败：归入 others，needsConfirmation = true
-5. 对 tops/bottoms/shoes 分类成功的图片调用 DashScope qwen-image-2.0 抠图（并发 2 张）
+5. 对 tops/bottoms/shoes 分类成功的图片调用 DashScope 抠图模型（默认 qwen-image-edit-plus，并发 2 张）
    - 成功：上传结果到云存储 matted/ 目录
    - 失败：保留原图，matted = false
 6. 组装任务结果并返回
@@ -361,7 +361,7 @@ sequenceDiagram
         CF-->>FE: 标记 needsConfirmation = true
     end
 
-    CF->>AI: qwen-image-2.0 抠图
+    CF->>AI: DashScope 抠图（默认 qwen-image-edit-plus）
     AI-->>CF: 返回透明主体图
     CF->>ST: 上传抠图结果到 matted/ 目录
     CF->>CF: 组装任务结果
@@ -456,7 +456,7 @@ stateDiagram-v2
 | AI 分类 | DashScope API 返回其他错误 | 不重试，分类标记为 `others` + `needsConfirmation: true` | 进入"未处理素材区"，显示「待确认」角标 |
 | AI 分类 | 返回内容解析失败 | 默认归入 `others`，confidence 为 0 | 进入"未处理素材区"，显示「待确认」角标 |
 | AI 分类 | 网络断开 | 抛出异常，该图片分类失败 | 进入"未处理素材区" |
-| 抠图 | DashScope qwen-image-2.0 调用失败 | `mattedResults[index] = null`，保留原图 | 结果页显示原图，可切换查看 |
+| 抠图 | DashScope 抠图模型调用失败 | `mattedResults[index] = null`，保留原图 | 结果页显示原图，可切换查看 |
 | 抠图 | 抠图结果下载失败 | 同上，保留原图 | 同上 |
 | 抠图 | 抠图结果上传到云存储失败 | 同上，保留原图 | 同上 |
 | 保存到相册 | 用户拒绝相册授权 | 检测授权状态 | 引导用户进入微信设置页开启权限 |
@@ -522,7 +522,7 @@ cloud://cloud1-d0g1blfsde474b168/
 | --- | --- | --- |
 | 图片合成 | 前端 Canvas | CloudBase 不支持 sharp 等原生 C++ 模块 |
 | 后端合成 | 放弃 | 已验证 CloudBase 错误码 145，不可行 |
-| 抠图 | DashScope qwen-image-2.0 | 已接入，去除背景替换为纯白 |
+| 抠图 | DashScope `qwen-image-edit-plus`（默认） | 已接入，去除背景替换为纯白；部署环境变量可覆盖 |
 | 分类 | DashScope qwen-vl-plus | 已接入，支持置信度输出 |
 | 存储 | 临时存储 24-72 小时 | 无账号体系下更安全 |
 | 任务模式 | 同步云函数调用 | 当前阶段处理量可控，60s 超时足够 |
@@ -590,7 +590,7 @@ cloud://cloud1-d0g1blfsde474b168/
 - 路线①素材库先行：预置动作帧序列，纯前端，无云端依赖。
 - 路线②自定义抽帧：走**云托管**（容器制，可跑 ffmpeg）执行视频/GIF 抽帧并回传帧序列，绕开 CloudBase 云函数不支持原生 C++ 模块的限制（与 sharp 错误码 145 同因，见 1.1 节）。
 - 帧数甜点区间 8–12 帧，上限 24 帧。
-- 路线②上线前必须完成一次云托管抽帧验证（耗时 / 回传体积 / 费用），验证结论回填 `PROJECT_STATUS.md`。
+- 路线②上线前必须完成一次云托管抽帧验证（耗时 / 回传体积 / 费用），验证结论记录到当天 `docs/iterations/` 日志，并同步必要的当前状态或路线图。
 
 ### 12.5 埋点事件总表
 

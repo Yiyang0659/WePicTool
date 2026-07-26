@@ -2,10 +2,10 @@
 
 **版本：** v1.0
 **日期：** 2026-07-18
-**状态：** 定位升级后的玩法实现总纲，阶段六~九的唯一执行依据
+**状态：** 长期玩法实现总纲；当前排期、分支和上线范围以 `docs/current.md`、`docs/roadmap.md` 为准
 **用途：** 给 AI 开发会话提供无信息断层的实现依据。一个新会话只读本文档，就能知道每个玩法对标什么效果、输入输出、技术路径、验收标准，无需再翻聊天记录。
 **信息来源：** 微信派官方文章（https://m.dzplus.dzng.com/share/general/0/NEWS3454236XTWWPMWBSEOWS）、界面新闻相关报道，平台行为核实日期 2026-07-18。
-**配套文档：** `PRD.md`（产品需求与红线）、`TECHNICAL_SPEC.md`（技术规格）、`PROJECT_STATUS.md`（当前进度）、`DEVELOPMENT_GUIDE.md`（开发任务模板与验收口径）。
+**配套文档：** `PRD.md`（产品需求与红线）、`TECHNICAL_SPEC.md`（技术规格）、[`../current.md`](../current.md)（当前进度）、[`../roadmap.md`](../roadmap.md)（优先级）、[`../governance.md`](../governance.md)（开发和验收记录规则）。
 
 ---
 
@@ -190,11 +190,11 @@ flowchart TD
 
 **③ 收图人体验：** 先收到上衣组叠图（白底卡逐张滑），再下装组、鞋子组；每组封面即第一件单品，滑动节奏 = 逐件对比，可回复"上衣 1 + 下装 2"。
 
-**④ 技术实现路径：** 已实现。`wx.chooseMedia` → 前端压缩 → 云存储 → 云函数 `processOutfit`（qwen-vl-plus 分类 + qwen-image-2.0 抠图）→ 前端 Canvas 白底合成（`utils/cardComposer.js`）→ 保存相册（`saveImagesSequentially`）→ 发送引导。
+**④ 技术实现路径：** 已实现、待真机验收。`wx.chooseMedia` → 前端压缩 → 云存储 → 云函数 `processOutfit`（qwen-vl-plus 分类 + 可由环境变量覆盖的抠图模型）→ 前端 Canvas 白底合成（`utils/cardComposer.js`）→ 保存相册（`saveImagesSequentially`）→ 发送引导。
 
 **⑤ 依赖与风险：** 抠图边缘质量（生成模型非专业分割，保留原图兜底）；浅色衣物白底可见性（轻阴影 + 细描边已实现，真机验证）；前端 Canvas 大图内存（iOS/Android 待验证）。
 
-**⑥ 验收标准：** 状态为**已实现待真机验收**，引用 `DEVELOPMENT_GUIDE.md` 阶段三验收标准逐项过：
+**⑥ 验收标准：** 状态为**已实现待真机验收**；每次验证结果记录在当天 `docs/iterations/` 日志中，并按以下口径逐项过：
 
 - 用 20 张穿搭素材测试，白底结果可接受率 >= 70%。
 - 白色 / 浅色衣物在白底上仍然可辨认。

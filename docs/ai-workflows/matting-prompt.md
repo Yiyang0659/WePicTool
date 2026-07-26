@@ -2,7 +2,7 @@
 
 **阶段：** 阶段三  
 **用途：** 对穿搭主链路图片（上衣、下装、鞋子）进行抠图，去除背景，生成白底图。  
-**当前状态：** 已接入 DashScope `qwen-image-2.0`，通过多模态端点调用。  
+**当前状态：** 已接入 DashScope 多模态端点；代码默认使用 `qwen-image-edit-plus`，云函数环境变量 `DASHSCOPE_MATTING_MODEL` 可覆盖。
 **⚠️ 注意：本文档仅供参考。实际运行时调用的提示词在 `miniprogram/cloudfunctions/processOutfit/index.js` 的 `MATTING_PROMPT` 变量中。修改提示词请改代码，本文档同步更新即可。**
 
 ## 当前提示词
@@ -14,13 +14,13 @@
 ## 调用方式
 
 - 端点：`https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation`
-- 模型：`qwen-image-2.0`
+- 模型：`qwen-image-edit-plus`（默认；以云函数代码和部署环境变量为准）
 - 输入格式：多模态（图片 base64 + 提示词）
 - 输出格式：返回抠图后的 PNG 图片 URL
 
 ```json
 {
-  "model": "qwen-image-2.0",
+  "model": "qwen-image-edit-plus",
   "input": {
     "messages": [
       {
@@ -49,7 +49,7 @@
 |------|------|
 | 边缘干净程度 | 毛边、蕾丝、鞋带不能大面积残缺 |
 | 浅色衣物可见性 | 白色衣服在白底上仍可辨认（需轻阴影或描边兜底） |
-| 单张耗时 | 平均 <= 5 秒 |
+| 单张耗时 | 平均 <= 10 秒；以部署后真机实测为准 |
 | 失败率 | 失败必须明确返回，保留原图冒充成功 |
 | 单张失败 | 不阻断整批结果展示 |
 

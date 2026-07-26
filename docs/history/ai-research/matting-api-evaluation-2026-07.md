@@ -1,5 +1,7 @@
 # 抠图 API 选型评估
 
+> 历史调研快照：保留 2026-07 的实验结论，不代表当前代码的默认模型或白底卡片实现状态。请看 [`../../ai-workflows/matting-prompt.md`](../../ai-workflows/matting-prompt.md) 和云函数代码。
+
 **阶段：** 阶段三  
 **用途：** 选择用于穿搭白底卡片生成的抠图服务。  
 **当前状态：** 已接入 DashScope `qwen-image-2.0` 做抠图，结果上传到云存储 `matted/` 目录。白底卡片合成（前端 Canvas）待实现。

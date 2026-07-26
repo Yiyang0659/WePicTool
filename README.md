@@ -8,14 +8,14 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——穿搭白底�
 
 实时项目状态与近期优先级分别以 [docs/current.md](docs/current.md) 和 [docs/roadmap.md](docs/roadmap.md) 为准；本 README 只提供项目入口和运行说明。
 
-**阶段二 AI 分类已完成，阶段三抠图已接入，前端 Canvas 白底卡片合成已实现（待真机验收）。定位已升级为叠图玩法生成器，玩法路线见 PLAYBOOK.md。**
+项目正处于上线范围决策与真机验收准备阶段。是否纳入 AI 能力、哪些能力可以上线以及功能分支是否合并，均以 [`docs/current.md`](docs/current.md) 为准；玩法路线见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)。
 
 当前版本包含：
 
 - 首页选择 1-9 张图片。
 - 上传前基础压缩（最长边不超过 1600px）。
 - 未配置云环境时进入本地预览模式。
-- `processOutfit` 云函数支持阶段一 mock 分组、阶段二 AI 分类（DashScope `qwen-vl-plus`）和阶段三抠图（DashScope `qwen-image-2.0`）。
+- `processOutfit` 云函数支持 mock 分组、DashScope `qwen-vl-plus` 分类和抠图；代码默认抠图模型为 `qwen-image-edit-plus`，部署环境变量可覆盖。
 - 结果页采用微信聊天窗口预览风格：上衣 / 下装 / 鞋子 / 未处理素材以”合并发图”气泡卡片展示。
 - 点击卡片”展开 N”可在当前页展开横向滚动缩略图，左右滑动查看该组全部图片。
 - 展开后支持原图 / 白底图切换、改分类、预览大图。
@@ -39,11 +39,15 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——穿搭白底�
 
 - [PRD（产品需求文档）](docs/product/PRD.md)
 - [PLAYBOOK（叠图玩法实现手册）](docs/product/PLAYBOOK.md)
-- [项目状态](docs/product/PROJECT_STATUS.md)
 - [技术方案设计](docs/product/TECHNICAL_SPEC.md)
-- [开发指南](docs/product/DEVELOPMENT_GUIDE.md)
-- [归档文档](docs/product/ARCHIVED.md)
 - [AI 工作流入口](docs/ai-workflows/README.md)
+- [当前状态](docs/current.md)
+- [近期路线图](docs/roadmap.md)
+- [开发与文档同步规则](docs/governance.md)
+- [关键决策](docs/decisions.md)
+- [每日迭代日志](docs/iterations/)
+- [历史资料](docs/history/README.md)
+- [功能设计与实施记录](docs/superpowers/README.md)
 
 ## 本地测试
 
@@ -108,15 +112,19 @@ WePicTool/
 │   ├── utils/
 │   │   └── task.js                   # 任务规则、mock 分组、发送能力判断、图片尺寸计算
 │   ├── cloudfunctions/
-│   │   └── processOutfit/            # 云函数：AI 分类（qwen-vl-plus）+ 抠图（qwen-image-2.0）
+│   │   └── processOutfit/            # 云函数：AI 分类（qwen-vl-plus）+ 抠图（默认 qwen-image-edit-plus）
 │   └── config/
 │       └── env.js                    # CloudBase 环境 ID 和本地预览开关
 ├── src/                              # 原 AI Studio / Vite 演示代码（React + Tailwind）
 │                                     # 不是小程序上传必需内容，已被 project.config.json 忽略
 ├── dist/                             # Vite 构建产物（被小程序上传忽略）
-├── docs/                             # 产品文档和 AI 工作流设计
-│   ├── product/                      # PRD、项目状态、技术方案、开发指南、归档文档
-│   └── ai-workflows/                 # AI 提示词、抠图 API 评估、抠图提示词、工作流计划
+├── docs/                             # 当前文档、产品规格、AI 提示词和历史资料
+│   ├── current.md / roadmap.md        # 当前阶段与下一步优先级
+│   ├── governance.md                  # 开发与文档同步规则
+│   ├── product/                      # PRD、玩法手册、技术规格
+│   ├── ai-workflows/                 # 当前 AI 提示词说明
+│   ├── history/                      # 只供追溯的旧状态、旧决策与调研
+│   └── superpowers/                  # 单项功能设计和实施计划
 ├── scripts/
 │   ├── check-miniprogram.mjs         # 小程序上线前本地预检脚本
 │   ├── test-dashscope.cjs            # DashScope 分类 API 本地测试

@@ -1,5 +1,7 @@
 # WePicTool 归档文档
 
+> 历史资料：本文件不作为当前开发依据；当前决策、状态与路线图分别看 `docs/decisions.md`、`docs/current.md`、`docs/roadmap.md`。
+
 **用途：** 存放历史决策、已过时内容、未采纳方案，供参考但不作为当前开发依据
 
 ---
