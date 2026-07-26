@@ -7,7 +7,7 @@
 ## 视觉规则
 
 - 卡片为 1080 × 1080 PNG，背景纯白 `#FFFFFF`，圆角 56px，无描边、无纸张纹理、无阴影。
-- 内容字使用 OFL 1.1 授权的 `LXGW WenKai` 作为底字形；它提供日常手写感，不采用书法感更强的马善政。
+- 内容字使用 OFL 1.1 授权的 `LXGW Marker Gothic` 作为底字形；它天生带有记号笔笔触，比规整书写字体更贴近参考效果。
 - 内容字为近黑色 `#171717`。先填充字形，再以圆角连接的同色描边加粗，使笔画呈现粗记号笔效果。
 - 对字形 alpha 蒙版叠加确定性颗粒：每张卡的种子来自 `taskId + order`，因此同一张已生成卡不会随重开页面变化。
   - 外沿轻微锯齿：0–3px；
@@ -27,7 +27,7 @@
 
 ## 技术方案
 
-1. 云托管渲染器引入 `LXGWWenKai-Regular.ttf` 与 OFL 许可证，并注册为 `LXGWWenKai`。
+1. 云托管渲染器引入 `LXGWMarkerGothic-Regular.ttf` 与 OFL 许可证，并注册为 `LXGWMarkerGothic`。
 2. 渲染器按 `taskId` 和卡片 order 生成伪随机参数；任务创建时将稳定 `taskId` 传入渲染流程。
 3. 使用 Canvas 的 `fillText`、`strokeText` 与离屏 alpha 蒙版绘制字形，再在蒙版内写入少量透明像素形成笔触颗粒。
 4. 贴纸使用仓库内原创 SVG/PNG 资产绘制；不依赖网络图片、AI 生图或用户设备字体。

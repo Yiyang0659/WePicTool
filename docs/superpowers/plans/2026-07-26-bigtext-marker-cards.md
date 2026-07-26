@@ -4,14 +4,14 @@
 
 **Goal:** 将大字滑卡的最终 PNG 改为带颗粒笔触、轻微不规则排版和原创贴纸的粗马克笔白卡。
 
-**Architecture:** 新增纯 `markerCard` 模块，依据稳定种子计算字位、角度、缩放和贴纸位置；云托管渲染器消费该布局并使用 LXGW WenKai、加粗描边与 alpha 颗粒生成 PNG。编辑页只复用同一布局做排版示意，最终视觉仍仅来自云端 PNG。
+**Architecture:** 新增纯 `markerCard` 模块，依据稳定种子计算字位、角度、缩放和贴纸位置；云托管渲染器消费该布局并使用 LXGW Marker Gothic、加粗描边与 alpha 颗粒生成 PNG。编辑页只复用同一布局做排版示意，最终视觉仍仅来自云端 PNG。
 
 **Tech Stack:** 原生微信小程序 JS/WXML/WXSS、CloudBase 云托管 Node.js、`@napi-rs/canvas`、Node 内置测试运行器、SIL OFL 1.1 字体。
 
 ## Global Constraints
 
 - 最终字卡为 1080 × 1080 PNG、纯白 `#FFFFFF` 背景、56px 圆角、无边框、无阴影。
-- 使用 LXGW WenKai（OFL 1.1）作底字形；不得使用马善政作为最终字卡字体。
+- 使用 LXGW Marker Gothic（OFL 1.1）作底字形；不得使用马善政作为最终字卡字体。
 - 内容字近黑 `#171717`，加粗描边、圆角连接、2%–4% 内部颗粒、90%–100% 墨色透明度。
 - 内容字旋转 -3° 至 3°、缩放 94% 至 106%、X/Y 偏移各不超过 42px；文字不可裁切。
 - 每张卡使用一枚原创涂鸦贴纸；不得使用蜡笔小新或任何第三方角色、人物、头像或聊天截图。
@@ -26,9 +26,9 @@
 - `miniprogram/utils/markerCard.js`：纯随机种子、字形布局参数、贴纸选择和编辑页预览数据。
 - `miniprogram/cloudhosting/text-card-renderer/markerCard.js`：与小程序纯模块一致的 CommonJS 副本，供容器使用。
 - `miniprogram/cloudhosting/text-card-renderer/stickers.js`：12 枚原创贴纸的 Canvas 绘制函数及尺寸元数据。
-- `miniprogram/cloudhosting/text-card-renderer/renderer.js`：注册 LXGW WenKai，绘制圆角白卡、粗笔字、颗粒与贴纸。
-- `miniprogram/cloudhosting/text-card-renderer/fonts/LXGWWenKai-Regular.ttf`：OFL 字体文件。
-- `miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-LXGWWenKai.txt`：字体许可证文本。
+- `miniprogram/cloudhosting/text-card-renderer/renderer.js`：注册 LXGW Marker Gothic，绘制圆角白卡、粗笔字、颗粒与贴纸。
+- `miniprogram/cloudhosting/text-card-renderer/fonts/LXGWMarkerGothic-Regular.ttf`：OFL 字体文件。
+- `miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-LXGWMarkerGothic.txt`：字体许可证文本。
 - `miniprogram/pages/bigtext/*`：将默认主题文案和本地排版示意改成马克笔白卡。
 - `tests/marker-card.test.cjs`：稳定种子、参数边界、贴纸避让规则。
 - `tests/text-card-renderer.test.cjs`：渲染器向每张卡传入稳定布局、保持原子上传回滚。
@@ -112,8 +112,8 @@ git commit -m "feat: add stable marker card layout"
 **Files:**
 - Modify: `miniprogram/cloudhosting/text-card-renderer/renderer.js`
 - Create: `miniprogram/cloudhosting/text-card-renderer/stickers.js`
-- Create: `miniprogram/cloudhosting/text-card-renderer/fonts/LXGWWenKai-Regular.ttf`
-- Create: `miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-LXGWWenKai.txt`
+- Create: `miniprogram/cloudhosting/text-card-renderer/fonts/LXGWMarkerGothic-Regular.ttf`
+- Create: `miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-LXGWMarkerGothic.txt`
 - Delete: `miniprogram/cloudhosting/text-card-renderer/fonts/MaShanZheng-Regular.ttf`
 - Delete: `miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-MaShanZheng.txt`
 - Modify: `tests/text-card-renderer.test.cjs`
@@ -158,14 +158,14 @@ return { statusCode: 200, body: { ok: true, taskId: safeTaskId, themeKey: theme.
 
 - [ ] **Step 4: Replace the visual renderer**
 
-Register `LXGWWenKai-Regular.ttf` as `LXGWWenKai`. For content cards, draw filled and stroked text inside a saved transform:
+Register `LXGWMarkerGothic-Regular.ttf` as `LXGWMarkerGothic`. For content cards, draw filled and stroked text inside a saved transform:
 
 ```js
 ctx.save();
 ctx.translate(540 + style.offsetX, 540 + style.offsetY);
 ctx.rotate(style.rotation * Math.PI / 180);
 ctx.scale(style.scale, style.scale);
-ctx.font = '650px LXGWWenKai';
+ctx.font = '650px LXGWMarkerGothic';
 ctx.lineJoin = 'round';
 ctx.lineCap = 'round';
 ctx.fillStyle = '#171717';
@@ -252,7 +252,7 @@ git commit -m "feat: preview marker-style bigtext cards"
 - Modify: `scripts/check-miniprogram.mjs`
 
 **Interfaces:**
-- Preflight requires `LXGWWenKai-Regular.ttf`, its OFL file and `stickers.js`.
+- Preflight requires `LXGWMarkerGothic-Regular.ttf`, its OFL file and `stickers.js`.
 - Deployment instructions identify the new font and clarify that a cloud-hosting redeploy is required before the visual change appears.
 
 - [ ] **Step 1: Add preflight requirements**
@@ -262,8 +262,8 @@ Add these exact paths to the bigtext required paths array:
 ```js
 'miniprogram/cloudhosting/text-card-renderer/markerCard.js',
 'miniprogram/cloudhosting/text-card-renderer/stickers.js',
-'miniprogram/cloudhosting/text-card-renderer/fonts/LXGWWenKai-Regular.ttf',
-'miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-LXGWWenKai.txt'
+'miniprogram/cloudhosting/text-card-renderer/fonts/LXGWMarkerGothic-Regular.ttf',
+'miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-LXGWMarkerGothic.txt'
 ```
 
 - [ ] **Step 2: Update deployment and acceptance documentation**
