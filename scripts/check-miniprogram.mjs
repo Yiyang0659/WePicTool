@@ -43,7 +43,10 @@ const bigtextRequiredPaths = [
   'miniprogram/cloudhosting/text-card-renderer/package.json',
   'miniprogram/cloudhosting/text-card-renderer/Dockerfile',
   'miniprogram/cloudhosting/text-card-renderer/index.js',
-  'miniprogram/cloudhosting/text-card-renderer/fonts/MaShanZheng-Regular.ttf'
+  'miniprogram/cloudhosting/text-card-renderer/markerCard.js',
+  'miniprogram/cloudhosting/text-card-renderer/stickers.js',
+  'miniprogram/cloudhosting/text-card-renderer/fonts/LXGWMarkerGothic-Regular.ttf',
+  'miniprogram/cloudhosting/text-card-renderer/LICENSES/OFL-LXGWMarkerGothic.txt'
 ];
 for (const relativePath of bigtextRequiredPaths) {
   if (!exists(relativePath)) errors.push(`大字滑卡所需文件不存在: ${relativePath}`);

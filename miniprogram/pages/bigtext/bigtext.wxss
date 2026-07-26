@@ -2,7 +2,7 @@ page { background: #f7f2ea; color: #1d1a17; }
 .page { min-height: 100vh; box-sizing: border-box; padding: 36rpx 28rpx 180rpx; }
 .hero { padding: 20rpx 8rpx 34rpx; }
 .eyebrow { display: inline-block; padding: 8rpx 16rpx; border-radius: 999rpx; background: #f0e2d3; color: #a34d36; font-size: 22rpx; font-weight: 600; }
-.title { margin-top: 18rpx; font-family: serif; font-size: 52rpx; font-weight: 800; letter-spacing: 2rpx; }
+.title { margin-top: 18rpx; font-size: 52rpx; font-weight: 800; letter-spacing: 2rpx; }
 .subtitle { margin-top: 12rpx; color: #796e64; font-size: 26rpx; line-height: 1.6; }
 .panel { margin-top: 22rpx; padding: 28rpx; border: 1rpx solid #eee3d7; border-radius: 28rpx; background: #fffdf8; box-shadow: 0 12rpx 30rpx rgba(80, 58, 38, .05); }
 .input-panel { margin-top: 0; }
@@ -14,19 +14,28 @@ page { background: #f7f2ea; color: #1d1a17; }
 .theme-list { display: flex; gap: 16rpx; margin-top: 22rpx; }
 .theme-chip { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 10rpx; padding: 16rpx 6rpx; border: 2rpx solid transparent; border-radius: 20rpx; background: #faf5ef; color: #766b61; font-size: 22rpx; }
 .theme-chip-on { border-color: #b6252d; background: #fff8ef; color: #1d1a17; font-weight: 700; }
-.theme-dot { display: flex; width: 46rpx; height: 46rpx; align-items: center; justify-content: center; border: 1rpx solid rgba(0,0,0,.1); border-radius: 50%; font-family: serif; font-size: 30rpx; }
+.theme-dot { display: flex; width: 46rpx; height: 46rpx; align-items: center; justify-content: center; border: 1rpx solid rgba(0,0,0,.1); border-radius: 50%; font-size: 30rpx; font-weight: 800; }
 .preview-head { display: flex; align-items: baseline; justify-content: space-between; margin: 38rpx 4rpx 18rpx; }
 .preview-note { color: #95887c; font-size: 20rpx; }
 .card-scroll { width: 100%; white-space: nowrap; }
 .card-row { display: flex; gap: 18rpx; padding: 4rpx 4rpx 22rpx; }
-.draft-card, .empty-card { position: relative; display: flex; width: 238rpx; height: 310rpx; flex: 0 0 auto; align-items: center; justify-content: center; overflow: hidden; border: 1rpx solid rgba(29,26,23,.12); border-radius: 18rpx; box-shadow: 0 12rpx 22rpx rgba(50, 32, 12, .10); }
-.draft-handwrite-paper { background: #fffdf8; color: #1d1a17; }
+.draft-card, .empty-card { position: relative; display: flex; width: 238rpx; height: 310rpx; flex: 0 0 auto; align-items: center; justify-content: center; overflow: hidden; border: 0; border-radius: 18rpx; box-shadow: 0 12rpx 22rpx rgba(50, 32, 12, .10); }
+.draft-handwrite-paper { background: #fff; color: #171717; }
 .draft-night-write { background: #171717; color: #fff; }
 .draft-violet-write { background: #6a5ae0; color: #fff; }
 .card-number { position: absolute; top: 14rpx; left: 16rpx; opacity: .55; font-size: 21rpx; }
 .draft-text { padding: 18rpx; text-align: center; white-space: normal; word-break: break-all; }
-.draft-content { font-family: serif; font-size: 112rpx; font-weight: 800; line-height: 1; }
-.draft-helper { font-family: serif; font-size: 40rpx; line-height: 1.35; }
+.draft-content { font-family: Arial, sans-serif; font-size: 112rpx; font-weight: 900; line-height: 1; letter-spacing: -8rpx; }
+.draft-helper { font-family: Arial, sans-serif; font-size: 40rpx; font-weight: 800; line-height: 1.35; }
+.draft-sticker { position: absolute; display: flex; width: 42rpx; height: 42rpx; align-items: center; justify-content: center; border-radius: 50%; color: #fff; font-size: 27rpx; font-weight: 800; line-height: 1; }
+.draft-sticker-top-right { top: 16rpx; right: 16rpx; }
+.draft-sticker-bottom-right { right: 16rpx; bottom: 16rpx; }
+.draft-sticker-sticker_0, .draft-sticker-sticker_9 { background: #f3b730; }
+.draft-sticker-sticker_1, .draft-sticker-sticker_6 { background: #ff9f43; }
+.draft-sticker-sticker_2, .draft-sticker-sticker_8 { background: #f16b6b; }
+.draft-sticker-sticker_3, .draft-sticker-sticker_7 { background: #cfa66a; }
+.draft-sticker-sticker_4, .draft-sticker-sticker_10 { background: #4d96ff; }
+.draft-sticker-sticker_5, .draft-sticker-sticker_11 { background: #a66cff; }
 .empty-card { width: 100%; color: #aa9d90; background: rgba(255,255,255,.56); font-size: 26rpx; text-align: center; box-shadow: none; }
 .helper-notice, .error-text { margin: 2rpx 6rpx; font-size: 23rpx; line-height: 1.6; }
 .helper-notice { color: #80644f; }

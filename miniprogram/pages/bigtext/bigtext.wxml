@@ -1,8 +1,8 @@
 <view class="page">
   <view class="hero">
-    <view class="eyebrow">默认手写体</view>
+    <view class="eyebrow">粗颗粒马克笔</view>
     <view class="title">把一句话，滑成一叠</view>
-    <view class="subtitle">一张一个字。最终卡片由云端手写字体生成。</view>
+    <view class="subtitle">一张一个字。最终卡片由云端马克笔笔触渲染。</view>
   </view>
 
   <view class="panel input-panel">
@@ -40,17 +40,19 @@
 
   <view class="preview-head">
     <view class="panel-title">滑动顺序预览</view>
-    <view class="preview-note">这里是文字排版预览，非最终手写图</view>
+    <view class="preview-note">排版与贴纸预览，最终笔触以生成图为准</view>
   </view>
   <scroll-view class="card-scroll" scroll-x="true" enable-flex="true">
     <view class="card-row">
       <view
         class="draft-card draft-{{themeKey}}"
+        style="{{item.previewStyle}}"
         wx:for="{{cardSpecs}}"
         wx:key="order"
       >
         <view class="card-number">{{item.order}}</view>
         <view class="draft-text {{item.role === 'content' ? 'draft-content' : 'draft-helper'}}">{{item.text}}</view>
+        <view class="draft-sticker draft-sticker-{{item.stickerKey}} draft-sticker-{{item.stickerCorner}}">{{item.stickerSymbol}}</view>
       </view>
       <view class="empty-card" wx:if="{{!cardSpecs.length}}">输入文字后，这里会出现你的卡片</view>
     </view>

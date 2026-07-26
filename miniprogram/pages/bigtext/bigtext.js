@@ -1,5 +1,6 @@
 const { THEMES, buildCardSpecs, buildBigtextTask, normalizeSourceText } = require('../../utils/textCard');
 const { validateRenderedCards } = require('../../utils/bigtextResponse');
+const { buildMarkerPreviewCards } = require('../../utils/markerCard');
 const { TEXT_CARD_RENDERER_URL } = require('../../config/env');
 
 function getErrorMessage(code) {
@@ -34,7 +35,11 @@ function requestRenderer(payload) {
           return;
         }
         try {
-          resolve(validateRenderedCards(payload.sourceText, body.cards));
+          if (typeof body.taskId !== 'string' || !/^text_[A-Za-z0-9_-]{6,80}$/.test(body.taskId)) {
+            reject(new Error('INVALID_RESPONSE'));
+            return;
+          }
+          resolve({ taskId: body.taskId, cards: validateRenderedCards(payload.sourceText, body.cards) });
         } catch (err) {
           reject(err);
         }
@@ -60,8 +65,8 @@ Page({
   },
 
   onLoad: function () {
-    const eventChannel = this.getOpenerEventChannel();
-    const that = this;
+    var that = this;
+    var eventChannel = this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
       eventChannel.on('acceptBigtextDraft', function (draft) {
         if (!draft) return;
@@ -90,12 +95,16 @@ Page({
       errorText = err.message || '请输入 1–20 个字';
     }
     const characterCount = Array.from(sourceText.trim()).length;
+    const previewCards = buildMarkerPreviewCards({
+      taskId: `draft_${sourceText || 'empty'}`,
+      cards: cardSpecs
+    });
     this.setData({
       sourceText,
       themeKey,
       charCount: characterCount,
       hasSourceText: characterCount > 0,
-      cardSpecs,
+      cardSpecs: previewCards,
       helperCount: Math.max(0, cardSpecs.length - characterCount),
       errorText
     });
@@ -114,11 +123,13 @@ Page({
 
     this.setData({ loading: true, errorText: '' });
     try {
-      const renderedCards = await requestRenderer({ sourceText, themeKey: this.data.themeKey });
+      const taskId = `text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const response = await requestRenderer({ taskId, sourceText, themeKey: this.data.themeKey });
       const task = buildBigtextTask({
+        taskId: response.taskId,
         sourceText,
         themeKey: this.data.themeKey,
-        renderedCards,
+        renderedCards: response.cards,
         createdAt: Date.now()
       });
       this.goToResult(task);

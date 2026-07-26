@@ -44,6 +44,12 @@ test('source text is trimmed, limited by Array.from, and falls back to the defau
   assert.equal(textCard.getTheme('missing').key, 'handwrite-paper');
 });
 
+test('default bigtext theme keeps its API key and uses the marker-card label', () => {
+  const theme = textCard.getTheme('handwrite-paper');
+  assert.equal(theme.key, 'handwrite-paper');
+  assert.equal(theme.label, '马克笔白卡');
+});
+
 test('bigtext task accepts only renderer cards matching the requested stack', () => {
   assert.throws(() => textCard.buildBigtextTask({
     sourceText: '生日',

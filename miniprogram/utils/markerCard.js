@@ -1,4 +1,5 @@
 const STICKER_COUNT = 12;
+const STICKER_SYMBOLS = ['✦', '●', '♥', '✿', 'ϟ', '⌒', '◉', '●', '●', '☀', '✧', '…'];
 
 function hashSeed(value) {
   let hash = 2166136261;
@@ -30,13 +31,15 @@ function buildMarkerCardStyle(input) {
   const offsetY = nextRandom(seed, -42, 42); seed = offsetY.seed;
   const stickerIndex = nextRandom(seed, 0, STICKER_COUNT); seed = stickerIndex.seed;
   const corner = nextRandom(seed, 0, 1);
+  const stickerKey = `sticker_${Math.floor(stickerIndex.value)}`;
 
   return {
     rotation: round(rotation.value),
     scale: round(scale.value),
     offsetX: round(offsetX.value),
     offsetY: round(offsetY.value),
-    stickerKey: `sticker_${Math.floor(stickerIndex.value)}`,
+    stickerKey,
+    stickerSymbol: STICKER_SYMBOLS[Number(stickerKey.replace('sticker_', ''))],
     stickerCorner: corner.value < 0.5 ? 'top-right' : 'bottom-right',
     stickerSize: 132
   };

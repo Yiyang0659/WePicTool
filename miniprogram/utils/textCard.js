@@ -1,7 +1,7 @@
 const THEMES = {
   'handwrite-paper': {
     key: 'handwrite-paper',
-    label: '手写纸卡',
+    label: '马克笔白卡',
     background: '#FFFDF8',
     foreground: '#1D1A17',
     accent: '#B6252D'
