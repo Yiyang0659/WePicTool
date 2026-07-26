@@ -55,6 +55,27 @@ test('renderer maps an unavailable audit service to a retryable response', async
   });
 });
 
+test('renderer keeps a valid client task id in its response and render call', async () => {
+  let seenTaskId = '';
+  const handler = rendererServer.createRenderHandler({
+    checkContent: async () => ({ ok: true, code: 'OK' }),
+    renderCards: async (specs, theme, taskId) => {
+      seenTaskId = taskId;
+      return specs.map((spec) => Object.assign({}, spec, {
+        cardId: `card_${spec.order}`,
+        fileId: `cloud://${spec.order}.png`,
+        url: `https://example.test/${spec.order}.png`
+      }));
+    }
+  });
+
+  const response = await handler({
+    taskId: 'text_20260726_abcdef', sourceText: '今', themeKey: 'handwrite-paper'
+  });
+  assert.equal(seenTaskId, 'text_20260726_abcdef');
+  assert.equal(response.body.taskId, 'text_20260726_abcdef');
+});
+
 test('card uploads roll back earlier files if a later upload fails', async () => {
   assert.equal(typeof rendererModule.createCardRenderer, 'function');
   const deleted = [];
@@ -72,4 +93,42 @@ test('card uploads roll back earlier files if a later upload fails', async () =>
     { text: '日', role: 'content', order: 2 }
   ], { key: 'handwrite-paper' }), /storage failed/);
   assert.deepEqual(deleted, ['cloud://1.png']);
+});
+
+test('card renderer gives every PNG and upload call the stable task id', async () => {
+  const pngTaskIds = [];
+  const uploadTaskIds = [];
+  const renderCards = rendererModule.createCardRenderer({
+    makePng: async (spec, theme, taskId) => {
+      pngTaskIds.push(`${taskId}:${spec.order}`);
+      return Buffer.from(spec.text);
+    },
+    uploadBuffer: async (buffer, spec, taskId) => {
+      uploadTaskIds.push(`${taskId}:${spec.order}`);
+      return { fileId: `cloud://${spec.order}.png`, url: `https://example.test/${spec.order}.png` };
+    },
+    deleteFile: async () => undefined
+  });
+
+  await renderCards([
+    { text: '今', role: 'content', order: 1 },
+    { text: '心', role: 'content', order: 2 }
+  ], { key: 'handwrite-paper' }, 'text_20260726_abcdef');
+
+  assert.deepEqual(pngTaskIds, ['text_20260726_abcdef:1', 'text_20260726_abcdef:2']);
+  assert.deepEqual(uploadTaskIds, ['text_20260726_abcdef:1', 'text_20260726_abcdef:2']);
+});
+
+test('marker PNG maker is stable per task and varies card layout across tasks', async () => {
+  assert.equal(typeof rendererModule.createMarkerPngMaker, 'function');
+  const makePng = rendererModule.createMarkerPngMaker();
+  const spec = { text: '今', role: 'content', order: 1, total: 4 };
+  const theme = { key: 'handwrite-paper', background: '#FFFFFF', foreground: '#171717', accent: '#171717' };
+  const sameFirst = await makePng(spec, theme, 'text_20260726_abcdef');
+  const sameSecond = await makePng(spec, theme, 'text_20260726_abcdef');
+  const different = await makePng(spec, theme, 'text_20260726_uvwxyz');
+
+  assert.equal(sameFirst.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.deepEqual(sameFirst, sameSecond);
+  assert.notDeepEqual(sameFirst, different);
 });

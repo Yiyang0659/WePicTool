@@ -1,5 +1,5 @@
 const cloud = require('wx-server-sdk');
-const { createCardRenderer, createPngMaker } = require('./renderer');
+const { createCardRenderer, createMarkerPngMaker } = require('./renderer');
 const { createHttpServer, createRenderHandler } = require('./server');
 
 cloud.init({ env: process.env.CLOUDBASE_ENV_ID || cloud.DYNAMIC_CURRENT_ENV });
@@ -16,10 +16,9 @@ async function checkContent(content) {
   }
 }
 
-async function uploadBuffer(buffer, spec) {
-  const taskPrefix = `bigtext/${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+async function uploadBuffer(buffer, spec, taskId) {
   const result = await cloud.uploadFile({
-    cloudPath: `${taskPrefix}/${String(spec.order).padStart(2, '0')}.png`,
+    cloudPath: `bigtext/${taskId}/${String(spec.order).padStart(2, '0')}.png`,
     fileContent: buffer
   });
   return { fileId: result.fileID, url: result.fileID };
@@ -30,7 +29,7 @@ async function deleteFile(fileId) {
 }
 
 const renderCards = createCardRenderer({
-  makePng: createPngMaker(),
+  makePng: createMarkerPngMaker(),
   uploadBuffer,
   deleteFile
 });

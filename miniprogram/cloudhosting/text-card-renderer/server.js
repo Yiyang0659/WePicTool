@@ -5,6 +5,11 @@ function failure(statusCode, code) {
   return { statusCode, body: { ok: false, code } };
 }
 
+function resolveTaskId(value) {
+  if (typeof value === 'string' && /^text_[A-Za-z0-9_-]{6,80}$/.test(value)) return value;
+  return `text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function createRenderHandler(dependencies) {
   const deps = dependencies || {};
   const checkContent = deps.checkContent;
@@ -27,8 +32,9 @@ function createRenderHandler(dependencies) {
 
     const specs = buildCardSpecs(sourceText);
     const theme = getTheme(input && input.themeKey);
+    const taskId = resolveTaskId(input && input.taskId);
     try {
-      const cards = await renderCards(specs, theme);
+      const cards = await renderCards(specs, theme, taskId);
       if (!Array.isArray(cards) || cards.length !== specs.length || cards.some((card, index) => {
         const spec = specs[index];
         return !card || !card.url || card.text !== spec.text || card.order !== spec.order;
@@ -37,7 +43,7 @@ function createRenderHandler(dependencies) {
       }
       return {
         statusCode: 200,
-        body: { ok: true, themeKey: theme.key, cards }
+        body: { ok: true, taskId, themeKey: theme.key, cards }
       };
     } catch (err) {
       console.error('[text-card-renderer] render failed:', err && (err.message || err));
@@ -72,4 +78,4 @@ function createHttpServer(handler) {
   });
 }
 
-module.exports = { createRenderHandler, createHttpServer };
+module.exports = { createRenderHandler, createHttpServer, resolveTaskId };
