@@ -1,141 +1,151 @@
 # WePicTool 微信小程序
 
-WePicTool 是微信「合并发送 / 叠图」玩法生成器——穿搭白底卡是旗舰功能，玩法模板库是长期资产。当前项目以微信小程序为实际主线，已跑通穿搭"选图 -> AI 分类抠图 -> 白底卡片 -> 按组保存 -> 回微信合并发送"主链路，后续按 PLAYBOOK.md 扩展玩法模板库。
+WePicTool 是微信「合并发送 / 叠图」玩法生成器——穿搭白底卡是旗舰功能，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线，已跑通穿搭"选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送"完整主链路。
 
-当前版本小程序 UI 为底部三 Tab（首页 / 记录 / 我的），结果页采用微信聊天窗口预览风格，让用户提前看到"合并发图"后的真实效果。
+小程序 UI 采用底部三 Tab 架构（首页 / 记录 / 我的），结果页与预览页采用沉浸式微信聊天窗口风格，让用户提前预演多图合并发送后的真实叠图折叠效果。
 
-## 当前阶段
+---
 
-实时项目状态与近期优先级分别以 [docs/current.md](docs/current.md) 和 [docs/roadmap.md](docs/roadmap.md) 为准；本 README 只提供项目入口和运行说明。
+## 当前阶段与产品特性
 
-项目正处于上线范围决策与真机验收准备阶段。是否纳入 AI 能力、哪些能力可以上线以及功能分支是否合并，均以 [`docs/current.md`](docs/current.md) 为准；玩法路线见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)。
+实时项目状态与近期优先级分别以 [`docs/current.md`](docs/current.md) 和 [`docs/roadmap.md`](docs/roadmap.md) 为准；本说明提供项目全景入口与运行指南。
 
-当前版本包含：
+### 当前已实现特性
 
-- 首页选择 1-9 张图片。
-- 上传前基础压缩（最长边不超过 1600px）。
-- 未配置云环境时进入本地预览模式。
-- `processOutfit` 云函数支持 mock 分组、DashScope `qwen-vl-plus` 分类和抠图；代码默认抠图模型为 `qwen-image-edit-plus`，部署环境变量可覆盖。
-- 结果页采用微信聊天窗口预览风格：上衣 / 下装 / 鞋子 / 未处理素材以”合并发图”气泡卡片展示。
-- 点击卡片”展开 N”可在当前页展开横向滚动缩略图，左右滑动查看该组全部图片。
-- 展开后支持原图 / 白底图切换、改分类、预览大图。
-- 前端 Canvas 白底卡片合成：1:1 / 4:5 / 3:4 比例切换、分组主体锚点、浅色衣物阴影描边兜底（已实现，待真机验收）。
-- 底部”一键合并发送”支持分享给朋友、保存全部图片、按分组保存。
-- 单张保存、按组保存、相册授权失败引导。
-- 结果页「改分类」能力，低置信度图片显示「待确认」角标。
-- 白色微信聊天预览页（`pages/preview`）：会话名「分享给好友」、堆叠卡片、展开/收起、滑动切换；不同生成比例在固定手势舞台内等比适配，底部模拟微信输入栏。
-- 处理完成后自动写入本地轻量记录，可在”记录”Tab 查看历史、再次生成。
-- “我的”Tab 提供相册权限、反馈、分享、缓存清理等入口。
-- 底部三 Tab 导航：首页 / 记录 / 我的。
+- **首页选图与压缩**：支持选择 1–9 张衣物/鞋子图片，上传前自动进行等比压缩（最长边不超过 1600px）。
+- **本地/云端双模式**：未配置云环境时自动启用本地 Mock 预览模式；配置后走云存储与云函数链路。
+- **内容安全防御门**：集成 `contentGuard` 云函数与微信安全接口，对文本与图片进行合规安全审查。
+- **AI 智能分类与抠图**：`processOutfit` 云函数接入阿里云 DashScope，使用 `qwen-vl-plus` 进行品类识别（上衣/下装/鞋子/其他），使用 `qwen-image-edit-plus` 进行主体抠图。
+- **前端 Canvas 白底卡合成**：`utils/cardComposer.js` 提供 1:1 / 4:5 / 3:4 多比例合成、品类视觉重心锚点对齐、浅色衣物微阴影与描边兜底。
+- **微信聊天风结果页**（`pages/result`）：白色微信聊天气泡展示分组卡片，支持展开横滑缩略图、原图/白底图切换、改分类、大图预览。
+- **微信发送效果全屏预览**（`pages/preview`）：深色全屏聊天风格，50% 舞台比例等比适配，支持扑克牌 3D 堆叠手势滑卡切换与纵向展开。
+- **微信叠图发送能力判定**：`utils/task.js` 自动判定分组是否达到微信 $\ge 3$ 张叠图阈值，不足时提供降级提示。
+- **一键合并发送与保存**：支持一键保存全部、按分组批量保存到系统相册，并附带相册授权引导。
+- **本地轻量历史记录**（`pages/record`）：处理完成自动写入设备本地缓存（最多保留 20 条，不上传云端，无账号负担），支持按相对日期（今天/昨天/N天前）聚合查看与再次生成。
+- **个人中心**（`pages/profile`）：提供相册权限管理、缓存清理、反馈建议、分享推荐与隐私说明。
+- **自动化测试与预检**：内置纯规则单元测试、语法检查、小程序配置预检及文档治理一致性校验。
 
-当前版本不包含：
+### 当前不包含范围
 
-- Sharp/Pillow 后端白底合成（CloudBase 不支持原生 C++ 模块）。
-- 阶段六起的叠图玩法模板（大字滑卡、剧情滑卡、盲盒抽卡、拼图揭秘、资料打包、翻页动画、成套搭配、滑滑换装，路线见 PLAYBOOK.md）。
-- 账号、付费、通用表情包工具。
-- 云端同步的历史记录（本地记录仅保存在当前设备）。
+- Sharp/Pillow 后端白底合成（CloudBase 云函数不支持 C++ 原生模块，已收敛至前端 Canvas 完成）。
+- 账号体系、云端同步历史记录、付费系统。
+- 通用表情包制作器（所有玩法必须收敛在微信叠图管线内）。
 
-## 文档入口
+---
 
-- [PRD（产品需求文档）](docs/product/PRD.md)
-- [PLAYBOOK（叠图玩法实现手册）](docs/product/PLAYBOOK.md)
-- [技术方案设计](docs/product/TECHNICAL_SPEC.md)
-- [AI 工作流入口](docs/ai-workflows/README.md)
-- [当前状态](docs/current.md)
-- [近期路线图](docs/roadmap.md)
-- [开发与文档同步规则](docs/governance.md)
-- [关键决策](docs/decisions.md)
-- [每日迭代日志](docs/iterations/)
-- [历史资料](docs/history/README.md)
-- [功能设计与实施记录](docs/superpowers/README.md)
+## 常用开发与测试命令
 
-## 本地测试
-
-1. 用微信开发者工具导入项目根目录：`/Users/Zhuanz/Desktop/WePicTool`
-2. 如果还没有真实 AppID，可以先保持占位配置，项目会启用本地预览模式。
-3. 点击“编译”，在首页选择 1-9 张图片。
-4. 未配置云环境时，小程序会直接使用本地临时图片生成预览分组，方便检查页面流程。
-
-本地预检：
+在项目根目录下运行：
 
 ```bash
-npm run check:miniprogram
-```
-
-纯规则测试：
-
-```bash
+# 1. 运行纯规则自动化测试（Node 内置 test runner）
 npm test
-```
 
-语法检查：
+# 2. 小程序上线前预检（检查 AppID、JSON、WXML 闭合、文件完整性）
+npm run check:miniprogram
 
-```bash
+# 3. 语法检查小程序核心 JS / 工具文件
 npm run check:syntax
+
+# 4. 文档治理体系一致性检查
+npm run check:docs
+
+# 5. TypeScript 类型检查（覆盖 src/ 和 scripts/）
+npm run lint
+
+# 6. 启动 Vite Web 演示沙盒（开发模式）
+npm run dev
+
+# 7. 构建 Vite 演示应用
+npm run build
 ```
 
-## 接入真实云开发
+---
 
-上线或真机完整测试前需要完成这些配置：
-
-1. 在微信公众平台创建小程序并获取真实 AppID。
-2. 替换 `project.config.json` 和 `miniprogram/project.config.json` 里的 `appid`。
-3. 在微信开发者工具中开通云开发，复制环境 ID。
-4. 在 `miniprogram/config/env.js` 中填写 `CLOUD_ENV_ID`。
-5. 右键 `miniprogram/cloudfunctions/processOutfit`，选择“上传并部署：云端安装依赖”。
-6. 重新编译，选择图片后会走云存储上传和 `processOutfit` 云函数链路。
-
-## 阶段一验收
-
-- 开发者工具“详情”里确认 AppID、基础库版本和云开发环境正确。
-- 运行 `npm run check:miniprogram`，确保没有结构性错误。
-- 在真机预览中测试选图、上传、结果页展示和保存到相册授权。
-- 拒绝相册授权后，确认能引导用户进入设置页。
-- 每组少于 3 张时，结果页必须展示降级提醒。
-- 在微信公众平台补齐用户隐私保护指引，说明会处理用户选择的图片。
-
-## 目录说明
+## 项目目录全景说明
 
 ```text
 WePicTool/
-├── miniprogram/                    # 微信小程序源码（微信开发者工具编译入口）
-│   ├── app.js / app.json / app.wxss / sitemap.json
-│   │                                 # 小程序全局入口、页面路由、Tab 配置、全局样式、搜索配置
-│   ├── pages/
-│   │   ├── index/                    # 首页 Tab：选图入口，调用 wx.chooseMedia
-│   │   ├── record/                   # 记录 Tab：本地历史任务列表、查看、再次生成
-│   │   ├── profile/                  # 我的 Tab：相册权限、反馈、分享、缓存清理
-│   │   ├── result/                   # 结果页（非 Tab）：白色聊天风格，分组展示、保存、改分类
-│   │   └── preview/                  # 微信预览页（非 Tab）：深色微信聊天风格，堆叠卡片、滑动切换
-│   ├── assets/
-│   │   └── tabbar/                   # 底部 Tab 图标（home/record/profile 各 2 个状态）
-│   ├── utils/
-│   │   └── task.js                   # 任务规则、mock 分组、发送能力判断、图片尺寸计算
-│   ├── cloudfunctions/
-│   │   └── processOutfit/            # 云函数：AI 分类（qwen-vl-plus）+ 抠图（默认 qwen-image-edit-plus）
-│   └── config/
-│       └── env.js                    # CloudBase 环境 ID 和本地预览开关
-├── src/                              # 原 AI Studio / Vite 演示代码（React + Tailwind）
-│                                     # 不是小程序上传必需内容，已被 project.config.json 忽略
-├── dist/                             # Vite 构建产物（被小程序上传忽略）
-├── docs/                             # 当前文档、产品规格、AI 提示词和历史资料
-│   ├── current.md / roadmap.md        # 当前阶段与下一步优先级
-│   ├── governance.md                  # 开发与文档同步规则
-│   ├── product/                      # PRD、玩法手册、技术规格
-│   ├── ai-workflows/                 # 当前 AI 提示词说明
-│   ├── history/                      # 只供追溯的旧状态、旧决策与调研
-│   └── superpowers/                  # 单项功能设计和实施计划
-├── scripts/
-│   ├── check-miniprogram.mjs         # 小程序上线前本地预检脚本
-│   ├── test-dashscope.cjs            # DashScope 分类 API 本地测试
-│   └── test-matting.cjs              # DashScope 抠图 API 本地测试
-├── tests/
-│   └── task.test.cjs                 # Node 纯规则测试
-├── ui-reference/                     # UI 设计参考图（9 张截图，非小程序上传内容）
-├── assets/
-│   └── .aistudio/                    # AI Studio 相关资源/配置
-├── package.json                      # 项目脚本和依赖
-├── tsconfig.json / vite.config.ts    # TypeScript 和 Vite 配置
-├── project.config.json               # 微信小程序项目根配置（AppID、小程序根目录等）
-└── metadata.json                     # AI Studio 项目元数据
+├── miniprogram/                      # [核心交付物] 微信小程序原生源码
+│   ├── app.js / app.json / app.wxss  # 小程序全局入口、页面路由、Tab 配置与全局样式
+│   ├── sitemap.json                  # 微信搜索索引配置
+│   ├── project.config.json           # 小程序目录内工程配置
+│   ├── assets/                       # 静态资源
+│   │   └── tabbar/                   # 底部 Tab 图标（首页/记录/我的 各 2 态）
+│   ├── config/
+│   │   └── env.js                    # CloudBase 环境 ID 与服务地址配置
+│   ├── pages/                        # 页面视图层
+│   │   ├── index/                    # 首页 Tab：选图入口 (wx.chooseMedia) 与基础压缩
+│   │   ├── result/                   # 结果页：白色聊天气泡、分组卡片、Canvas 合成、改分类
+│   │   ├── preview/                  # 预览页：深色微信聊天全屏预演、扑克牌堆叠、滑卡切换
+│   │   ├── record/                   # 记录 Tab：本地历史任务列表、相对日期聚合、再次生成
+│   │   └── profile/                  # 我的 Tab：相册权限、缓存清理、反馈与隐私说明
+│   ├── cloudfunctions/               # 微信云开发云函数
+│   │   ├── processOutfit/            # 穿搭 AI 分类 (qwen-vl-plus) 与抠图 (qwen-image-edit-plus)
+│   │   └── contentGuard/             # 内容安全审查云函数 (msgSecCheck)
+│   └── utils/                        # 前端核心工具库
+│       ├── task.js                   # 任务模型、Mock 数据、叠图能力 (buildSendability) 判定
+│       ├── cardComposer.js           # 前端 Canvas 白底卡排版合成引擎 (1:1/4:5/3:4, 阴影描边)
+│       └── previewLayout.js          # 预览页 50% 宽度手势舞台比例计算
+├── docs/                             # [项目大脑] 治理体系与知识库
+│   ├── current.md                    # 当前阶段、活跃分支、阻塞项与下一步（唯一事实源）
+│   ├── roadmap.md                    # 优先级路线图 (P0~P3) 与进入条件
+│   ├── decisions.md                  # 架构、技术与产品关键决策库
+│   ├── governance.md                 # 开发与文档同步治理规则
+│   ├── changelog.md                  # 用户可感知的功能变更日志
+│   ├── product/                      # 产品核心文档
+│   │   ├── PRD.md                    # 产品需求文档
+│   │   ├── PLAYBOOK.md               # 叠图玩法实现手册 (微信平台事实与统一叠图管线)
+│   │   └── TECHNICAL_SPEC.md         # 架构与技术规格说明书
+│   ├── ai-workflows/                 # AI 提示词工程与模型评测
+│   ├── iterations/                   # 每日敏捷迭代日志 (YYYY-MM-DD.md)
+│   ├── superpowers/                  # 单项功能设计说明 (specs/) 与实施计划 (plans/)
+│   └── history/                      # 归档的历史状态、早期笔记与调研资料
+├── scripts/                          # [工程脚本] 自动化校验与本地联调
+│   ├── check-miniprogram.mjs         # 小程序上线前自动化预检
+│   ├── check-documentation.mjs       # 文档治理一致性自动化检查
+│   ├── gen-tabbar-icons.py           # TabBar 图标生成脚本
+│   ├── test-dashscope.cjs            # 阿里云 DashScope 分类连通性测试
+│   ├── test-matting.cjs              # 阿里云 DashScope 抠图独立测试
+│   ├── test-wanx.cjs                 # 万相图像模型测试
+│   └── test-matting-models.cjs       # 抠图模型效果与耗时对比测试
+├── tests/                            # [自动化测试] 纯规则单测套件
+│   ├── task.test.cjs                 # 任务数据结构与叠图阈值判定测试
+│   ├── content-safety.test.cjs       # 内容安全规则测试
+│   ├── preview-layout.test.cjs       # 预览页排版计算测试
+│   └── check-documentation.test.cjs  # 文档治理机制测试
+├── .worktrees/                       # [Git 工作树] 并行功能分支
+│   └── bigtext-handwrite/            # 大字滑卡独立功能分支 (含云托管渲染服务)
+├── src/ & dist/                      # [演示沙盒] Vite + React + Tailwind 模拟器（不随小程序上传）
+├── ui-reference/                     # 微信真实叠图录屏与视觉参考原型
+├── package.json                      # 项目 npm 依赖与 scripts 配置
+├── project.config.json               # 微信开发者工具根配置
+├── CLAUDE.md / AGENTS.md             # AI 协作规范与上下文索引入口
+└── metadata.json                     # 项目元数据
 ```
+
+---
+
+## 接入真实云开发流程
+
+在上线或真机测试前，需要完成以下云开发配置：
+
+1. 在微信公众平台创建小程序，获取真实 **AppID**。
+2. 替换 `project.config.json` 和 `miniprogram/project.config.json` 中的 `appid`。
+3. 在微信开发者工具中开通云开发环境，获取 **环境 ID**。
+4. 在 `miniprogram/config/env.js` 中填入 `CLOUD_ENV_ID`。
+5. 分别右键 `miniprogram/cloudfunctions/` 下的 `processOutfit` 和 `contentGuard`，选择“上传并部署：云端安装依赖”。
+6. 重新编译小程序，选择图片后即可体验真实云存储上传、AI 分类抠图与安全审核链路。
+
+---
+
+## 核心文档索引
+
+- 📋 **产品需求**：[`docs/product/PRD.md`](docs/product/PRD.md)
+- 🎮 **叠图玩法手册**：[`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)
+- 📐 **技术方案设计**：[`docs/product/TECHNICAL_SPEC.md`](docs/product/TECHNICAL_SPEC.md)
+- 📍 **当前状态**：[`docs/current.md`](docs/current.md)
+- 🗺️ **路线图与优先级**：[`docs/roadmap.md`](docs/roadmap.md)
+- ⚖️ **关键决策库**：docs/decisions.md
+- 📜 **治理与同步规范**：[`docs/governance.md`](docs/governance.md)
+
