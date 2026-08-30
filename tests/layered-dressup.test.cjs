@@ -164,3 +164,22 @@ test('preview excludes empty groups but keeps real groups below three cards', ()
   assert.equal(preview[0].key, 'head');
   assert.equal(preview[0].cards.length, 2);
 });
+
+test('every built-in asset exists and the project-owned head cards are 640 square PNGs', () => {
+  const pack = registry.getAssetPack('funny-paper-doll-v1');
+  const allItems = Object.values(pack.groups).flat();
+
+  allItems.forEach((item) => {
+    const assetPath = path.join(__dirname, '..', 'miniprogram', item.url.replace(/^\//, ''));
+    assert.equal(fs.existsSync(assetPath), true, `missing asset: ${item.url}`);
+    assert.ok(fs.statSync(assetPath).size > 0, `empty asset: ${item.url}`);
+  });
+
+  pack.groups.head.forEach((item) => {
+    const assetPath = path.join(__dirname, '..', 'miniprogram', item.url.replace(/^\//, ''));
+    const data = fs.readFileSync(assetPath);
+    assert.deepEqual(Array.from(data.subarray(0, 8)), [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(data.readUInt32BE(16), 640);
+    assert.equal(data.readUInt32BE(20), 640);
+  });
+});
