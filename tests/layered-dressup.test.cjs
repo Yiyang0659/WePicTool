@@ -28,6 +28,9 @@ function plain(value) {
 }
 
 const registry = loadMiniProgramModule('miniprogram/config/playRegistry.js');
+const dressup = loadMiniProgramModule('miniprogram/utils/layeredDressup.js', {
+  '../config/playRegistry': registry
+});
 
 test('registers layered dressup with the four ordered groups', () => {
   const play = registry.getPlayDefinition('layered-dressup');
@@ -69,4 +72,95 @@ test('rejects duplicate ids and assets placed in the wrong group', () => {
   assert.equal(result.valid, false);
   assert.match(result.errors.join('\n'), /重复/);
   assert.match(result.errors.join('\n'), /shoes.*groupKey/);
+});
+
+test('creates a complete demo project from the built-in pack', () => {
+  const project = dressup.createProject({
+    sourceMode: 'demo',
+    templateId: 'funny-paper-doll-v1',
+    now: 1000
+  });
+
+  assert.equal(project.projectId, 'layered_1000');
+  assert.equal(project.playId, 'layered-dressup');
+  assert.equal(project.groups.head.length, 3);
+  assert.equal(project.groups.tops.length, 3);
+  assert.equal(project.groups.bottoms.length, 3);
+  assert.equal(project.groups.shoes.length, 3);
+  assert.equal(dressup.buildSendability(project).validGroupCount, 4);
+});
+
+test('creates an empty upload project without adding filler cards', () => {
+  const project = dressup.createProject({ sourceMode: 'upload', now: 2000 });
+
+  assert.deepEqual(plain(project.groups), {
+    head: [],
+    tops: [],
+    bottoms: [],
+    shoes: []
+  });
+  assert.equal(dressup.buildSendability(project).canExport, false);
+});
+
+test('adding user material changes demo source to mixed and caps a group at twelve', () => {
+  const project = dressup.createProject({
+    sourceMode: 'demo',
+    templateId: 'funny-paper-doll-v1',
+    now: 1000
+  });
+  const additions = Array.from({ length: 12 }, (_, index) => ({
+    id: `user_${index}`,
+    url: `/tmp/${index}.jpg`
+  }));
+
+  const next = dressup.addItems(project, 'tops', additions, 'user');
+
+  assert.equal(next.sourceMode, 'mixed');
+  assert.equal(next.groups.tops.length, 12);
+  assert.equal(next.groups.tops[3].source, 'user');
+  assert.equal(project.groups.tops.length, 3);
+});
+
+test('removing the third card makes that group non-stackable without padding it', () => {
+  const project = dressup.createProject({
+    sourceMode: 'demo',
+    templateId: 'funny-paper-doll-v1',
+    now: 1000
+  });
+
+  const next = dressup.removeItem(project, 'head', project.groups.head[2].id);
+
+  assert.equal(next.groups.head.length, 2);
+  assert.equal(dressup.buildSendability(next).groups.head.mode, 'normal');
+  assert.equal(dressup.buildSendability(next).groups.head.missing, 1);
+});
+
+test('moving an item changes the first card used by preview', () => {
+  const project = dressup.createProject({
+    sourceMode: 'demo',
+    templateId: 'funny-paper-doll-v1',
+    now: 1000
+  });
+  const expected = project.groups.shoes[2].url;
+
+  const next = dressup.moveItem(project, 'shoes', 2, 0);
+  const preview = dressup.buildPreviewGroups(next);
+
+  assert.equal(preview[3].key, 'shoes');
+  assert.equal(preview[3].cards[0].url, expected);
+  assert.deepEqual(plain(next.groups.shoes.map(item => item.order)), [1, 2, 3]);
+});
+
+test('preview excludes empty groups but keeps real groups below three cards', () => {
+  const project = dressup.createProject({ sourceMode: 'upload', now: 2000 });
+  const next = dressup.addItems(project, 'head', [
+    { id: 'one', url: '/tmp/one.jpg' },
+    { id: 'two', url: '/tmp/two.jpg' }
+  ], 'user');
+
+  const preview = dressup.buildPreviewGroups(next);
+
+  assert.equal(preview.length, 1);
+  assert.equal(preview[0].key, 'head');
+  assert.equal(preview[0].cards.length, 2);
 });
