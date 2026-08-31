@@ -4,7 +4,8 @@
     "pages/record/record",
     "pages/profile/profile",
     "pages/result/result",
-    "pages/preview/preview"
+    "pages/preview/preview",
+    "pages/dressup/dressup"
   ],
   "window": {
     "backgroundTextStyle": "light",
