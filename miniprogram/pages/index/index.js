@@ -33,6 +33,33 @@ const DEMO_SLIDES = [
   { src: '/assets/samples/top2.jpg', num: '04' }
 ];
 
+const LAYERED_DEMO_ROWS = [
+  {
+    key: 'head',
+    emoji: '🙂',
+    name: '头像 / 发型',
+    images: ['/assets/samples/head1.png', '/assets/samples/head2.png', '/assets/samples/head3.png']
+  },
+  {
+    key: 'tops',
+    emoji: '👕',
+    name: '上衣',
+    images: ['/assets/samples/top1.jpg', '/assets/samples/top2.jpg', '/assets/samples/top3.jpg']
+  },
+  {
+    key: 'bottoms',
+    emoji: '👖',
+    name: '下装',
+    images: ['/assets/samples/bottom1.jpg', '/assets/samples/bottom2.jpg', '/assets/samples/bottom3.jpg']
+  },
+  {
+    key: 'shoes',
+    emoji: '👟',
+    name: '鞋子',
+    images: ['/assets/samples/shoe1.jpg', '/assets/samples/shoe2.jpg', '/assets/samples/shoe3.jpg']
+  }
+];
+
 Page({
   data: {
     loading: false,
@@ -45,16 +72,22 @@ Page({
     ratioOptions: CONFIRM_RATIO_OPTIONS,
     // 首屏「朋友视角」仿真演示卡的轮播数据
     demoSlides: DEMO_SLIDES,
+    layeredDemoRows: LAYERED_DEMO_ROWS,
     // 玩法模板（即将上线）：数据驱动渲染，点击统一走 onComingSoon
     comingModules: [
-      { key: 'bigtext', name: '大字滑卡', emoji: '🔤', desc: '一张一个大字，滑出惊喜' },
-      { key: 'drama', name: '剧情滑卡', emoji: '🎬', desc: '多图连播，讲出你的剧情' },
-      { key: 'blindbox', name: '盲盒抽卡', emoji: '🎁', desc: '抽到哪张看哪张，惊喜拉满' },
-      { key: 'puzzle', name: '拼图揭秘', emoji: '🧩', desc: '一块一块，拼出完整答案' },
-      { key: 'flipbook', name: '翻页动画', emoji: '🎞️', desc: '多图连翻，让照片动起来' },
-      { key: 'suit', name: '成套搭配', emoji: '🧥', desc: '一整套穿搭，一图看懂' },
-      { key: 'dressup', name: '滑滑换装', emoji: '👠', desc: '左右滑一滑，换装挑不停' }
+      { key: 'film', name: '胶片相册', emoji: '🎞️', desc: '把生活照做成统一画册' },
+      { key: 'beforeafter', name: '前后对比', emoji: '↔️', desc: '两种状态，滑动看变化' },
+      { key: 'panorama', name: '无缝画卷', emoji: '🖼️', desc: '一张宽图，分段连续滑动' },
+      { key: 'drama', name: '剧情反转', emoji: '🎬', desc: '封面留悬念，末张抖包袱' }
     ]
+  },
+
+  onTryLayeredDemo: function () {
+    wx.navigateTo({ url: '/pages/dressup/dressup?mode=demo' });
+  },
+
+  onCreateLayeredDressup: function () {
+    wx.navigateTo({ url: '/pages/dressup/dressup?mode=upload' });
   },
 
   // 即将上线模块统一提示

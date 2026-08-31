@@ -18,43 +18,87 @@
       </view>
     </view>
 
-    <!-- 2. 朋友视角仿真演示卡：3 秒讲清产品是干嘛的 -->
-    <view class="demo-card">
-      <view class="demo-chat-row">
-        <view class="demo-avatar"></view>
-        <view class="demo-bubble">
-          <swiper class="demo-swiper" autoplay interval="2000" circular indicator-dots="false">
-            <swiper-item wx:for="{{demoSlides}}" wx:key="src">
-              <!-- 白底编号卡样式：白底 + 左上角黑底白字序号角标 -->
-              <view class="demo-slide-card">
-                <view class="demo-slide-num">{{item.num}}</view>
-                <image class="demo-slide-img" src="{{item.src}}" mode="aspectFit" />
-              </view>
-            </swiper-item>
-          </swiper>
+    <!-- 2. 四叠真实效果演示 -->
+    <view class="layered-demo-card">
+      <view class="layered-demo-head">
+        <view>
+          <view class="layered-demo-title">四个部位独立滑动</view>
+          <view class="layered-demo-sub">朋友在微信里随手组合，像玩纸娃娃</view>
         </view>
+        <view class="layered-demo-live">玩法演示</view>
       </view>
-      <view class="demo-caption">朋友收到就能这样滑着看 👀</view>
+      <view class="layered-demo-row" wx:for="{{layeredDemoRows}}" wx:key="key" wx:for-item="row">
+        <view class="layered-demo-label"><text>{{row.emoji}}</text><text>{{row.name}}</text></view>
+        <swiper class="layered-row-swiper" autoplay interval="{{1900 + index * 320}}" circular indicator-dots="false">
+          <swiper-item wx:for="{{row.images}}" wx:key="*this" wx:for-item="src">
+            <image class="layered-row-image" src="{{src}}" mode="aspectFit" />
+          </swiper-item>
+        </swiper>
+        <view class="layered-stack-edge edge-one"></view>
+        <view class="layered-stack-edge edge-two"></view>
+      </view>
+      <view class="layered-demo-caption">头像、上衣、下装、鞋子各发一叠，四组互不影响</view>
     </view>
 
-    <!-- 3. 旗舰主卡：穿搭叠图（双按钮：示例体验 + 选自己的图走既有 onChooseMedia） -->
+    <!-- 3. 旗舰主卡 -->
     <view class="hero-card">
-      <view class="hero-icon">📸</view>
-      <view class="hero-title">穿搭叠图</view>
-      <view class="hero-desc">AI 抠图分组 · 白底编号卡 · 回微信合并发送</view>
+      <view class="hero-icon">🪄</view>
+      <view class="hero-eyebrow">本期主玩法</view>
+      <view class="hero-title">分层云换装</view>
+      <view class="hero-desc">系统模板开箱即玩，也能上传自己的头像、衣服和鞋子，自由混搭成四叠。</view>
       <view class="hero-cta-row">
-        <view class="hero-cta-ghost" catchtap="onChooseMedia">选自己的图</view>
-        <view class="hero-cta" catchtap="onTrySample">用示例试一叠</view>
+        <view class="hero-cta" bindtap="onTryLayeredDemo">直接试玩</view>
+        <view class="hero-cta-ghost" bindtap="onCreateLayeredDressup">上传自己的素材</view>
       </view>
     </view>
 
-    <!-- 4. 玩法模板区 -->
+    <!-- 4. 热门模板 -->
     <view class="section-head">
       <view class="section-title-wrap">
         <view class="section-bar"></view>
-        <view class="section-title">玩法模板</view>
+        <view class="section-title">热门模板</view>
       </view>
-      <view class="section-side">陆续上线</view>
+      <view class="section-side">首套已可用</view>
+    </view>
+    <view class="hot-template-card" bindtap="onTryLayeredDemo">
+      <view class="hot-template-cover">
+        <image class="hot-template-head" src="/assets/samples/head2.png" mode="aspectFit" />
+        <view class="hot-template-mini hot-mini-one">👕</view>
+        <view class="hot-template-mini hot-mini-two">👟</view>
+      </view>
+      <view class="hot-template-copy">
+        <view class="hot-template-kicker">分层云换装 · 内置素材</view>
+        <view class="hot-template-title">抽象搞怪</view>
+        <view class="hot-template-desc">4 个部位 × 3 张素材，不选图也能完整体验</view>
+      </view>
+      <view class="hot-template-arrow">›</view>
+    </view>
+
+    <!-- 5. 已有 AI 工具 -->
+    <view class="section-head section-head-spaced">
+      <view class="section-title-wrap">
+        <view class="section-bar"></view>
+        <view class="section-title">我的照片工具</view>
+      </view>
+      <view class="section-side">已有能力</view>
+    </view>
+    <view class="ai-tool-card">
+      <view class="ai-tool-icon">📸</view>
+      <view class="ai-tool-copy">
+        <view class="ai-tool-title">AI 穿搭整理</view>
+        <view class="ai-tool-desc">自动分类、去背、白底卡，适合整理真实衣物照片</view>
+      </view>
+      <view class="ai-tool-action" bindtap="onChooseMedia">选图</view>
+    </view>
+    <view class="ai-sample-link" bindtap="onTrySample">没有素材？用原来的 3+3+3 示例试试 →</view>
+
+    <!-- 6. 后续玩法 -->
+    <view class="section-head section-head-spaced">
+      <view class="section-title-wrap">
+        <view class="section-bar"></view>
+        <view class="section-title">下一批玩法</view>
+      </view>
+      <view class="section-side">陆续实现</view>
     </view>
     <view class="module-grid">
       <view class="module-card" wx:for="{{comingModules}}" wx:key="key" bindtap="onComingSoon">
@@ -65,7 +109,7 @@
       </view>
     </view>
 
-    <!-- 5. 工具区 -->
+    <!-- 7. 工具区 -->
     <view class="tool-card" bindtap="onComingSoon">
       <view class="tool-emoji">🗂️</view>
       <view class="tool-info">
@@ -75,7 +119,7 @@
       <view class="tool-badge">即将上线</view>
     </view>
 
-    <!-- 6. 操作说明卡 -->
+    <!-- 8. 操作说明 -->
     <view class="guide-card">
       <view class="section-title-wrap guide-title-wrap">
         <view class="section-bar"></view>
@@ -84,19 +128,19 @@
       <view class="guide-list">
         <view class="guide-item">
           <view class="guide-num">1</view>
-          <view class="guide-text">点击「穿搭叠图」卡片的「用示例试一叠」快速体验，或点「选自己的图」选择上衣、裤子、裙子或鞋子的照片（可混选 1-9 张）。</view>
+          <view class="guide-text">先用「抽象搞怪」模板试玩，或者上传自己的头像、上衣、下装和鞋子。</view>
         </view>
         <view class="guide-item">
           <view class="guide-num">2</view>
-          <view class="guide-text">确认图片与输出比例后，系统上传至云端进行部件智能分类与整理。</view>
+          <view class="guide-text">每个部位补到 3 张以上；可以删除、调顺序，也可以用系统素材补齐。</view>
         </view>
         <view class="guide-item">
           <view class="guide-num">3</view>
-          <view class="guide-text">在结果页查看自动分出的【上衣组】、【下装组】和【鞋子组】，一键保存到手机相册。</view>
+          <view class="guide-text">在微信预览里分别滑动四叠，确认第一张封面和组合效果。</view>
         </view>
         <view class="guide-item">
           <view class="guide-num">4</view>
-          <view class="guide-text">发送到微信群或私聊，利用微信多图合并堆叠效果，让闺蜜/群友左右滑动帮你挑选！</view>
+          <view class="guide-text">按头像、上衣、下装、鞋子的顺序保存并发送，每组勾选「发送后合并展示」。</view>
         </view>
       </view>
     </view>
