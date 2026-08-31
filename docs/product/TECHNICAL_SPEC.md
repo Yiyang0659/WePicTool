@@ -1,8 +1,8 @@
 # WePicTool 技术方案设计
 
-**版本：** v2.1
-**日期：** 2026-07-18
-**状态：** 覆盖阶段一到阶段三已有接口与实现；新增第 12 节叠图玩法管线技术规格（定位升级）
+**版本：** v2.2
+**日期：** 2026-08-31
+**状态：** 覆盖既有 AI 穿搭链路、叠图预览管线与分层云换装首版功能分支
 
 ---
 
@@ -118,13 +118,16 @@ flowchart LR
 | 目录 | 职责 |
 | --- | --- |
 | `miniprogram/pages/index/` | 首页 Tab：选图、压缩、上传、创建任务 |
+| `miniprogram/pages/dressup/` | 分层云换装编辑页：四组上传、混用、删除排序、预览、保存与发送引导 |
 | `miniprogram/pages/record/` | 记录 Tab：本地历史任务列表、查看、再次生成 |
 | `miniprogram/pages/profile/` | 我的 Tab：相册权限、反馈、分享、缓存清理 |
 | `miniprogram/pages/result/` | 结果页（非 Tab）：白色聊天风格，分组展示、保存、改分类、发送引导 |
 | `miniprogram/pages/preview/` | 微信预览页（非 Tab）：白色微信聊天风格，比例安全的堆叠卡片、展开/收起、滑动切换 |
 | `miniprogram/app.json` | 全局页面路由与底部 Tab（首页 / 记录 / 我的）配置 |
 | `miniprogram/config/env.js` | CloudBase 环境 ID 和本地预览开关 |
+| `miniprogram/config/playRegistry.js` | 玩法、四组定义和内置素材包注册表 |
 | `miniprogram/utils/task.js` | 任务规则、mock 分组、发送能力判断、图片尺寸计算 |
+| `miniprogram/utils/layeredDressup.js` | 分层换装项目模型、不可变编辑规则、发送能力与预览契约 |
 | `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 AI 分类 + 阶段三抠图 |
 | `miniprogram/cloudfunctions/contentGuard/` | 云函数：使用微信内容安全接口审核用户反馈文本 |
 
@@ -216,6 +219,31 @@ others
 ```text
 当前更适合普通发送；想要叠图效果，建议每组补到 3 张以上
 ```
+
+### 4.4 分层云换装项目契约
+
+该契约与 `outfit` AI 任务分离，避免把 `head` 和本地系统素材塞进旧三组后端模型：
+
+```js
+{
+  projectId: 'layered_1720000000000',
+  playId: 'layered-dressup',
+  sourceMode: 'mixed', // demo | upload | mixed
+  templateId: 'funny-paper-doll-v1',
+  ratio: '4:5',
+  labelMode: 'clean',
+  groups: {
+    head: [],
+    tops: [],
+    bottoms: [],
+    shoes: []
+  },
+  createdAt: 1720000000000,
+  updatedAt: 1720000000000
+}
+```
+
+每个素材项包含 `id`、`assetId`、`groupKey`、`source`、`url/localPath`、尺寸、授权来源和 `order`。每组上限 12；0 张为 `empty`，1–2 张为 `normal`，3–12 张为 `stackable`。只有 `stackable` 组进入导出队列，不生成补位卡。
 
 ---
 
@@ -685,6 +713,39 @@ expanded --点单张--> viewer（黑底大图，点任意处关闭）
 - 展开消息行始终保留 WXML 图片节点，以 `hidden` + CSS animation（stagger 用内联 `animation-delay`）切换；viewer 用全屏 `position: fixed` 黑底容器。
 - 每叠一个组件实例；页面接收多组时纵向排列多个固定高度折叠卡消息，典型 375px 视口须同时露出上衣、下装、鞋子与输入栏。
 - 真机验收对照清单：白色外壳、12:00、54% 舞台、左右露角、比例安全适配、胶囊近牌堆、滑动跟手旋转、阈值/回弹手感、飞出渐隐、循环翻页、展开时无白屏重载与 stagger——与用户提供的真实微信视频并排逐项对比。
+
+---
+
+## 13. 分层云换装首版技术规格
+
+### 13.1 注册与资源
+
+- `playRegistry.js` 固定注册 `layered-dressup` 的四组顺序和 `demo/upload/mixed` 三种入口。
+- `funny-paper-doll-v1` 四组各 3 张，所有素材 ID 全局唯一，组内 `groupKey` 必须一致。
+- 注册表校验拒绝缺组、少于 3 张、超过 12 张、重复 ID 和错误分组。
+- 三张头像素材为本次生成的项目自有抽象插画；既有上衣、下装、鞋子示例沿用项目内样本资源。
+
+### 13.2 编辑与持久化
+
+- `createProject` 创建空上传项目或从完整素材包克隆演示项目。
+- `addItems`、`removeItem`、`moveItem` 返回新项目对象，不原地修改调用方数据。
+- 加入不同来源素材时，项目来源自动转为 `mixed`；每次编辑重新生成连续 `order` 和组内标签。
+- 用户选择的临时图片复制到 `wx.env.USER_DATA_PATH/layered-dressup/`，草稿写入 `wepictool_layered_dressup_draft_v1`。
+- 首版只保存一个设备本地草稿，不上云、不跨设备同步。
+
+### 13.3 预览与导出
+
+- `buildPreviewGroups` 按 `head → tops → bottoms → shoes` 生成 `{key,name,cards}`，交给现有 `pages/preview` 直连契约。
+- 预览允许显示真实的 1–2 张组，但页面不会把它标记为可形成叠图。
+- 保存全部只展开 `stackable` 组，并保持四组固定顺序与组内排序。
+- 包内资源在保存前复制到用户目录；HTTP、CloudBase 和本地路径分别走下载或直用分支。
+- 保存失败记录已完成数量；相册拒绝时引导 `wx.openSetting`，项目草稿不丢失。
+
+### 13.4 当前验证边界
+
+Node 自动化覆盖注册表、素材完整性、项目来源、数量上限、删除降级、排序首图、预览契约、页面路由和首页入口。`check:syntax` 与 `check:miniprogram` 覆盖新增 JS 和页面文件。
+
+自动化不能替代以下真机验证：包内文件系统读写、用户临时图片持久化、相册保存后的实际排序、横纵手势冲突、iOS/Android 微信四叠折叠效果。当前功能分支不得写成已发布。
 
 ---
 
