@@ -183,3 +183,39 @@ test('every built-in asset exists and the project-owned head cards are 640 squar
     assert.equal(data.readUInt32BE(20), 640);
   });
 });
+
+test('declares a complete layered dressup page and its editing actions', () => {
+  const root = path.join(__dirname, '..');
+  const appConfig = JSON.parse(fs.readFileSync(path.join(root, 'miniprogram/app.json'), 'utf8'));
+  assert.ok(appConfig.pages.includes('pages/dressup/dressup'));
+
+  ['js', 'json', 'wxml', 'wxss'].forEach((extension) => {
+    assert.equal(
+      fs.existsSync(path.join(root, `miniprogram/pages/dressup/dressup.${extension}`)),
+      true,
+      `missing dressup.${extension}`
+    );
+  });
+
+  const markup = fs.readFileSync(path.join(root, 'miniprogram/pages/dressup/dressup.wxml'), 'utf8');
+  [
+    'onAddUserItems',
+    'onAddSystemItems',
+    'onRemoveItem',
+    'onMoveItem',
+    'onPreview',
+    'onSaveGroup',
+    'onSaveAll'
+  ].forEach((handler) => assert.match(markup, new RegExp(`bindtap="${handler}"`)));
+  assert.match(markup, /首图/);
+  assert.match(markup, /还差 \{\{g\.missing\}\} 张可形成叠图/);
+});
+
+test('syntax checks include the layered dressup page and both shared modules', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const command = packageJson.scripts['check:syntax'];
+
+  assert.match(command, /miniprogram\/config\/playRegistry\.js/);
+  assert.match(command, /miniprogram\/utils\/layeredDressup\.js/);
+  assert.match(command, /miniprogram\/pages\/dressup\/dressup\.js/);
+});
