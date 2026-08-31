@@ -89,7 +89,7 @@ WePicTool/
 │       └── previewLayout.js          # 预览页 50% 宽度手势舞台比例计算
 ├── docs/                             # [项目大脑] 治理体系与知识库
 │   ├── current.md                    # 当前阶段、活跃分支、阻塞项与下一步（唯一事实源）
-│   ├── roadmap.md                    # 优先级路线图 (P0~P3) 与进入条件
+│   ├── roadmap.md                    # 优先级路线图 (P0~P5) 与进入条件
 │   ├── decisions.md                  # 架构、技术与产品关键决策库
 │   ├── governance.md                 # 开发与文档同步治理规则
 │   ├── changelog.md                  # 用户可感知的功能变更日志
@@ -114,8 +114,9 @@ WePicTool/
 │   ├── content-safety.test.cjs       # 内容安全规则测试
 │   ├── preview-layout.test.cjs       # 预览页排版计算测试
 │   └── check-documentation.test.cjs  # 文档治理机制测试
-├── .worktrees/                       # [Git 工作树] 并行功能分支
-│   └── bigtext-handwrite/            # 大字滑卡独立功能分支 (含云托管渲染服务)
+├── .worktrees/                       # [Git 工作树] 独立功能分支
+│   ├── bigtext-handwrite/            # 历史大字滑卡实验，供趣味字画选择性迁移
+│   └── layered-dressup-mvp/          # 分层云换装 MVP，待集成与真机验收
 ├── src/ & dist/                      # [演示沙盒] Vite + React + Tailwind 模拟器（不随小程序上传）
 ├── ui-reference/                     # 微信真实叠图录屏与视觉参考原型
 ├── package.json                      # 项目 npm 依赖与 scripts 配置
@@ -146,6 +147,6 @@ WePicTool/
 - 📐 **技术方案设计**：[`docs/product/TECHNICAL_SPEC.md`](docs/product/TECHNICAL_SPEC.md)
 - 📍 **当前状态**：[`docs/current.md`](docs/current.md)
 - 🗺️ **路线图与优先级**：[`docs/roadmap.md`](docs/roadmap.md)
+- ✍️ **趣味字画设计**：[`docs/superpowers/specs/2026-08-31-fun-text-stack-design.md`](docs/superpowers/specs/2026-08-31-fun-text-stack-design.md)
 - ⚖️ **关键决策库**：docs/decisions.md
 - 📜 **治理与同步规范**：[`docs/governance.md`](docs/governance.md)
-

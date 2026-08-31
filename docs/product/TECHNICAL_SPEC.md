@@ -1,8 +1,8 @@
 # WePicTool 技术方案设计
 
-**版本：** v2.1
-**日期：** 2026-07-18
-**状态：** 覆盖阶段一到阶段三已有接口与实现；新增第 12 节叠图玩法管线技术规格（定位升级）
+**版本：** v2.2
+**日期：** 2026-08-31
+**状态：** 覆盖阶段一到阶段三已有接口与实现；第 12 节包含统一叠图管线及趣味字画的待实现技术契约
 
 ---
 
@@ -554,14 +554,15 @@ cloud://cloud1-d0g1blfsde474b168/
 ```js
 // miniprogram/utils/playTemplates.js（待新增）
 {
-  id: 'big-text',              // 玩法唯一 ID，同时作为埋点 moduleId
-  name: '大字滑卡',
+  id: 'fun-text-stack',        // 玩法唯一 ID，同时作为埋点 moduleId
+  name: '趣味字画',
   inputType: 'text',           // text | images | template-params | mixed
-  composeFn: 'composeBigText', // 卡片生成函数名（前端 Canvas）
-  cardCountRule: '每张 1 个字',
+  planner: 'hybrid',           // 规则策略 + AI 结构化规划
+  composeFn: 'composeScenes',  // 把故事计划合成为可编辑场景
+  cardCountRule: '按叙事策略生成 3–8 张卡',
   minCards: 3,                 // ≥3 张硬约束（微信合并展示触发下限）
-  fallbackStrategy: 'padCoverGuide', // 不足 minCards 时自动补封面卡 + 引导卡
-  trackDimension: { moduleId: 'big-text', templateId: null }
+  fallbackStrategy: 'ruleStoryTemplates', // AI 失败时使用规则故事模板
+  trackDimension: { moduleId: 'fun-text-stack', strategyId: null }
 }
 ```
 
@@ -570,7 +571,7 @@ cloud://cloud1-d0g1blfsde474b168/
 | 管线段 | 职责 | 对应代码 / 复用情况 |
 | --- | --- | --- |
 | 1. 输入器 | 选图 / 文字 / 模板参数 | 各玩法页面新增；图片输入复用 `pages/index` 的 `wx.chooseMedia` + 压缩链路 |
-| 2. 卡片生成器 | 前端 Canvas 批量渲染卡片 | 复用 `miniprogram/utils/cardComposer.js`（导出 `composeCard`、`RATIO_MAP`、`GROUP_ANCHOR`、`DEFAULT_OPTIONS`）；文字类玩法按同一模式新增 compose 函数 |
+| 2. 卡片生成器 | 把玩法计划转为可编辑场景并批量渲染 | 图片玩法复用 `miniprogram/utils/cardComposer.js`；趣味字画新增策略选择、候选校验、`sceneComposer` 和小程序/云托管双渲染适配器，详细契约见对应功能设计 |
 | 3. 叠图预览 | 微信聊天效果预览 | 复用 `pages/preview`（白色微信聊天风格：比例安全堆叠卡片、展开/收起、滑动切换），通过 `eventChannel` 传入图组数据 |
 | 4. 编号保存 | 文件名 01、02…… 控制发送顺序 | 复用 `pages/result` 的 `saveImagesSequentially(urls, successTitle)`，需抽为通用组件并叠加文件名编号 |
 | 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 在现有发送引导（`pages/result` 保存完成后的引导）基础上改版为通用浮层组件 |
@@ -583,7 +584,7 @@ cloud://cloud1-d0g1blfsde474b168/
 - 图片违规或审核服务异常时，云函数返回 `CONTENT_UNSAFE` 或 `SAFETY_UNAVAILABLE`，前端停留在当前页并显示非技术性提示；违规任务的 `cloud://` 源图片会尽力删除，删除失败仅记录日志且不影响拦截。
 - 意见反馈文本由独立 `contentGuard` 云函数调用 `security.msgSecCheck`；仅 `ok === true` 时才允许写入本地 `wepictool_feedbacks`，违规或安全服务异常均不保存。
 - `processOutfit/config.json` 必须声明 `security.imgSecCheck`，`contentGuard/config.json` 必须声明 `security.msgSecCheck`；客户端不得保存 AppSecret，也不得绕过云函数直连安全接口。
-- 后续新增的大字滑卡、剧情滑卡和盲盒自定义文本同样必须先走 `contentGuard`，检测不通过不得渲染、落盘或生成卡片。
+- 后续新增的趣味字画、剧情反转和盲盒自定义文本同样必须先走 `contentGuard`；模型为趣味字画新增的文字在场景合成前也必须复查，检测不通过不得渲染、落盘或生成卡片。
 
 ### 12.4 翻页动画云托管 ffmpeg 备注
 
