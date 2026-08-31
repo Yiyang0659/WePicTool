@@ -48,6 +48,17 @@ function loadMiniProgramPage(relativePath, dependencies = {}, wxOverrides = {}) 
   return definition;
 }
 
+function instantiatePage(definition) {
+  const instance = Object.assign({}, definition);
+  instance.data = plain(definition.data || {});
+  instance.setData = function (updates) {
+    Object.keys(updates || {}).forEach((key) => {
+      instance.data[key] = updates[key];
+    });
+  };
+  return instance;
+}
+
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -273,4 +284,24 @@ test('homepage explains the four-stack effect and keeps the existing AI outfit e
   assert.match(markup, /bindtap="onCreateLayeredDressup"/);
   assert.match(markup, /抽象搞怪/);
   assert.match(markup, /bindtap="onChooseMedia"/);
+});
+
+test('upload entry ignores a saved demo-only draft', () => {
+  const demoDraft = dressup.createProject({
+    sourceMode: 'demo',
+    templateId: 'funny-paper-doll-v1',
+    now: 3000
+  });
+  const definition = loadMiniProgramPage('miniprogram/pages/dressup/dressup.js', {
+    '../../config/playRegistry': registry,
+    '../../utils/layeredDressup': dressup
+  }, {
+    getStorageSync() { return demoDraft; }
+  });
+  const page = instantiatePage(definition);
+
+  page.onLoad({ mode: 'upload' });
+
+  assert.equal(page.data.project.sourceMode, 'upload');
+  assert.equal(page.data.groupList.every(group => group.count === 0), true);
 });

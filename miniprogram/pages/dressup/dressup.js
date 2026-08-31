@@ -35,7 +35,12 @@ Page({
     if (mode === 'upload') {
       try {
         var saved = wx.getStorageSync(DRAFT_KEY);
-        if (saved && saved.playId === 'layered-dressup' && saved.groups) {
+        if (
+          saved &&
+          saved.playId === 'layered-dressup' &&
+          saved.groups &&
+          (saved.sourceMode === 'upload' || saved.sourceMode === 'mixed')
+        ) {
           project = saved;
         }
       } catch (err) {
