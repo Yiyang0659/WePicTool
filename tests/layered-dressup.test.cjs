@@ -23,6 +23,31 @@ function loadMiniProgramModule(relativePath, dependencies = {}) {
   return module.exports;
 }
 
+function loadMiniProgramPage(relativePath, dependencies = {}, wxOverrides = {}) {
+  const filePath = path.join(__dirname, '..', relativePath);
+  const code = fs.readFileSync(filePath, 'utf8');
+  let definition = null;
+  const localRequire = (request) => {
+    if (Object.prototype.hasOwnProperty.call(dependencies, request)) {
+      return dependencies[request];
+    }
+    return require(request);
+  };
+  vm.runInNewContext(code, {
+    Page(value) { definition = value; },
+    require: localRequire,
+    wx: wxOverrides,
+    getApp() { return { globalData: {} }; },
+    console,
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    Promise
+  }, { filename: filePath });
+  return definition;
+}
+
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -218,4 +243,34 @@ test('syntax checks include the layered dressup page and both shared modules', (
   assert.match(command, /miniprogram\/config\/playRegistry\.js/);
   assert.match(command, /miniprogram\/utils\/layeredDressup\.js/);
   assert.match(command, /miniprogram\/pages\/dressup\/dressup\.js/);
+});
+
+test('homepage flagship actions navigate to demo and upload dressup modes', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  const urls = [];
+  const page = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../utils/task': taskUtils
+  }, {
+    navigateTo(options) { urls.push(options.url); }
+  });
+
+  page.onTryLayeredDemo();
+  page.onCreateLayeredDressup();
+
+  assert.deepEqual(urls, [
+    '/pages/dressup/dressup?mode=demo',
+    '/pages/dressup/dressup?mode=upload'
+  ]);
+  assert.equal(page.data.comingModules.some(item => item.key === 'suit'), false);
+  assert.equal(page.data.comingModules.some(item => item.key === 'dressup'), false);
+});
+
+test('homepage explains the four-stack effect and keeps the existing AI outfit entry', () => {
+  const markup = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/index/index.wxml'), 'utf8');
+
+  assert.match(markup, /四个部位独立滑动/);
+  assert.match(markup, /bindtap="onTryLayeredDemo"/);
+  assert.match(markup, /bindtap="onCreateLayeredDressup"/);
+  assert.match(markup, /抽象搞怪/);
+  assert.match(markup, /bindtap="onChooseMedia"/);
 });
