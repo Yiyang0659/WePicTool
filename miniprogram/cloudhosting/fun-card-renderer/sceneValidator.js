@@ -52,7 +52,7 @@ function validateTextLayer(layer, errors) {
       push(errors, layer.lines.join('') === layer.text, '文字图层换行与文本不一致');
     }
   }
-  if (layer.effectKey !== undefined) push(errors, EFFECT_KEYS.has(layer.effectKey), '文字效果不在白名单');
+  push(errors, EFFECT_KEYS.has(layer.effectKey), '文字效果不在白名单');
   if (layer.fontFamily !== undefined) push(errors, layer.fontFamily === 'LXGWMarkerGothic', '字体不在白名单');
   push(errors, isFiniteNumber(layer.fontSize) && layer.fontSize > 0 && layer.fontSize <= 600, '字号不合法');
   push(errors, isFiniteNumber(layer.lineHeight) && layer.lineHeight > 0 && layer.lineHeight <= 720, '行高不合法');
@@ -76,10 +76,10 @@ function validateScene(scene, expectedOrder) {
   if (scene.role !== undefined) push(errors, ALLOWED_ROLES.includes(scene.role), '卡片角色不合法');
   push(errors, scene.background && typeof scene.background === 'object' && !Array.isArray(scene.background), '场景背景不合法');
   if (scene.background && typeof scene.background === 'object') {
+    const backgroundKeys = Object.keys(scene.background).sort();
+    push(errors, backgroundKeys.length === 2 && backgroundKeys[0] === 'assetKey' && backgroundKeys[1] === 'color', '背景形式不受支持');
     push(errors, HEX_COLOR.test(scene.background.color || ''), '背景颜色不合法');
-    if (scene.background.assetKey !== undefined) {
-      push(errors, BACKGROUND_KEYS.has(scene.background.assetKey), '背景素材不在白名单');
-    }
+    push(errors, BACKGROUND_KEYS.has(scene.background.assetKey), '背景素材不在白名单');
   }
   if (!Array.isArray(scene.layers)) {
     errors.push('场景图层不合法');
@@ -148,7 +148,7 @@ function validateCandidate(candidate) {
   candidate.scenes.forEach((scene, index) => {
     const result = validateScene(scene, index + 1);
     result.errors.forEach((error) => errors.push('场景 ' + (index + 1) + ': ' + error));
-    if (scene && scene.background && scene.background.assetKey !== undefined) {
+    if (scene && scene.background) {
       push(
         errors,
         scene.background.assetKey === BACKGROUND_BY_STYLE_PACK[candidate.stylePackId],

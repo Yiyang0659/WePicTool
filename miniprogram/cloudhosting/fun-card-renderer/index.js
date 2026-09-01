@@ -1,8 +1,9 @@
 'use strict';
 
 const cloud = require('wx-server-sdk');
-const { createPngMaker, createSceneRenderer } = require('./renderer');
+const { createPngMaker, createSceneRenderer, createCardRollback } = require('./renderer');
 const {
+  createContentChecker,
   createRenderStackHandler,
   createPreviewStackHandler,
   createHttpServer
@@ -14,20 +15,14 @@ if (!isLocalDev) {
   cloud.init({ env: process.env.CLOUDBASE_ENV_ID });
 }
 
-async function checkContent(content) {
-  if (isLocalDev) {
-    return { ok: true, code: 'OK' };
-  }
-  try {
-    const response = await cloud.openapi.security.msgSecCheck({ content });
-    return response && Number(response.errCode) === 0
-      ? { ok: true, code: 'OK' }
-      : { ok: false, code: 'CONTENT_UNSAFE' };
-  } catch (error) {
-    console.error('[fun-card-renderer] content audit failed:', error && (error.errMsg || error.message || error));
-    return { ok: false, code: 'SAFETY_UNAVAILABLE' };
-  }
-}
+const checkContent = isLocalDev
+  ? async () => ({ ok: true, code: 'OK' })
+  : createContentChecker(
+    ({ content }) => cloud.openapi.security.msgSecCheck({ content }),
+    (error) => {
+      console.error('[fun-card-renderer] content audit failed:', error && (error.errMsg || error.message || error));
+    }
+  );
 
 async function uploadBuffer(buffer, cloudPath) {
   if (isLocalDev) {
@@ -47,7 +42,8 @@ const renderScenes = createSceneRenderer({
   uploadBuffer,
   deleteFile
 });
-const dependencies = { checkContent, renderScenes };
+const rollbackCards = createCardRollback(deleteFile);
+const dependencies = { checkContent, renderScenes, rollbackCards };
 const httpServer = createHttpServer({
   renderStackHandler: createRenderStackHandler(dependencies),
   previewStackHandler: createPreviewStackHandler(dependencies)

@@ -20,7 +20,10 @@ function registerFont(GlobalFonts) {
 
 function paintText(context, layer, ratio) {
   const lines = layer.lines;
-  const effectKey = layer.effectKey || 'marker-bold';
+  const effectKey = layer.effectKey;
+  if (!['marker-bold', 'chalk-rough', 'collage-cutout', 'stamp-shadow'].includes(effectKey)) {
+    throw new Error('unsupported text effect');
+  }
   context.save();
   context.translate(layer.x * ratio, layer.y * ratio);
   context.rotate((layer.rotation || 0) * Math.PI / 180);
@@ -90,6 +93,7 @@ function createPngMaker() {
 
 function createSceneRenderer(dependencies) {
   const deps = dependencies || {};
+  const rollbackCards = createCardRollback(deps.deleteFile);
   return async function renderScenes(scenes, job) {
     const expectedSize = job && job.kind === 'preview' ? PREVIEW_SIZE : FINAL_SIZE;
     if (!job || !['preview', 'final'].includes(job.kind) || job.size !== expectedSize) {
@@ -116,9 +120,18 @@ function createSceneRenderer(dependencies) {
       }
       return uploaded;
     } catch (error) {
-      await Promise.allSettled(uploaded.map((card) => Promise.resolve().then(() => deps.deleteFile(card.fileId))));
+      await rollbackCards(uploaded);
       throw error;
     }
+  };
+}
+
+function createCardRollback(deleteFile) {
+  return async function rollbackCards(cards) {
+    if (typeof deleteFile !== 'function' || !Array.isArray(cards)) return;
+    await Promise.allSettled(cards.filter((card) => card && card.fileId).map((card) => {
+      return Promise.resolve().then(() => deleteFile(card.fileId));
+    }));
   };
 }
 
@@ -127,5 +140,6 @@ module.exports = {
   PREVIEW_SIZE,
   FINAL_SIZE,
   createPngMaker,
-  createSceneRenderer
+  createSceneRenderer,
+  createCardRollback
 };

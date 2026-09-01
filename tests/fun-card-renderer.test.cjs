@@ -26,6 +26,7 @@ function textLayer(text) {
     type: 'text',
     text,
     lines: [text],
+    effectKey: 'marker-bold',
     fontSize: 180,
     lineHeight: 210,
     x: 540,
@@ -48,7 +49,7 @@ function validPayload() {
       order,
       width: 1080,
       height: 1080,
-      background: { color: '#FCE4EC' },
+      background: { assetKey: 'pink-note-01', color: '#FCE4EC' },
       layers: [textLayer(order === 3 ? '我今天想见你' : '再滑一下')]
     }))
   };
@@ -63,13 +64,21 @@ function validPreviewPayload() {
       ['candidate_hard_turn_123', 'pink-note-v1'],
       ['candidate_suspense_reveal_456', 'chalk-chaos-v1'],
       ['candidate_fake_checklist_789', 'paper-collage-v1']
-    ].map(([candidateId, stylePackId], candidateIndex) => ({
-      candidateId,
-      stylePackId,
-      scenes: base.scenes.map((scene) => Object.assign({}, clone(scene), {
-        sceneId: 'scene_' + (candidateIndex + 1) + '_' + scene.order
-      }))
-    }))
+    ].map(([candidateId, stylePackId], candidateIndex) => {
+      const backgrounds = {
+        'pink-note-v1': { assetKey: 'pink-note-01', color: '#FCE4EC' },
+        'chalk-chaos-v1': { assetKey: 'chalk-board-01', color: '#24303A' },
+        'paper-collage-v1': { assetKey: 'paper-collage-01', color: '#F4EAD7' }
+      };
+      return {
+        candidateId,
+        stylePackId,
+        scenes: base.scenes.map((scene) => Object.assign({}, clone(scene), {
+          sceneId: 'scene_' + (candidateIndex + 1) + '_' + scene.order,
+          background: clone(backgrounds[stylePackId])
+        }))
+      };
+    })
   };
 }
 
@@ -135,9 +144,15 @@ test('rejects malformed, over-layered, or unregistered scenes', () => {
     ['non-contiguous order', (payload) => { payload.scenes[1].order = 3; }],
     ['duplicate scene ID', (payload) => { payload.scenes[1].sceneId = payload.scenes[0].sceneId; }],
     ['unknown style pack', (payload) => { payload.stylePackId = 'unknown-pack'; }],
+    ['missing background asset', (payload) => { delete payload.scenes[0].background.assetKey; }],
+    ['unknown background asset', (payload) => { payload.scenes[0].background.assetKey = 'unknown-background'; }],
     ['background from another style pack', (payload) => {
       payload.scenes[0].background.assetKey = 'chalk-board-01';
     }],
+    ['unsupported background form', (payload) => {
+      payload.scenes[0].background.imageUrl = 'https://example.test/background.png';
+    }],
+    ['missing effect', (payload) => { delete payload.scenes[0].layers[0].effectKey; }],
     ['unknown effect', (payload) => { payload.scenes[0].layers[0].effectKey = 'unknown-effect'; }],
     ['unknown asset', (payload) => {
       payload.scenes[0].layers.push({
@@ -196,6 +211,41 @@ test('fails closed when content safety is unavailable', async () => {
     assert.deepEqual(response, { statusCode: 503, body: { ok: false, code: 'SAFETY_UNAVAILABLE' } });
     assert.equal(rendered, false);
   }
+});
+
+test('maps only the official unsafe errCode to 403 and treats other audit failures as unavailable', async () => {
+  assert.equal(typeof server.createContentChecker, 'function');
+  const cases = [
+    [{ errCode: 87014 }, 403, 'CONTENT_UNSAFE'],
+    [{ errCode: 44991 }, 503, 'SAFETY_UNAVAILABLE'],
+    [{ errCode: 40001 }, 503, 'SAFETY_UNAVAILABLE'],
+    [null, 503, 'SAFETY_UNAVAILABLE']
+  ];
+
+  for (const [auditResponse, statusCode, code] of cases) {
+    const checkContent = server.createContentChecker(async ({ content }) => {
+      assert.match(content, /我今天想见你/);
+      return auditResponse;
+    });
+    const handler = server.createRenderStackHandler({
+      checkContent,
+      renderScenes: async () => { throw new Error('must not render'); }
+    });
+    const response = await handler(validPayload());
+    assert.deepEqual(response, { statusCode, body: { ok: false, code } });
+  }
+
+  const thrownCheck = server.createContentChecker(async () => {
+    throw new Error('permission denied');
+  });
+  const thrownHandler = server.createRenderStackHandler({
+    checkContent: thrownCheck,
+    renderScenes: async () => { throw new Error('must not render'); }
+  });
+  assert.deepEqual(await thrownHandler(validPayload()), {
+    statusCode: 503,
+    body: { ok: false, code: 'SAFETY_UNAVAILABLE' }
+  });
 });
 
 test('renders the final stack at 1080 and preserves scene order', async () => {
@@ -299,6 +349,47 @@ test('preview auditing is a single aggregate gate before any candidate renders',
   assert.equal(renders, 0);
 });
 
+test('preview rollback removes uploads from earlier candidates when a later candidate fails', async () => {
+  const payload = validPreviewPayload();
+  const scenarios = [
+    {
+      name: 'candidate 2 render failure',
+      failCandidate: payload.candidates[1].candidateId,
+      failWithMismatch: false,
+      expectedDeleted: 3
+    },
+    {
+      name: 'candidate 3 response mismatch',
+      failCandidate: payload.candidates[2].candidateId,
+      failWithMismatch: true,
+      expectedDeleted: 9
+    }
+  ];
+
+  for (const scenario of scenarios) {
+    const deleted = [];
+    const handler = server.createPreviewStackHandler({
+      checkContent: async () => ({ ok: true }),
+      renderScenes: async (scenes, job) => {
+        if (job.candidateId === scenario.failCandidate && !scenario.failWithMismatch) {
+          throw new Error('upload failed');
+        }
+        const cards = renderedCards(scenes, job.candidateId);
+        return job.candidateId === scenario.failCandidate ? cards.reverse() : cards;
+      },
+      rollbackCards: async (cards) => {
+        cards.forEach((card) => deleted.push(card.fileId));
+      }
+    });
+
+    const response = await handler(payload);
+
+    assert.deepEqual(response, { statusCode: 500, body: { ok: false, code: 'RENDER_FAILED' } }, scenario.name);
+    assert.equal(deleted.length, scenario.expectedDeleted, scenario.name);
+    assert.equal(new Set(deleted).size, scenario.expectedDeleted, scenario.name);
+  }
+});
+
 test('uploads one PNG at a time to fixed paths and rolls back earlier uploads on failure', async () => {
   const payload = validPayload();
   const made = [];
@@ -352,6 +443,14 @@ test('real PNG rendering is deterministic and uses exact preview/final dimension
   assert.equal(high.length > lowA.length, true);
 });
 
+test('real PNG rendering rejects a text layer without an explicit registered effect', async () => {
+  const scene = validPayload().scenes[0];
+  delete scene.layers[0].effectKey;
+  const makePng = renderer.createPngMaker();
+
+  await assert.rejects(() => makePng(scene, 360), /effect/i);
+});
+
 test('HTTP routes expose both handlers and the licensed font with CORS headers', async (t) => {
   const fontPath = path.join(serviceRoot, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
   const httpServer = server.createHttpServer({
@@ -388,4 +487,31 @@ test('HTTP routes expose both handlers and the licensed font with CORS headers',
   const missing = await request(baseUrl, '/missing');
   assert.equal(missing.status, 404);
   assert.deepEqual(missing.body, { ok: false, code: 'NOT_FOUND' });
+});
+
+test('oversized HTTP JSON returns INVALID_REQUEST without resetting the connection', async (t) => {
+  const httpServer = server.createHttpServer({
+    renderStackHandler: async () => ({ statusCode: 200, body: { ok: true } }),
+    previewStackHandler: async () => ({ statusCode: 200, body: { ok: true } })
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  t.after(() => httpServer.close());
+  const address = httpServer.address();
+
+  let response;
+  await assert.doesNotReject(async () => {
+    response = await request(
+      'http://127.0.0.1:' + address.port,
+      '/render-stack',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ padding: 'x'.repeat(2 * 1024 * 1024) })
+      }
+    );
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(response.body, { ok: false, code: 'INVALID_REQUEST' });
 });

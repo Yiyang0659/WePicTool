@@ -16,6 +16,24 @@ function failure(statusCode, code) {
   return { statusCode, body: { ok: false, code } };
 }
 
+function assessSecurityResponse(response) {
+  const errCode = response && Number(response.errCode);
+  if (errCode === 0) return { ok: true, code: 'OK' };
+  if (errCode === 87014) return { ok: false, code: 'CONTENT_UNSAFE' };
+  return { ok: false, code: 'SAFETY_UNAVAILABLE' };
+}
+
+function createContentChecker(msgSecCheck, onError) {
+  return async function checkContent(content) {
+    try {
+      return assessSecurityResponse(await msgSecCheck({ content }));
+    } catch (error) {
+      if (typeof onError === 'function') onError(error);
+      return { ok: false, code: 'SAFETY_UNAVAILABLE' };
+    }
+  };
+}
+
 async function auditPayload(checkContent, payload) {
   if (typeof checkContent !== 'function') return failure(503, 'SAFETY_UNAVAILABLE');
   let audit;
@@ -38,6 +56,15 @@ function cardsMatchScenes(cards, scenes) {
     return card && card.sceneId === scene.sceneId && card.order === scene.order
       && typeof card.url === 'string' && card.url.length > 0;
   });
+}
+
+async function rollbackRequestCards(rollbackCards, cards) {
+  if (typeof rollbackCards !== 'function') return;
+  try {
+    await rollbackCards(cards);
+  } catch (error) {
+    // Preserve the original render failure even when best-effort cleanup fails.
+  }
 }
 
 function createRenderStackHandler(dependencies) {
@@ -75,6 +102,7 @@ function createPreviewStackHandler(dependencies) {
     if (!validatePreviewPayload(input).valid) return failure(400, 'INVALID_REQUEST');
     const blocked = await auditPayload(deps.checkContent, input);
     if (blocked) return blocked;
+    const requestCards = [];
     try {
       const candidates = [];
       for (const candidate of input.candidates) {
@@ -84,7 +112,11 @@ function createPreviewStackHandler(dependencies) {
           kind: 'preview',
           size: 360
         });
-        if (!cardsMatchScenes(cards, candidate.scenes)) return failure(500, 'RENDER_FAILED');
+        if (Array.isArray(cards)) requestCards.push(...cards);
+        if (!cardsMatchScenes(cards, candidate.scenes)) {
+          await rollbackRequestCards(deps.rollbackCards, requestCards);
+          return failure(500, 'RENDER_FAILED');
+        }
         candidates.push({
           candidateId: candidate.candidateId,
           stylePackId: candidate.stylePackId,
@@ -96,6 +128,7 @@ function createPreviewStackHandler(dependencies) {
         body: { ok: true, projectId: input.projectId, candidates }
       };
     } catch (error) {
+      await rollbackRequestCards(deps.rollbackCards, requestCards);
       return failure(500, 'RENDER_FAILED');
     }
   };
@@ -113,17 +146,22 @@ function readJson(request) {
   return new Promise((resolve, reject) => {
     let raw = '';
     let bytes = 0;
+    let tooLarge = false;
     request.setEncoding('utf8');
     request.on('data', (chunk) => {
       bytes += Buffer.byteLength(chunk);
       if (bytes > MAX_BODY_BYTES) {
-        reject(new Error('request body too large'));
-        request.destroy();
+        tooLarge = true;
+        raw = '';
         return;
       }
-      raw += chunk;
+      if (!tooLarge) raw += chunk;
     });
     request.on('end', () => {
+      if (tooLarge) {
+        reject(new Error('request body too large'));
+        return;
+      }
       try {
         resolve(JSON.parse(raw || '{}'));
       } catch (error) {
@@ -180,6 +218,8 @@ function createHttpServer(options) {
 }
 
 module.exports = {
+  assessSecurityResponse,
+  createContentChecker,
   createRenderStackHandler,
   createPreviewStackHandler,
   createHttpServer
