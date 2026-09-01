@@ -68,6 +68,13 @@ const dressup = loadMiniProgramModule('miniprogram/utils/layeredDressup.js', {
   '../config/playRegistry': registry
 });
 
+test('exposes the play registry through Node CommonJS for the shared baseline gate', () => {
+  const directRegistry = require('../miniprogram/config/playRegistry.js');
+
+  assert.equal(typeof directRegistry.getPlayDefinition, 'function');
+  assert.equal(directRegistry.getPlayDefinition('layered-dressup').id, 'layered-dressup');
+});
+
 test('registers layered dressup with the four ordered groups', () => {
   const play = registry.getPlayDefinition('layered-dressup');
 
