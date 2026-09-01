@@ -302,7 +302,8 @@ test('upload entry ignores a saved demo-only draft', () => {
   });
   const definition = loadMiniProgramPage('miniprogram/pages/dressup/dressup.js', {
     '../../config/playRegistry': registry,
-    '../../utils/layeredDressup': dressup
+    '../../utils/layeredDressup': dressup,
+    '../../utils/imageExporter': require('../miniprogram/utils/imageExporter.js')
   }, {
     getStorageSync() { return demoDraft; }
   });

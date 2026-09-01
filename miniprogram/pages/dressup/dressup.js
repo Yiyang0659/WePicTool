@@ -1,5 +1,6 @@
 const registry = require('../../config/playRegistry');
 const dressup = require('../../utils/layeredDressup');
+const imageExporter = require('../../utils/imageExporter');
 
 const DRAFT_KEY = 'wepictool_layered_dressup_draft_v1';
 const DEFAULT_PACK_ID = 'funny-paper-doll-v1';
@@ -257,25 +258,23 @@ Page({
 
   saveItemsSequentially: async function (items, successTitle) {
     this.setData({ saving: true });
-    wx.showLoading({ title: '保存 0/' + items.length, mask: true });
-    var saved = 0;
+    var urls = items.map(getItemUrl).filter(Boolean);
     try {
-      for (var i = 0; i < items.length; i++) {
-        wx.showLoading({ title: '保存 ' + (i + 1) + '/' + items.length, mask: true });
-        var filePath = await this.resolveImageFilePath(getItemUrl(items[i]));
-        await this.saveToAlbum(filePath);
-        saved += 1;
-      }
+      var res = await imageExporter.saveImagesSequentially(wx, urls, {
+        onProgress: function (current, total) {
+          wx.showLoading({ title: '保存 ' + current + '/' + total, mask: true });
+        }
+      });
       wx.hideLoading();
       this.setData({
         saving: false,
         showGuide: true,
-        guideTitle: successTitle + '（' + saved + ' 张）'
+        guideTitle: successTitle + '（' + res.savedCount + ' 张）'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
-      this.handleSaveError(err, saved, items.length);
+      this.handleSaveError(err.cause || err, err.savedCount || 0, items.length);
     }
   },
 

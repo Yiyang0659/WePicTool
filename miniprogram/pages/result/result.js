@@ -1,6 +1,7 @@
 // pages/result/result.js
 const { normalizeTaskGroups, GROUP_META, createMockTask } = require('../../utils/task');
 const { composeCard, DEFAULT_OPTIONS } = require('../../utils/cardComposer');
+const imageExporter = require('../../utils/imageExporter');
 
 const CHANGE_CATEGORY_OPTIONS = [
   { key: 'tops', label: '上衣组' },
@@ -684,24 +685,22 @@ Page({
   saveImagesSequentially: function (urls, successTitle, showGuide) {
     if (!urls || urls.length === 0) return;
     const that = this;
-    wx.showLoading({ title: `正在保存 1/${urls.length} 张...`, mask: true });
-    const saveNext = (index) => {
-      if (index >= urls.length) {
-        wx.hideLoading();
-        if (showGuide) {
-          // 保存后发送引导：改为自定义半屏浮层，引导回微信勾选「发送后合并展示」
-          that.setData({ showSendGuide: true });
-        } else {
-          wx.showToast({ title: successTitle || '保存完成', icon: 'success', duration: 2000 });
-        }
-        return;
+    imageExporter.saveImagesSequentially(wx, urls, {
+      onProgress: function (current, total) {
+        wx.showLoading({ title: `正在保存 ${current}/${total} 张...`, mask: true });
       }
-      wx.showLoading({ title: `正在保存 ${index + 1}/${urls.length} 张...`, mask: true });
-      that.downloadAndSaveToAlbum(urls[index])
-        .then(() => { saveNext(index + 1); })
-        .catch((err) => { wx.hideLoading(); that.handleSaveError(err, urls.slice(index)); });
-    };
-    saveNext(0);
+    }).then(function () {
+      wx.hideLoading();
+      if (showGuide) {
+        that.setData({ showSendGuide: true });
+      } else {
+        wx.showToast({ title: successTitle || '保存完成', icon: 'success', duration: 2000 });
+      }
+    }).catch(function (err) {
+      wx.hideLoading();
+      const remainUrls = urls.slice((err && err.nextIndex) || 0);
+      that.handleSaveError({ type: 'save_fail', error: (err && err.cause) || err }, remainUrls);
+    });
   },
 
   downloadAndSaveToAlbum: function (url) {

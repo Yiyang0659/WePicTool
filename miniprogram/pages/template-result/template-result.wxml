@@ -1,0 +1,84 @@
+<!-- pages/template-result/template-result.wxml -->
+<view class="result-page">
+  <view class="result-header">
+    <view class="result-title">趣味字画已生成</view>
+    <view class="result-source" wx:if="{{project.sourceText}}">“{{project.sourceText}}”</view>
+  </view>
+
+  <!-- 渲染加载中 -->
+  <view wx:if="{{rendering}}" class="render-loading-box">
+    <view class="loading-spinner"></view>
+    <view class="loading-text">正在生成高清卡片...</view>
+  </view>
+
+  <!-- 渲染失败重试 -->
+  <view wx:elif="{{renderFailed}}" class="render-failed-box">
+    <view class="failed-text">{{renderErrorMessage || '生成失败，请重试'}}</view>
+    <button class="btn-retry-render" bindtap="onRetryRender">重新生成</button>
+  </view>
+
+  <!-- 渲染成功卡片展示 -->
+  <view wx:else class="result-content">
+    <view class="stage-container">
+      <view class="stage-step-tag">{{currentIndex + 1}} / {{renderedCards.length}}</view>
+      <swiper class="result-swiper" current="{{currentIndex}}" bindchange="onSwiperChange">
+        <swiper-item wx:for="{{renderedCards}}" wx:key="sceneId" class="result-swiper-item">
+          <image class="rendered-card-img" src="{{item.url}}" mode="aspectFit" />
+        </swiper-item>
+      </swiper>
+    </view>
+
+    <!-- 底部操作按钮 -->
+    <view class="result-actions">
+      <button class="btn-preview-dark" bindtap="onPreviewStack">先滑着看看</button>
+      <button class="btn-edit-again" bindtap="onEditStack">自己改改</button>
+      <button class="btn-save-stack" bindtap="onSaveStack" loading="{{saving}}">
+        {{saveCursor > 0 ? ('继续保存（剩余 ' + (renderedCards.length - saveCursor) + ' 张）') : '按顺序保存'}}
+      </button>
+    </view>
+  </view>
+
+  <!-- 保存后四步发送引导浮层 -->
+  <view wx:if="{{showGuide}}" class="guide-mask" catchtouchmove="true">
+    <view class="guide-dialog">
+      <view class="guide-title">已按顺序保存到相册</view>
+      <view class="guide-sub">请按以下步骤在微信中发送：</view>
+
+      <view class="guide-steps">
+        <view class="guide-step-item">
+          <view class="step-num">1</view>
+          <view class="step-content">
+            <view class="step-bold">回微信聊天</view>
+            <view class="step-desc">打开你想发送的好友或群聊对话框</view>
+          </view>
+        </view>
+
+        <view class="guide-step-item">
+          <view class="step-num">2</view>
+          <view class="step-content">
+            <view class="step-bold">从最近图片按顺序全选</view>
+            <view class="step-desc">从相册第一张开始，按刚才保存的顺序勾选全部卡片</view>
+          </view>
+        </view>
+
+        <view class="guide-step-item">
+          <view class="step-num">3</view>
+          <view class="step-content">
+            <view class="step-bold">勾选“发送后合并展示”</view>
+            <view class="step-desc">选图完成后，在微信发送栏勾选合并展示选项</view>
+          </view>
+        </view>
+
+        <view class="guide-step-item">
+          <view class="step-num">4</view>
+          <view class="step-content">
+            <view class="step-bold">发送</view>
+            <view class="step-desc">点击发送，朋友点开即可滑着看你的心意</view>
+          </view>
+        </view>
+      </view>
+
+      <button class="btn-guide-close" bindtap="onCloseGuide">我知道了</button>
+    </view>
+  </view>
+</view>
