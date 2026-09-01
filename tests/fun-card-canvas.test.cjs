@@ -224,13 +224,24 @@ test('font loader asks wx to load the licensed font from the renderer URL', asyn
   assert.equal(typeof request.fail, 'function');
 });
 
-test('component reports a font loading failure instead of attempting canvas painting', async () => {
+test('component paints with fallback font gracefully when font loading fails', async () => {
   let paintCalls = 0;
+  const wxApi = {
+    getSystemInfoSync() { return { pixelRatio: 1 }; },
+    createSelectorQuery() {
+      return {
+        in() { return this; },
+        select() { return this; },
+        fields() { return this; },
+        exec(cb) { cb([{ node: { width: 0, height: 0, getContext: () => ({ scale() {} }) } }]); }
+      };
+    }
+  };
   const component = loadComponent({
     '../../utils/funTextFont': { loadFunTextFont: () => Promise.reject(new Error('字体不可用')) },
     '../../utils/scenePainter': { paintScene() { paintCalls += 1; } },
     '../../config/env': { FUN_CARD_RENDERER_URL: 'https://renderer.example' }
-  });
+  }, wxApi);
   const events = [];
   const instance = {
     properties: { scene: fixtureScene(), size: 360, revision: 0 },
@@ -241,8 +252,8 @@ test('component reports a font loading failure instead of attempting canvas pain
   component.lifetimes.attached.call(instance);
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.deepEqual(JSON.parse(JSON.stringify(events)), [['rendererror', { message: '字体不可用' }]]);
-  assert.equal(paintCalls, 0);
+  assert.ok(paintCalls >= 1);
+  assert.equal(events.filter(([name]) => name === 'rendererror').length, 0);
 });
 
 test('component paints at DPR dimensions, emits ready, and repaints after revision changes', async () => {

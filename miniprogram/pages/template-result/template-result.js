@@ -3,6 +3,7 @@
 const funTextProject = require('../../utils/funTextProject');
 const funCardRendererClient = require('../../utils/funCardRendererClient');
 const imageExporter = require('../../utils/imageExporter');
+const painter = require('../../utils/scenePainter');
 
 Page({
   data: {
@@ -58,12 +59,79 @@ Page({
       const res = await funCardRendererClient.requestRenderStack(wx, payload);
       this.applyRenderSuccess(project, res.cards);
     } catch (err) {
-      this.setData({
+      // 云端未连接或失败时，无缝切换为本地 Canvas 2D 离线导出
+      this.renderLocalCanvasStack(project);
+    }
+  },
+
+  renderLocalCanvasStack: function (project) {
+    const that = this;
+    const candidate = (project.candidates || []).find(function (c) {
+      return c.candidateId === project.selectedCandidateId;
+    });
+    const scenes = (candidate && candidate.editedScenes) || [];
+    if (!scenes.length) {
+      that.setData({
         rendering: false,
         renderFailed: true,
-        renderErrorMessage: (err && err.message) || '高清渲染失败，请重试'
+        renderErrorMessage: '未找到选中的场景数据'
       });
+      return;
     }
+
+    const query = wx.createSelectorQuery();
+    query.select('#funTextExporterCanvas').fields({ node: true, size: true }).exec(async function (res) {
+      const canvasNode = res && res[0] && res[0].node;
+      if (!canvasNode) {
+        that.setData({
+          rendering: false,
+          renderFailed: true,
+          renderErrorMessage: '高清画布初始化失败，请重试'
+        });
+        return;
+      }
+
+      try {
+        canvasNode.width = 1080;
+        canvasNode.height = 1080;
+        const ctx = canvasNode.getContext('2d');
+        const renderedCards = [];
+
+        for (let i = 0; i < scenes.length; i++) {
+          const scene = scenes[i];
+          ctx.clearRect(0, 0, 1080, 1080);
+          painter.paintScene(ctx, scene, 1080);
+
+          const tempFilePath = await new Promise(function (resolve, reject) {
+            wx.canvasToTempFilePath({
+              canvas: canvasNode,
+              width: 1080,
+              height: 1080,
+              destWidth: 1080,
+              destHeight: 1080,
+              fileType: 'png',
+              success: function (r) { resolve(r.tempFilePath); },
+              fail: reject
+            });
+          });
+
+          renderedCards.push({
+            sceneId: scene.sceneId,
+            role: scene.role,
+            order: i + 1,
+            url: tempFilePath
+          });
+        }
+
+        that.applyRenderSuccess(project, renderedCards);
+      } catch (error) {
+        that.setData({
+          rendering: false,
+          renderFailed: true,
+          renderErrorMessage: '本地生成失败: ' + ((error && error.message) || error)
+        });
+      }
+    });
   },
 
   applyRenderSuccess: function (project, cards) {

@@ -81,4 +81,7 @@
       <button class="btn-guide-close" bindtap="onCloseGuide">我知道了</button>
     </view>
   </view>
+
+  <!-- 本地高清渲染隐藏画布 -->
+  <canvas id="funTextExporterCanvas" type="2d" style="position: fixed; left: -9999px; top: -9999px; width: 1080px; height: 1080px;"></canvas>
 </view>

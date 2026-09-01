@@ -11,43 +11,61 @@ Component({
 
   lifetimes: {
     attached: function () {
-      this.loadFontAndPaint();
+      this.initCanvasAndPaint();
+    },
+    ready: function () {
+      this.initCanvasAndPaint();
     }
   },
 
   observers: {
     'scene, size, revision': function () {
-      if (this.fontReady) this.paintCurrentScene();
+      this.paintCurrentScene();
     }
   },
 
   methods: {
-    loadFontAndPaint: function () {
+    initCanvasAndPaint: function () {
       var component = this;
-      return font.loadFunTextFont(wx, env.FUN_CARD_RENDERER_URL).then(function () {
-        component.fontReady = true;
-        return component.paintCurrentScene();
-      }).catch(function (error) {
-        component.triggerEvent('rendererror', {
-          message: (error && error.message) || '手写字体加载失败'
+      if (!component._fontLoading && !component.fontReady) {
+        component._fontLoading = true;
+        font.loadFunTextFont(wx, env.FUN_CARD_RENDERER_URL).then(function () {
+          component.fontReady = true;
+          component._fontLoading = false;
+          return component.paintCurrentScene();
+        }).catch(function (error) {
+          component._fontLoading = false;
+          // 字体加载失败不中断界面显示，降级使用默认字体绘制
+          return component.paintCurrentScene();
         });
-      });
+      } else {
+        component.paintCurrentScene();
+      }
     },
 
-    paintCurrentScene: function () {
+    paintCurrentScene: function (retryCount) {
       var component = this;
       var scene = component.properties.scene;
       var size = Number(component.properties.size) || 360;
+      var attempt = Number(retryCount) || 0;
       if (!scene) return Promise.resolve();
+
       return new Promise(function (resolve, reject) {
         wx.createSelectorQuery().in(component).select('#cardCanvas').fields({ node: true, size: true }).exec(function (result) {
           var canvasInfo = result && result[0];
           if (!canvasInfo || !canvasInfo.node) {
+            if (attempt < 3) {
+              setTimeout(function () {
+                component.paintCurrentScene(attempt + 1).then(resolve).catch(reject);
+              }, 80);
+              return;
+            }
             reject(new Error('预览画布不可用'));
             return;
           }
           try {
-            var pixelRatio = Number(wx.getSystemInfoSync().pixelRatio) || 1;
+            var sys = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {};
+            var pixelRatio = Number(sys && sys.pixelRatio) || 1;
             var canvas = canvasInfo.node;
             canvas.width = size * pixelRatio;
             canvas.height = size * pixelRatio;

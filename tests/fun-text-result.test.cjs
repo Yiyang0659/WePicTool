@@ -78,10 +78,18 @@ function loadResultPage(wxApi, customDeps) {
     exporter = {};
   }
 
+  const assetRegistry = loadMiniProgramModule('miniprogram/config/assetRegistry.js');
+  const stylePacks = loadMiniProgramModule('miniprogram/config/stylePacks.js');
+  const painter = loadMiniProgramModule('miniprogram/utils/scenePainter.js', {
+    '../config/assetRegistry': assetRegistry,
+    '../config/stylePacks': stylePacks
+  });
+
   const deps = Object.assign({
     '../../utils/funTextProject': model,
     '../../utils/funCardRendererClient': client,
-    '../../utils/imageExporter': exporter
+    '../../utils/imageExporter': exporter,
+    '../../utils/scenePainter': painter
   }, customDeps || {});
 
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/template-result/template-result.js', deps, wxApi));
