@@ -22,6 +22,7 @@ function recordingContext(operations) {
     rotate(value) { operations.push(['rotate', value]); },
     fillRect(x, y, w, h) { operations.push(['fillRect', x, y, w, h]); },
     fillText(text, x, y) { operations.push(['fillText', text, x, y]); },
+    strokeText(text, x, y) { operations.push(['strokeText', text, x, y]); },
     beginPath() {},
     moveTo() {},
     lineTo() {},
@@ -48,7 +49,7 @@ function fixtureScene() {
   };
 }
 
-function loadComponent(dependencies) {
+function loadComponent(dependencies, wxApi = {}) {
   const filePath = path.join(__dirname, '..', 'miniprogram/components/fun-card-canvas/fun-card-canvas.js');
   const code = fs.readFileSync(filePath, 'utf8');
   let definition = null;
@@ -58,11 +59,52 @@ function loadComponent(dependencies) {
       if (Object.prototype.hasOwnProperty.call(dependencies, request)) return dependencies[request];
       return require(request);
     },
-    wx: {},
+    wx: wxApi,
     Promise,
     console
   }, { filename: filePath });
   return definition;
+}
+
+function recipeContext(operations) {
+  return {
+    save() { operations.push(['save']); },
+    restore() { operations.push(['restore']); },
+    scale(x, y) { operations.push(['scale', x, y]); },
+    translate(x, y) { operations.push(['translate', x, y]); },
+    rotate(value) { operations.push(['rotate', value]); },
+    fillRect(x, y, w, h) { operations.push(['fillRect', x, y, w, h]); },
+    fillText(text, x, y) { operations.push(['fillText', text, x, y]); },
+    strokeText(text, x, y) { operations.push(['strokeText', text, x, y]); },
+    beginPath() { operations.push(['beginPath']); },
+    moveTo(x, y) { operations.push(['moveTo', x, y]); },
+    lineTo(x, y) { operations.push(['lineTo', x, y]); },
+    bezierCurveTo() { operations.push(['bezierCurveTo']); },
+    quadraticCurveTo() { operations.push(['quadraticCurveTo']); },
+    arc() { operations.push(['arc']); },
+    closePath() { operations.push(['closePath']); },
+    fill() { operations.push(['fill']); },
+    stroke() { operations.push(['stroke']); },
+    set fillStyle(value) { operations.push(['fillStyle', value]); },
+    set strokeStyle(value) { operations.push(['strokeStyle', value]); },
+    set lineWidth(value) { operations.push(['lineWidth', value]); },
+    set font(value) { operations.push(['font', value]); },
+    set textAlign(value) { operations.push(['textAlign', value]); },
+    set textBaseline(value) { operations.push(['textBaseline', value]); }
+  };
+}
+
+function visualSignature(operations, startAt) {
+  return operations.slice(startAt).filter((operation) => [
+    'fillRect', 'fillText', 'strokeText', 'beginPath', 'moveTo', 'lineTo',
+    'bezierCurveTo', 'quadraticCurveTo', 'arc', 'closePath', 'fill', 'stroke'
+  ].includes(operation[0])).map((operation) => operation[0]).join('>');
+}
+
+function sceneWithOneLayer(layer) {
+  const scene = fixtureScene();
+  scene.layers = [layer];
+  return scene;
 }
 
 test('paints background before ordered layers at preview scale', () => {
@@ -94,6 +136,68 @@ test('does not send asset drawing requests for keys outside the registry', () =>
   });
 
   assert.equal(operations.some((operation) => operation[0] === 'asset'), false);
+});
+
+test('uses four deterministic and visibly distinct registered text effect recipes', () => {
+  const expectedSignatures = {
+    'marker-bold': 'strokeText>fillText',
+    'chalk-rough': 'fillText>fillText>fillText',
+    'collage-cutout': 'fillRect>fillText',
+    'stamp-shadow': 'fillText>fillText'
+  };
+  const signatures = {};
+
+  Object.entries(expectedSignatures).forEach(([effectKey, expected]) => {
+    const operations = [];
+    const layer = fixtureScene().layers[0];
+    layer.effectKey = effectKey;
+    painter.paintScene(recipeContext(operations), sceneWithOneLayer(layer), 1080);
+    const textStart = operations.findIndex((operation) => operation[0] === 'translate');
+    signatures[effectKey] = visualSignature(operations, textStart + 1);
+    assert.equal(signatures[effectKey], expected);
+  });
+
+  assert.equal(new Set(Object.values(signatures)).size, 4);
+});
+
+test('rejects an unregistered text effect without drawing its text', () => {
+  const operations = [];
+  const layer = fixtureScene().layers[0];
+  layer.effectKey = 'not-registered';
+
+  painter.paintScene(recipeContext(operations), sceneWithOneLayer(layer), 1080);
+
+  assert.equal(operations.some((operation) => operation[0] === 'fillText' || operation[0] === 'strokeText'), false);
+});
+
+test('uses a deterministic, distinct production recipe for every registered sticker', () => {
+  const expectedSignatures = {
+    sticker_0: 'beginPath>moveTo>bezierCurveTo>bezierCurveTo>closePath>fill',
+    sticker_1: 'beginPath>arc>arc>arc>arc>arc>fill',
+    sticker_2: 'beginPath>moveTo>lineTo>lineTo>lineTo>lineTo>lineTo>lineTo>lineTo>lineTo>lineTo>closePath>fill',
+    sticker_3: 'beginPath>arc>fill>beginPath>arc>arc>stroke',
+    sticker_4: 'beginPath>moveTo>lineTo>lineTo>lineTo>lineTo>lineTo>lineTo>lineTo>closePath>fill',
+    sticker_5: 'beginPath>moveTo>lineTo>lineTo>lineTo>closePath>fill>beginPath>moveTo>lineTo>stroke',
+    sticker_6: 'beginPath>moveTo>lineTo>lineTo>lineTo>lineTo>closePath>fill',
+    sticker_7: 'beginPath>arc>arc>arc>fill',
+    sticker_8: 'beginPath>moveTo>lineTo>stroke>beginPath>arc>fill',
+    sticker_9: 'beginPath>arc>fill>beginPath>moveTo>lineTo>moveTo>lineTo>moveTo>lineTo>moveTo>lineTo>stroke',
+    sticker_10: 'beginPath>bezierCurveTo>bezierCurveTo>closePath>fill>beginPath>moveTo>lineTo>stroke',
+    sticker_11: 'fillRect>fillRect>fillRect>fillRect>beginPath>moveTo>lineTo>lineTo>closePath>fill'
+  };
+  const signatures = {};
+
+  Object.entries(expectedSignatures).forEach(([assetKey, expected]) => {
+    const operations = [];
+    painter.paintScene(recipeContext(operations), sceneWithOneLayer({
+      id: assetKey, type: 'sticker', assetKey, x: 540, y: 540, rotation: 0, scale: 1
+    }), 1080);
+    const assetStart = operations.findIndex((operation) => operation[0] === 'translate');
+    signatures[assetKey] = visualSignature(operations, assetStart + 1);
+    assert.equal(signatures[assetKey], expected);
+  });
+
+  assert.equal(new Set(Object.values(signatures)).size, 12);
 });
 
 test('font loader rejects when the renderer URL is absent without asking wx to load a font', async () => {
@@ -139,6 +243,63 @@ test('component reports a font loading failure instead of attempting canvas pain
 
   assert.deepEqual(JSON.parse(JSON.stringify(events)), [['rendererror', { message: '字体不可用' }]]);
   assert.equal(paintCalls, 0);
+});
+
+test('component paints at DPR dimensions, emits ready, and repaints after revision changes', async () => {
+  const operations = [];
+  const context = recipeContext(operations);
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext(type) {
+      assert.equal(type, '2d');
+      return context;
+    }
+  };
+  let queries = 0;
+  const wxApi = {
+    getSystemInfoSync() { return { pixelRatio: 2 }; },
+    createSelectorQuery() {
+      return {
+        in(component) { assert.ok(component); return this; },
+        select(selector) { assert.equal(selector, '#cardCanvas'); return this; },
+        fields(options) { assert.deepEqual(JSON.parse(JSON.stringify(options)), { node: true, size: true }); return this; },
+        exec(callback) { queries += 1; callback([{ node: canvas, width: 360, height: 360 }]); }
+      };
+    }
+  };
+  const component = loadComponent({
+    '../../utils/funTextFont': { loadFunTextFont: () => Promise.resolve() },
+    '../../utils/scenePainter': painter,
+    '../../config/env': { FUN_CARD_RENDERER_URL: 'https://renderer.example' }
+  }, wxApi);
+  const events = [];
+  const instance = {
+    properties: { scene: fixtureScene(), size: 360, revision: 0 },
+    triggerEvent(name, detail) { events.push([name, detail]); }
+  };
+  Object.assign(instance, component.methods);
+
+  component.lifetimes.attached.call(instance);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(instance.fontReady, true);
+  assert.equal(canvas.width, 720);
+  assert.equal(canvas.height, 720);
+  assert.deepEqual(operations[0], ['scale', 2, 2]);
+  assert.deepEqual(JSON.parse(JSON.stringify(events)), [['ready', { sceneId: 'scene_1' }]]);
+  assert.equal(operations.filter((operation) => operation[0] === 'fillRect').length, 1);
+
+  instance.properties.revision = 1;
+  component.observers['scene, size, revision'].call(instance);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(queries, 2);
+  assert.equal(operations.filter((operation) => operation[0] === 'fillRect').length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(events)), [
+    ['ready', { sceneId: 'scene_1' }],
+    ['ready', { sceneId: 'scene_1' }]
+  ]);
 });
 
 test('canvas component declares its data inputs and a 2d canvas without system font fallbacks', () => {
