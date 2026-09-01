@@ -2,6 +2,7 @@
 // 趣味字画输入页：一句话 + 组合表达标签；本地归一化 → contentGuard → 创建规则项目 → 候选页。
 // 内置示例固定使用已审核文案，不调用云函数。
 const contentGuardClient = require('../../utils/contentGuardClient');
+const creativePlannerClient = require('../../utils/creativePlannerClient');
 const funTextProject = require('../../utils/funTextProject');
 
 const EXPRESSION_OPTIONS = [
@@ -55,11 +56,16 @@ Page({
     this.setData({ generating: true });
     try {
       await contentGuardClient.checkTextContent(wx, sourceText);
-      const project = funTextProject.createFunTextProject({
+      const brief = {
         sourceText: sourceText,
         expressionKey: this.data.expressionKey,
         now: Date.now()
-      });
+      };
+      const planRes = await creativePlannerClient.planCandidates(wx, brief);
+      const project = funTextProject.createFunTextProject(Object.assign({}, brief, {
+        candidates: planRes.candidates,
+        generationMode: planRes.source
+      }));
       this.navigateToCandidates(project);
     } catch (err) {
       if (err && err.code === 'CONTENT_UNSAFE') {

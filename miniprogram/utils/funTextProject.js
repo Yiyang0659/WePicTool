@@ -111,8 +111,26 @@ function createFunTextProject(input) {
   var value = input || {};
   var now = timestamp(value.now);
   var brief = creativeBrief.normalizeCreativeBrief(value);
-  var planned = planner.planRuleCandidates(brief);
-  var stylePackIds = matcher.matchStylePacks(planned.candidates, brief.variant);
+  var plannedCandidates = Array.isArray(value.candidates) && value.candidates.length === 3
+    ? value.candidates
+    : null;
+  var generationMode = value.generationMode || (plannedCandidates ? 'ai' : 'rules');
+  var candidates;
+
+  if (plannedCandidates) {
+    candidates = plannedCandidates.map(function (cand) {
+      if (cand.editedScenes && cand.stylePackId) return clone(cand);
+      var stylePackId = cand.stylePackId || 'pink-note-v1';
+      return createCandidate(cand, stylePackId);
+    });
+  } else {
+    var planned = planner.planRuleCandidates(brief);
+    var stylePackIds = matcher.matchStylePacks(planned.candidates, brief.variant);
+    generationMode = planned.generationMode;
+    candidates = planned.candidates.map(function (candidate, index) {
+      return createCandidate(candidate, stylePackIds[index]);
+    });
+  }
 
   return {
     projectId: value.projectId || ('funtext_' + now),
@@ -123,10 +141,8 @@ function createFunTextProject(input) {
       expressionKey: brief.expressionKey,
       variant: brief.variant
     },
-    generationMode: planned.generationMode,
-    candidates: planned.candidates.map(function (candidate, index) {
-      return createCandidate(candidate, stylePackIds[index]);
-    }),
+    generationMode: generationMode,
+    candidates: candidates,
     selectedCandidateId: '',
     renderStatus: 'draft',
     renderedCards: [],

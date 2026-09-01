@@ -8,9 +8,16 @@ const {
   createHttpServer
 } = require('./server');
 
-cloud.init(process.env.CLOUDBASE_ENV_ID ? { env: process.env.CLOUDBASE_ENV_ID } : {});
+const isLocalDev = !process.env.CLOUDBASE_ENV_ID;
+
+if (!isLocalDev) {
+  cloud.init({ env: process.env.CLOUDBASE_ENV_ID });
+}
 
 async function checkContent(content) {
+  if (isLocalDev) {
+    return { ok: true, code: 'OK' };
+  }
   try {
     const response = await cloud.openapi.security.msgSecCheck({ content });
     return response && Number(response.errCode) === 0
@@ -23,11 +30,15 @@ async function checkContent(content) {
 }
 
 async function uploadBuffer(buffer, cloudPath) {
+  if (isLocalDev) {
+    return { fileId: cloudPath, url: 'data:image/png;base64,' + buffer.toString('base64') };
+  }
   const result = await cloud.uploadFile({ cloudPath, fileContent: buffer });
   return { fileId: result.fileID, url: result.fileID };
 }
 
 async function deleteFile(fileId) {
+  if (isLocalDev) return;
   await cloud.deleteFile({ fileList: [fileId] });
 }
 

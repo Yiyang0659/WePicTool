@@ -139,7 +139,7 @@ function createHttpServer(options) {
   const fontPath = config.fontPath || DEFAULT_FONT_PATH;
   return http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://localhost');
-    if (request.method === 'GET' && url.pathname === '/font/LXGWMarkerGothic-Regular.ttf') {
+    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/font/LXGWMarkerGothic-Regular.ttf') {
       try {
         const stat = fs.statSync(fontPath);
         response.writeHead(200, {
@@ -149,6 +149,10 @@ function createHttpServer(options) {
           'access-control-allow-origin': '*',
           'cross-origin-resource-policy': 'cross-origin'
         });
+        if (request.method === 'HEAD') {
+          response.end();
+          return;
+        }
         fs.createReadStream(fontPath).pipe(response);
       } catch (error) {
         writeJson(response, 500, { ok: false, code: 'FONT_UNAVAILABLE' });

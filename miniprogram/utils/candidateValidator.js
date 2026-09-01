@@ -1,11 +1,13 @@
 var ALLOWED_ROLES = ['hook', 'build', 'misdirect', 'pause', 'reveal', 'ending'];
 
 function textLength(value) {
-  return Array.from(value).length;
+  return Array.from(value || '').length;
 }
 
-function validateCandidateSet(candidates, brief) {
+function validateCandidateSet(candidates, brief, options) {
   var errors = [];
+  var opts = options || {};
+  var isAi = Boolean(opts.isAi);
   var sourceText = brief && brief.sourceText;
 
   if (!Array.isArray(candidates) || candidates.length !== 3) {
@@ -55,8 +57,11 @@ function validateCandidateSet(candidates, brief) {
       }
       if (card.role === 'reveal') {
         revealCount += 1;
-        if (card.text !== sourceText) {
+        if (!isAi && card.text !== sourceText) {
           errors.push(label + ' reveal 必须保留原句');
+        }
+        if (!card.text) {
+          errors.push(label + ' reveal 不能为空');
         }
         if (textLength(card.text) > 40) {
           errors.push(label + ' reveal 文案不能超过 40 字');
@@ -64,7 +69,7 @@ function validateCandidateSet(candidates, brief) {
       } else if (textLength(card.text) > 12) {
         errors.push(label + ' 非 reveal 文案不能超过 12 字');
       }
-      if (cardIndex > 0 && card.text === candidate.cards[cardIndex - 1].text) {
+      if (cardIndex > 0 && card.text && card.text === candidate.cards[cardIndex - 1].text) {
         errors.push(label + ' 不能有连续相同文案');
       }
     });
@@ -77,7 +82,19 @@ function validateCandidateSet(candidates, brief) {
   return { valid: errors.length === 0, errors: errors };
 }
 
+function buildRepairPrompt(errors, rawOutput) {
+  var errorLines = (errors || []).map(function (err, idx) {
+    return (idx + 1) + '. ' + err;
+  }).join('\n');
+
+  return '你上一轮输出的 JSON 存在以下校验错误，请修正以下错误并重新输出完整的合法 JSON：\n' +
+    errorLines + '\n\n' +
+    '上一次输出内容：\n' + String(rawOutput || '').slice(0, 1000) + '\n\n' +
+    '严格要求：只输出修复后的纯 JSON，不要包含任何额外的自然语言解释。';
+}
+
 module.exports = {
   ALLOWED_ROLES: ALLOWED_ROLES,
-  validateCandidateSet: validateCandidateSet
+  validateCandidateSet: validateCandidateSet,
+  buildRepairPrompt: buildRepairPrompt
 };

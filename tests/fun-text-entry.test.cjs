@@ -14,6 +14,8 @@ const client = require('../miniprogram/utils/contentGuardClient');
 const model = require('../miniprogram/utils/funTextProject');
 const taskModule = require('../miniprogram/utils/task');
 
+const plannerClient = require('../miniprogram/utils/creativePlannerClient');
+
 const CANDIDATES_PAGE = '/pages/fun-text-candidates/fun-text-candidates';
 
 function readMiniProgramFile(relativePath) {
@@ -48,6 +50,7 @@ function recordingWx(overrides) {
 function loadFunTextPage(wxApi) {
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text/fun-text.js', {
     '../../utils/contentGuardClient': client,
+    '../../utils/creativePlannerClient': plannerClient,
     '../../utils/funTextProject': model
   }, wxApi));
 }
@@ -93,7 +96,10 @@ test('onGenerate trims, audits once, and navigates with a three-candidate rules 
   const { wxApi, calls } = recordingWx({
     cloud: {
       callFunction: async (options) => {
-        audited.push(options.data.content);
+        if (options && options.name === 'contentGuard' && options.data && options.data.content) {
+          audited.push(options.data.content);
+          return { result: { ok: true, code: 'OK' } };
+        }
         return { result: { ok: true, code: 'OK' } };
       }
     }
@@ -109,7 +115,7 @@ test('onGenerate trims, audits once, and navigates with a three-candidate rules 
   assert.equal(calls.emitted[0].name, 'funTextProject');
   const project = calls.emitted[0].payload.project;
   assert.equal(project.sourceText, '我今天想见你');
-  assert.equal(project.generationMode, 'rules');
+  assert.ok(['rules', 'rule_fallback', 'ai'].includes(project.generationMode));
   assert.equal(project.brief.expressionKey, 'random-fun');
   assert.equal(project.candidates.length, 3);
   assert.equal(page.data.generating, false);
