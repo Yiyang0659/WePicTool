@@ -1,0 +1,50 @@
+<!--pages/fun-text/fun-text.wxml-->
+<view class="fun-text-page">
+  <view class="fun-text-head">
+    <view class="fun-text-title-wrap">
+      <view class="fun-text-title">趣味字画</view>
+      <view class="fun-text-badge">开发中</view>
+    </view>
+    <view class="fun-text-sub">一句话，自动变成三套可滑卡片</view>
+  </view>
+
+  <!-- 一句话输入 -->
+  <view class="fun-text-input-card">
+    <textarea
+      class="fun-text-input"
+      value="{{inputText}}"
+      placeholder="比如：我今天想见你"
+      placeholder-class="fun-text-placeholder"
+      bindinput="onInput"
+      auto-height
+      maxlength="140"
+      cursor-spacing="20"
+    />
+    <view class="fun-text-count {{charCount > 40 ? 'fun-text-count-over' : ''}}">{{charCount}}/40</view>
+  </view>
+
+  <!-- 组合表达标签（可跳过，默认随机好玩） -->
+  <view class="fun-text-label">组合表达标签（可跳过）</view>
+  <scroll-view class="fun-text-tags" scroll-x enable-flex>
+    <view class="fun-text-tag-row">
+      <view
+        class="fun-text-tag {{expressionKey === item.key ? 'fun-text-tag-on' : ''}}"
+        wx:for="{{expressionOptions}}"
+        wx:key="key"
+        data-key="{{item.key}}"
+        bindtap="onSelectExpression"
+      >
+        <view class="fun-text-tag-name">{{item.label}}</view>
+        <view class="fun-text-tag-desc">{{item.desc}}</view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 主操作 -->
+  <view class="fun-text-cta {{generating ? 'fun-text-cta-disabled' : ''}}" bindtap="onGenerate">
+    {{generating ? '正在安全检查…' : '帮我变成一叠'}}
+  </view>
+
+  <!-- 内置示例入口 -->
+  <view class="fun-text-demo-link" bindtap="onTryDemo">没有想好？先滑一叠示例 →</view>
+</view>

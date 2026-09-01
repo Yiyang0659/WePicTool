@@ -1,5 +1,6 @@
 // pages/index/index.js
 const { createMockTask, isCloudPermissionError } = require('../../utils/task');
+const funTextProject = require('../../utils/funTextProject');
 
 // 确认页输出比例选项（与结果页 RATIO_OPTIONS 保持一致）
 const CONFIRM_RATIO_OPTIONS = [
@@ -60,6 +61,16 @@ const LAYERED_DEMO_ROWS = [
   }
 ];
 
+// 趣味字画首页示例：五张由 render-demo.js 用授权字体渲染的真实 PNG，
+// 顺序即「搞怪反转」pink-note-v1 候选的 hook → misdirect → pause → reveal → ending。
+const FUN_TEXT_DEMO_SLIDES = [
+  { src: '/assets/fun-text/demo/01.png' },
+  { src: '/assets/fun-text/demo/02.png' },
+  { src: '/assets/fun-text/demo/03.png' },
+  { src: '/assets/fun-text/demo/04.png' },
+  { src: '/assets/fun-text/demo/05.png' }
+];
+
 Page({
   data: {
     loading: false,
@@ -73,6 +84,9 @@ Page({
     // 首屏「朋友视角」仿真演示卡的轮播数据
     demoSlides: DEMO_SLIDES,
     layeredDemoRows: LAYERED_DEMO_ROWS,
+    // 趣味字画真实示例（开发中）：可滑五张，滑到末张展示 CTA
+    funTextDemoSlides: FUN_TEXT_DEMO_SLIDES,
+    funTextDemoIndex: 0,
     // 玩法模板（即将上线）：数据驱动渲染，点击统一走 onComingSoon
     comingModules: [
       { key: 'film', name: '胶片相册', emoji: '🎞️', desc: '把生活照做成统一画册' },
@@ -88,6 +102,29 @@ Page({
 
   onCreateLayeredDressup: function () {
     wx.navigateTo({ url: '/pages/dressup/dressup?mode=upload' });
+  },
+
+  // 趣味字画示例滑动进度：滑到最后一张后展示 CTA
+  onFunTextDemoChange: function (event) {
+    const current = Number(event.detail && event.detail.current);
+    if (Number.isFinite(current)) {
+      this.setData({ funTextDemoIndex: current });
+    }
+  },
+
+  // 趣味字画内置示例：固定已审核文案，不调用云函数，直接带入候选页
+  onTryFunTextDemo: function () {
+    const project = funTextProject.createFunTextProject({
+      sourceText: '我今天想见你',
+      expressionKey: 'funny-reversal',
+      now: Date.now()
+    });
+    wx.navigateTo({
+      url: '/pages/fun-text-candidates/fun-text-candidates',
+      success: function (navRes) {
+        navRes.eventChannel.emit('funTextProject', { project: project });
+      }
+    });
   },
 
   // 即将上线模块统一提示

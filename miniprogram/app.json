@@ -5,7 +5,8 @@
     "pages/profile/profile",
     "pages/result/result",
     "pages/preview/preview",
-    "pages/dressup/dressup"
+    "pages/dressup/dressup",
+    "pages/fun-text/fun-text"
   ],
   "window": {
     "backgroundTextStyle": "light",

@@ -876,3 +876,103 @@
   text-align: center;
   line-height: 1.5;
 }
+
+/* ===== 趣味字画真实示例（开发中） ===== */
+.fun-text-demo-card {
+  margin-bottom: 24rpx;
+  padding: 26rpx;
+  border-radius: 26rpx;
+  background: linear-gradient(160deg, #fff0f5, #ffe9ef);
+  border: 2rpx solid #ffd3e2;
+}
+
+.fun-text-demo-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.fun-text-demo-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.fun-text-demo-title {
+  font-size: 29rpx;
+  font-weight: 750;
+  color: #26211f;
+}
+
+.fun-text-demo-badge {
+  padding: 5rpx 12rpx;
+  border-radius: 999rpx;
+  font-size: 18rpx;
+  color: #e0447c;
+  background: #ffffff;
+  border: 2rpx solid #ffc9dd;
+}
+
+.fun-text-demo-sub {
+  margin-top: 6rpx;
+  font-size: 21rpx;
+  color: #8a7f7b;
+}
+
+.fun-text-demo-tip {
+  padding: 7rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #e0447c;
+  background: #ffffff;
+  box-shadow: 0 4rpx 12rpx rgba(243, 92, 140, 0.14);
+  flex-shrink: 0;
+}
+
+.fun-text-demo-swiper {
+  width: 100%;
+  height: 640rpx;
+  border-radius: 22rpx;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.fun-text-demo-image {
+  width: 100%;
+  height: 100%;
+}
+
+.fun-text-demo-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18rpx;
+  min-height: 56rpx;
+}
+
+.fun-text-demo-indicator {
+  font-size: 22rpx;
+  color: #b08f9c;
+  font-variant-numeric: tabular-nums;
+}
+
+.fun-text-demo-hint {
+  font-size: 22rpx;
+  color: #b08f9c;
+}
+
+.fun-text-demo-cta {
+  padding: 14rpx 30rpx;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #f35c8c, #f07856);
+  box-shadow: 0 10rpx 22rpx rgba(243, 92, 140, 0.28);
+}
+
+.fun-text-demo-cta:active {
+  opacity: 0.88;
+}

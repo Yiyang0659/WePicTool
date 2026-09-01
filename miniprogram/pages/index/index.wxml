@@ -40,6 +40,43 @@
       <view class="layered-demo-caption">头像、上衣、下装、鞋子各发一叠，四组互不影响</view>
     </view>
 
+    <!-- 2.5 趣味字画真实示例（开发中）：五张授权字体渲染的真实 PNG，滑到最后一张出现 CTA -->
+    <view class="fun-text-demo-card">
+      <view class="fun-text-demo-head">
+        <view class="fun-text-demo-copy">
+          <view class="fun-text-demo-title-wrap">
+            <view class="fun-text-demo-title">趣味字画</view>
+            <view class="fun-text-demo-badge">开发中</view>
+          </view>
+          <view class="fun-text-demo-sub">一句话变成三套可滑卡片</view>
+        </view>
+        <view class="fun-text-demo-tip">滑一下看看</view>
+      </view>
+      <swiper
+        class="fun-text-demo-swiper"
+        current="{{funTextDemoIndex}}"
+        bindchange="onFunTextDemoChange"
+      >
+        <swiper-item wx:for="{{funTextDemoSlides}}" wx:key="src" wx:for-item="slide">
+          <image
+            class="fun-text-demo-image"
+            src="{{slide.src}}"
+            mode="aspectFit"
+            bindtap="onTryFunTextDemo"
+          />
+        </swiper-item>
+      </swiper>
+      <view class="fun-text-demo-foot">
+        <view class="fun-text-demo-indicator">{{funTextDemoIndex + 1}} / {{funTextDemoSlides.length}}</view>
+        <view
+          class="fun-text-demo-cta"
+          wx:if="{{funTextDemoIndex >= funTextDemoSlides.length - 1}}"
+          bindtap="onTryFunTextDemo"
+        >把你的话也变成一叠 →</view>
+        <view class="fun-text-demo-hint" wx:else>左右滑动，看看这叠怎么演</view>
+      </view>
+    </view>
+
     <!-- 3. 旗舰主卡 -->
     <view class="hero-card">
       <view class="hero-icon">🪄</view>

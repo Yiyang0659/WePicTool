@@ -267,7 +267,8 @@ test('homepage flagship actions navigate to demo and upload dressup modes', () =
   const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
   const urls = [];
   const page = loadMiniProgramPage('miniprogram/pages/index/index.js', {
-    '../../utils/task': taskUtils
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
   }, {
     navigateTo(options) { urls.push(options.url); }
   });
