@@ -48,12 +48,28 @@ function loadMiniProgramPage(relativePath, dependencies = {}, wxOverrides = {}) 
   return definition;
 }
 
+function setNestedValue(target, keyPath, value) {
+  const parts = keyPath.replace(/\[(\w+)\]/g, '.$1').split('.');
+  let current = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (!(part in current) || typeof current[part] !== 'object' || current[part] === null) {
+      current[part] = /^\d+$/.test(parts[i + 1]) ? [] : {};
+    }
+    current = current[part];
+  }
+  current[parts[parts.length - 1]] = value;
+}
+
 function instantiatePage(definition) {
   const instance = Object.assign({}, definition);
   instance.data = plain(definition.data || {});
   instance.setData = function (updates) {
     Object.keys(updates || {}).forEach((key) => {
       instance.data[key] = updates[key];
+      if (key.includes('.') || key.includes('[')) {
+        setNestedValue(instance.data, key, updates[key]);
+      }
     });
   };
   return instance;

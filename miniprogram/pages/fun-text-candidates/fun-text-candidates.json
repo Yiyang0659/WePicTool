@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "挑选一套",
+  "usingComponents": {
+    "fun-card-canvas": "../../components/fun-card-canvas/fun-card-canvas"
+  }
+}

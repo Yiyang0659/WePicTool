@@ -1,0 +1,83 @@
+<!-- pages/fun-text-candidates/fun-text-candidates.wxml -->
+<view class="candidates-page">
+  <view class="candidates-header">
+    <view class="candidates-title">为你挑了三套表达</view>
+    <view class="candidates-source" wx:if="{{project.sourceText}}">“{{project.sourceText}}”</view>
+    <view class="candidates-hint">左右滑动卡片查看完整滑动效果</view>
+  </view>
+
+  <view wx:if="{{serverPreviewFailed}}" class="preview-error-banner" bindtap="onRetryPreview">
+    <text class="preview-error-text">手写预览暂不可用，点此重试</text>
+  </view>
+
+  <view class="candidates-list">
+    <view
+      wx:for="{{candidates}}"
+      wx:key="candidateId"
+      class="candidate-card"
+    >
+      <view class="candidate-meta">
+        <view class="candidate-title-wrap">
+          <text class="candidate-tag">{{index === 0 ? '方案 A' : (index === 1 ? '方案 B' : '方案 C')}}</text>
+          <text class="candidate-name">{{item.title}}</text>
+        </view>
+        <view class="candidate-step">{{item.currentIndex + 1}} / {{item.cardCount}}</view>
+      </view>
+
+      <view class="candidate-stage">
+        <swiper
+          class="candidate-swiper"
+          current="{{item.currentIndex}}"
+          data-index="{{index}}"
+          data-candidate-id="{{item.candidateId}}"
+          bindchange="onSwipeCandidate"
+        >
+          <swiper-item
+            wx:for="{{item.editedScenes}}"
+            wx:for-item="scene"
+            wx:for-index="sceneIdx"
+            wx:key="sceneId"
+            class="swiper-card-item"
+          >
+            <image
+              wx:if="{{item.fallbackImages && item.fallbackImages[sceneIdx]}}"
+              class="card-preview-image"
+              src="{{item.fallbackImages[sceneIdx]}}"
+              mode="aspectFit"
+            />
+            <fun-card-canvas
+              wx:elif="{{sceneIdx >= item.currentIndex - 1 && sceneIdx <= item.currentIndex + 1}}"
+              scene="{{scene}}"
+              size="{{300}}"
+              bindrendererror="onCanvasError"
+            />
+            <view wx:else class="card-empty-slot"></view>
+          </swiper-item>
+        </swiper>
+      </view>
+
+      <view class="candidate-actions">
+        <button
+          class="btn-use"
+          data-candidate-id="{{item.candidateId}}"
+          data-index="{{index}}"
+          bindtap="onUseCandidate"
+        >用这套</button>
+        <button
+          class="btn-edit"
+          data-candidate-id="{{item.candidateId}}"
+          data-index="{{index}}"
+          bindtap="onEditCandidate"
+        >自己改改</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="candidates-footer">
+    <button
+      class="btn-regenerate"
+      bindtap="onRegenerate"
+      loading="{{regenerating}}"
+    >再来三套</button>
+  </view>
+</view>
