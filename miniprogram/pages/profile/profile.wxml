@@ -20,7 +20,7 @@
   <view class="tip-card">
     <text class="tip-icon">💡</text>
     <view class="tip-text">
-      <text class="tip-strong">大字滑卡、剧情滑卡</text>等更多玩法陆续上线，敬请期待
+      <text class="tip-strong">趣味字画</text>（开发中：一句话自动变成三套可滑卡片）与更多玩法陆续上线，敬请期待
     </view>
   </view>
 
@@ -125,7 +125,7 @@
       <view class="about-name">滑一叠</view>
       <view class="about-version">版本 {{version}}</view>
       <view class="about-desc">
-        滑一叠是一个微信叠图玩法生成器。选择衣服、裤子、鞋子照片后，AI 自动分类抠图、生成白底编号卡片；保存后回微信「合并发送」给朋友，朋友左右滑动就能帮你挑穿搭。大字滑卡、剧情滑卡等更多玩法陆续上线。
+        滑一叠是一个微信叠图玩法生成器。选择衣服、裤子、鞋子照片后，AI 自动分类抠图、生成白底编号卡片；保存后回微信「合并发送」给朋友，朋友左右滑动就能帮你挑穿搭。趣味字画（一句话自动变成三套可滑卡片，开发中）与更多玩法陆续上线。
       </view>
       <view class="about-close" bindtap="onCloseAbout">我知道了</view>
     </view>

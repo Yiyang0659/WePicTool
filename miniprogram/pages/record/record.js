@@ -15,14 +15,15 @@ Page({
     // 玩法类型元信息：未来新玩法写入带 type 的记录后，分类 tab 自动点亮
     TYPE_META: {
       outfit: { label: '穿搭叠图', emoji: '👕' },
+      funtext: { label: '趣味字画', emoji: '🎨' },
+      dressup: { label: '滑滑换装', emoji: '👠' },
       bigtext: { label: '大字滑卡', emoji: '🔤' },
       story: { label: '剧情滑卡', emoji: '🎬' },
       blindbox: { label: '盲盒抽卡', emoji: '🎁' },
       puzzle: { label: '拼图揭秘', emoji: '🧩' },
       pack: { label: '资料打包', emoji: '🗂️' },
       animate: { label: '翻页动画', emoji: '🎞️' },
-      combo: { label: '成套搭配', emoji: '🧥' },
-      dressup: { label: '滑滑换装', emoji: '👠' }
+      combo: { label: '成套搭配', emoji: '🧥' }
     },
     typeTabs: [{ type: 'all', label: '全部', emoji: '' }],
     activeType: 'all',
@@ -190,7 +191,52 @@ Page({
   onViewRecord: function (e) {
     const recordId = e.currentTarget.dataset.recordid;
     const record = this.data.records.find(r => r.recordId === recordId);
-    if (!record || !record.taskSnapshot) {
+    if (!record) {
+      wx.showToast({ title: '记录未找到', icon: 'none' });
+      return;
+    }
+
+    if (record.recordType === 'funtext') {
+      const project = (record.taskSnapshot && record.taskSnapshot.projectSnapshot) || record.projectSnapshot;
+      if (!project) {
+        wx.showToast({ title: '字画项目数据已失效', icon: 'none' });
+        return;
+      }
+      wx.navigateTo({
+        url: '/pages/template-result/template-result',
+        success: function (navRes) {
+          navRes.eventChannel.emit('funTextProject', { project: project });
+          if (record.taskSnapshot) {
+            navRes.eventChannel.emit('acceptTaskData', { task: record.taskSnapshot });
+          }
+        }
+      });
+      return;
+    }
+
+    if (record.recordType === 'bigtext') {
+      wx.showModal({
+        title: '旧版记录提示',
+        content: '该记录为旧版大字滑卡，现已全面升级为全新趣味字画。是否前往体验全新趣味字画？',
+        confirmText: '去体验',
+        cancelText: '取消',
+        success: function (res) {
+          if (res.confirm) {
+            wx.navigateTo({ url: '/pages/fun-text/fun-text' });
+          }
+        }
+      });
+      return;
+    }
+
+    if (record.recordType === 'dressup') {
+      wx.navigateTo({
+        url: '/pages/dressup/dressup?mode=edit'
+      });
+      return;
+    }
+
+    if (!record.taskSnapshot) {
       wx.showToast({ title: '记录数据不完整', icon: 'none' });
       return;
     }
@@ -209,7 +255,19 @@ Page({
   onRegenerate: function (e) {
     const recordId = e.currentTarget.dataset.recordid;
     const record = this.data.records.find(r => r.recordId === recordId);
-    if (!record || !record.sourceImages || record.sourceImages.length === 0) {
+    if (!record) return;
+
+    if (record.recordType === 'funtext' || record.recordType === 'bigtext') {
+      wx.navigateTo({ url: '/pages/fun-text/fun-text' });
+      return;
+    }
+
+    if (record.recordType === 'dressup') {
+      wx.navigateTo({ url: '/pages/dressup/dressup?mode=demo' });
+      return;
+    }
+
+    if (!record.sourceImages || record.sourceImages.length === 0) {
       wx.showToast({ title: '原图信息已丢失', icon: 'none' });
       return;
     }
@@ -218,9 +276,10 @@ Page({
       url: `/pages/result/result?taskId=${record.taskSnapshot.taskId || 'regenerate'}`,
       success: function (navRes) {
         // 使用原始图片重新生成 mock 任务
-        const task = createMockTask(record.sourceImages);
+        const mockTask = createMockTask(record.sourceImages);
         navRes.eventChannel.emit('acceptTaskData', {
-          task: task
+          task: mockTask,
+          isLocalMock: true
         });
       }
     });
