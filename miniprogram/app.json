@@ -7,7 +7,8 @@
     "pages/preview/preview",
     "pages/dressup/dressup",
     "pages/fun-text/fun-text",
-    "pages/fun-text-candidates/fun-text-candidates"
+    "pages/fun-text-candidates/fun-text-candidates",
+    "pages/fun-text-editor/fun-text-editor"
   ],
   "window": {
     "backgroundTextStyle": "light",

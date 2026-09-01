@@ -1,0 +1,112 @@
+<!-- pages/fun-text-editor/fun-text-editor.wxml -->
+<view class="editor-page">
+  <!-- 当前卡片画布 -->
+  <view class="editor-stage">
+    <fun-card-canvas
+      wx:if="{{currentScene}}"
+      scene="{{currentScene}}"
+      size="{{320}}"
+      revision="{{canvasRevision}}"
+    />
+  </view>
+
+  <!-- 1. 调整顺序 / 缩略图卡片序列 -->
+  <view class="editor-section">
+    <view class="section-header">
+      <text class="section-title">调整顺序</text>
+      <text class="section-hint">点击选中卡片，首张为微信封面</text>
+    </view>
+    <scroll-view class="cards-scroll" scroll-x="true">
+      <view class="cards-strip">
+        <view
+          wx:for="{{scenes}}"
+          wx:key="sceneId"
+          class="card-thumb-item {{index === currentCardIndex ? 'thumb-active' : ''}}"
+          data-index="{{index}}"
+          bindtap="onSelectCard"
+        >
+          <view class="thumb-badge {{index === 0 ? 'badge-cover' : ''}}">
+            {{index === 0 ? '微信封面' : (index + 1)}}
+          </view>
+          <view class="thumb-text">{{item.layers[0].text || '……'}}</view>
+          <view class="thumb-order-controls" wx:if="{{index === currentCardIndex}}">
+            <view
+              wx:if="{{index > 0}}"
+              class="btn-order-arrow"
+              data-index="{{index}}"
+              catchtap="onMoveCardLeft"
+            >‹</view>
+            <view
+              wx:if="{{index < scenes.length - 1}}"
+              class="btn-order-arrow"
+              data-index="{{index}}"
+              catchtap="onMoveCardRight"
+            >›</view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 2. 改文字 -->
+  <view class="editor-section">
+    <view class="section-header">
+      <text class="section-title">改文字</text>
+      <text class="section-hint">仅修改当前卡（第 {{currentCardIndex + 1}} 张）</text>
+    </view>
+    <view class="edit-text-row" bindtap="onStartEditText">
+      <view class="edit-text-preview">
+        {{currentScene.layers[0].text ? currentScene.layers[0].text : '（此卡为纯涂鸦停顿，点此添加文字）'}}
+      </view>
+      <view class="edit-text-action">改文字 ✎</view>
+    </view>
+  </view>
+
+  <!-- 3. 换整叠风格 -->
+  <view class="editor-section">
+    <view class="section-header">
+      <text class="section-title">换整叠风格</text>
+      <text class="section-hint">整叠风格统一更换</text>
+    </view>
+    <view class="style-packs-row">
+      <view
+        wx:for="{{stylePacks}}"
+        wx:key="id"
+        class="style-pack-chip {{item.id === selectedCandidate.stylePackId ? 'style-chip-active' : ''}}"
+        data-style-pack-id="{{item.id}}"
+        bindtap="onSelectStylePack"
+      >
+        <view class="style-color-dot" style="background: {{item.color || '#fff'}};"></view>
+        <text class="style-name">{{item.name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 底部操作栏 -->
+  <view class="editor-footer">
+    <button class="btn-confirm-edits" bindtap="onConfirmEdits">完成，制作这叠</button>
+  </view>
+
+  <!-- 文字修改弹窗 -->
+  <view wx:if="{{editingTextModalVisible}}" class="modal-mask" catchtouchmove="true">
+    <view class="modal-dialog">
+      <view class="modal-title">修改第 {{currentCardIndex + 1}} 张文字</view>
+      <view class="modal-input-wrap">
+        <textarea
+          class="modal-textarea"
+          value="{{editingText}}"
+          maxlength="{{maxCharCount}}"
+          placeholder="请输入本卡文字"
+          bindinput="onInputEditText"
+        />
+        <view class="modal-counter {{editingCharCount > maxCharCount ? 'counter-over' : ''}}">
+          {{editingCharCount}} / {{maxCharCount}}
+        </view>
+      </view>
+      <view class="modal-actions">
+        <button class="btn-modal-cancel" bindtap="onCancelEditText">取消</button>
+        <button class="btn-modal-confirm" bindtap="onConfirmEditText">确定</button>
+      </view>
+    </view>
+  </view>
+</view>
