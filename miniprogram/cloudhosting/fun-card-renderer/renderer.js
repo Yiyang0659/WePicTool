@@ -1,0 +1,131 @@
+'use strict';
+
+const path = require('node:path');
+const { drawProceduralAsset } = require('./drawAssets');
+
+const SCENE_SIZE = 1080;
+const PREVIEW_SIZE = 360;
+const FINAL_SIZE = 1080;
+const FONT_FAMILY = 'LXGWMarkerGothic';
+let fontRegistered = false;
+
+function registerFont(GlobalFonts) {
+  if (fontRegistered) return;
+  const fontPath = path.join(__dirname, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
+  if (!GlobalFonts.registerFromPath(fontPath, FONT_FAMILY)) {
+    throw new Error('licensed font registration failed');
+  }
+  fontRegistered = true;
+}
+
+function paintText(context, layer, ratio) {
+  const lines = layer.lines;
+  const effectKey = layer.effectKey || 'marker-bold';
+  context.save();
+  context.translate(layer.x * ratio, layer.y * ratio);
+  context.rotate((layer.rotation || 0) * Math.PI / 180);
+  context.scale(layer.scale || 1, layer.scale || 1);
+  context.font = String(layer.fontSize * ratio) + 'px ' + FONT_FAMILY;
+  context.textAlign = layer.align;
+  context.textBaseline = 'middle';
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
+  const offset = (lines.length - 1) * layer.lineHeight * ratio / 2;
+  lines.forEach((line, index) => {
+    const y = index * layer.lineHeight * ratio - offset;
+    if (effectKey === 'marker-bold') {
+      context.strokeStyle = layer.color;
+      context.lineWidth = Math.max(2, layer.fontSize * ratio * 0.075);
+      context.strokeText(line, 0, y);
+      context.fillStyle = layer.color;
+      context.fillText(line, 0, y);
+    } else if (effectKey === 'chalk-rough') {
+      context.fillStyle = layer.color;
+      context.fillText(line, -1.5 * ratio, y + ratio);
+      context.fillText(line, 1.5 * ratio, y - ratio);
+      context.fillText(line, 0, y);
+    } else if (effectKey === 'collage-cutout') {
+      const width = Math.max(layer.fontSize * ratio, Array.from(line).length * layer.fontSize * ratio * 1.08);
+      const height = layer.lineHeight * ratio * 0.78;
+      context.fillStyle = '#FFFDF7';
+      context.fillRect(-width / 2, y - height / 2, width, height);
+      context.fillStyle = layer.color;
+      context.fillText(line, 0, y);
+    } else if (effectKey === 'stamp-shadow') {
+      context.fillStyle = '#8F4562';
+      context.fillText(line, 5 * ratio, y + 5 * ratio);
+      context.fillStyle = layer.color;
+      context.fillText(line, 0, y);
+    }
+  });
+  context.restore();
+}
+
+function paintAsset(context, layer, ratio) {
+  context.save();
+  context.translate(layer.x * ratio, layer.y * ratio);
+  context.rotate((layer.rotation || 0) * Math.PI / 180);
+  context.scale((layer.scale || 1) * ratio, (layer.scale || 1) * ratio);
+  drawProceduralAsset(context, layer);
+  context.restore();
+}
+
+function createPngMaker() {
+  const { createCanvas, GlobalFonts } = require('@napi-rs/canvas');
+  registerFont(GlobalFonts);
+  return async function makePng(scene, size) {
+    if (size !== PREVIEW_SIZE && size !== FINAL_SIZE) throw new Error('unsupported render size');
+    const ratio = size / SCENE_SIZE;
+    const canvas = createCanvas(size, size);
+    const context = canvas.getContext('2d');
+    context.fillStyle = scene.background.color;
+    context.fillRect(0, 0, size, size);
+    scene.layers.forEach((layer) => {
+      if (layer.type === 'text') paintText(context, layer, ratio);
+      else paintAsset(context, layer, ratio);
+    });
+    return canvas.toBuffer('image/png');
+  };
+}
+
+function createSceneRenderer(dependencies) {
+  const deps = dependencies || {};
+  return async function renderScenes(scenes, job) {
+    const expectedSize = job && job.kind === 'preview' ? PREVIEW_SIZE : FINAL_SIZE;
+    if (!job || !['preview', 'final'].includes(job.kind) || job.size !== expectedSize) {
+      throw new Error('invalid render job');
+    }
+    const uploaded = [];
+    try {
+      for (const scene of scenes) {
+        const buffer = await deps.makePng(scene, job.size);
+        if (!Buffer.isBuffer(buffer)) throw new Error('PNG renderer returned no buffer');
+        const cloudPath = [
+          'funtext', job.projectId, job.candidateId, job.kind, scene.order + '.png'
+        ].join('/');
+        const stored = await deps.uploadBuffer(buffer, cloudPath, { scene, job });
+        if (!stored || typeof stored.fileId !== 'string' || !stored.fileId || typeof stored.url !== 'string' || !stored.url) {
+          throw new Error('storage returned no file URL');
+        }
+        uploaded.push({
+          sceneId: scene.sceneId,
+          order: scene.order,
+          fileId: stored.fileId,
+          url: stored.url
+        });
+      }
+      return uploaded;
+    } catch (error) {
+      await Promise.allSettled(uploaded.map((card) => Promise.resolve().then(() => deps.deleteFile(card.fileId))));
+      throw error;
+    }
+  };
+}
+
+module.exports = {
+  SCENE_SIZE,
+  PREVIEW_SIZE,
+  FINAL_SIZE,
+  createPngMaker,
+  createSceneRenderer
+};

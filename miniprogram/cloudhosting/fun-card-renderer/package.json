@@ -1,0 +1,18 @@
+{
+  "name": "wepictool-fun-card-renderer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test ../../../tests/fun-card-renderer.test.cjs"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.78",
+    "wx-server-sdk": "^4.0.2"
+  }
+}

@@ -14,6 +14,7 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换�
 
 - **首页选图与压缩**：支持选择 1–9 张衣物/鞋子图片，上传前自动进行等比压缩（最长边不超过 1600px）。
 - **分层云换装（功能分支）**：支持内置纸娃娃素材直接试玩或按部位上传，按头像/发型、上衣、下装、鞋子四组独立排序、预览和保存；真机验收尚未完成。
+- **趣味字画渲染底座（功能分支）**：独立 Node 20 云托管服务对 1080 场景执行白名单校验和二次内容审核，使用授权字体确定性输出 360 预览图或 1080 最终 PNG；尚未部署或接入用户页面。
 - **本地/云端双模式**：未配置云环境时自动启用本地 Mock 预览模式；配置后走云存储与云函数链路。
 - **内容安全防御门**：集成 `contentGuard` 云函数与微信安全接口，对文本与图片进行合规安全审查。
 - **AI 智能分类与抠图**：`processOutfit` 云函数接入阿里云 DashScope，使用 `qwen-vl-plus` 进行品类识别（上衣/下装/鞋子/其他），使用 `qwen-image-edit-plus` 进行主体抠图。
@@ -59,6 +60,12 @@ npm run dev
 
 # 7. 构建 Vite 演示应用
 npm run build
+
+# 8. 运行趣味字画云托管渲染器测试
+npm --prefix miniprogram/cloudhosting/fun-card-renderer test
+
+# 9. 构建趣味字画 Node 20 云托管镜像（需本机 Docker）
+docker build -t wepictool-fun-card-renderer miniprogram/cloudhosting/fun-card-renderer
 ```
 
 ---
@@ -86,6 +93,8 @@ WePicTool/
 │   ├── cloudfunctions/               # 微信云开发云函数
 │   │   ├── processOutfit/            # 穿搭 AI 分类 (qwen-vl-plus) 与抠图 (qwen-image-edit-plus)
 │   │   └── contentGuard/             # 内容安全审查云函数 (msgSecCheck)
+│   ├── cloudhosting/
+│   │   └── fun-card-renderer/         # Node 20 趣味字画预览/高清 PNG、字体与二次审核服务
 │   └── utils/                        # 前端核心工具库
 │       ├── task.js                   # 任务模型、Mock 数据、叠图能力 (buildSendability) 判定
 │       ├── layeredDressup.js          # 分层云换装项目模型与编辑规则
@@ -140,7 +149,8 @@ WePicTool/
 3. 在微信开发者工具中开通云开发环境，获取 **环境 ID**。
 4. 在 `miniprogram/config/env.js` 中填入 `CLOUD_ENV_ID`。
 5. 分别右键 `miniprogram/cloudfunctions/` 下的 `processOutfit` 和 `contentGuard`，选择“上传并部署：云端安装依赖”。
-6. 重新编译小程序，选择图片后即可体验真实云存储上传、AI 分类抠图与安全审核链路。
+6. 需要联调趣味字画时，从 `miniprogram/cloudhosting/fun-card-renderer/` 的 Dockerfile 部署 Node 20 云托管服务，授予内容安全与云存储权限，并把 HTTPS 服务地址写入 `miniprogram/config/env.js` 的 `FUN_CARD_RENDERER_URL`；服务未部署时不要填写占位地址。
+7. 重新编译小程序，选择图片后即可体验真实云存储上传、AI 分类抠图与安全审核链路；趣味字画仍需后续页面任务接入后才能从用户入口联调。
 
 ---
 
