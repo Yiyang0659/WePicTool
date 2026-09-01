@@ -108,9 +108,34 @@ if (exists('miniprogram/config/env.js')) {
   if (/CLOUD_ENV_ID\s*=\s*['"]\s*['"]/.test(envJs)) {
     warnings.push('miniprogram/config/env.js 未填写 CloudBase 环境 ID；当前会启用本地预览模式。');
   }
+  if (!envJs.includes('FUN_CARD_RENDERER_URL')) {
+    errors.push('miniprogram/config/env.js 缺少 FUN_CARD_RENDERER_URL 配置声明。');
+  } else if (/FUN_CARD_RENDERER_URL\s*=\s*['"]\s*['"]/.test(envJs)) {
+    warnings.push('miniprogram/config/env.js 未填写 FUN_CARD_RENDERER_URL；趣味字画手写字体与云端渲染服务上线前需配置云托管 HTTPS 域名。');
+  }
 } else {
   warnings.push('缺少 miniprogram/config/env.js；建议集中管理 CloudBase 环境 ID。');
 }
+
+if (exists('miniprogram/cloudhosting/fun-card-renderer')) {
+  const requiredRendererFiles = [
+    'Dockerfile',
+    'package.json',
+    'index.js',
+    'server.js',
+    'renderer.js',
+    'sceneValidator.js',
+    'drawAssets.js',
+    'fonts/LXGWMarkerGothic-Regular.ttf',
+    'LICENSES/OFL-LXGWMarkerGothic.txt'
+  ];
+  for (const file of requiredRendererFiles) {
+    if (!exists(`miniprogram/cloudhosting/fun-card-renderer/${file}`)) {
+      errors.push(`趣味字画云托管缺少必要文件: miniprogram/cloudhosting/fun-card-renderer/${file}`);
+    }
+  }
+}
+
 
 if (errors.length > 0) {
   console.error('小程序上线预检未通过:');
