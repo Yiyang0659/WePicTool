@@ -215,10 +215,16 @@ test('fails closed when content safety is unavailable', async () => {
 
 test('maps only the official unsafe errCode to 403 and treats other audit failures as unavailable', async () => {
   assert.equal(typeof server.createContentChecker, 'function');
+  assert.deepEqual(server.assessSecurityResponse({ errCode: 0 }), { ok: true, code: 'OK' });
   const cases = [
     [{ errCode: 87014 }, 403, 'CONTENT_UNSAFE'],
     [{ errCode: 44991 }, 503, 'SAFETY_UNAVAILABLE'],
     [{ errCode: 40001 }, 503, 'SAFETY_UNAVAILABLE'],
+    [{ errCode: null }, 503, 'SAFETY_UNAVAILABLE'],
+    [{ errCode: '' }, 503, 'SAFETY_UNAVAILABLE'],
+    [{ errCode: '0' }, 503, 'SAFETY_UNAVAILABLE'],
+    [{}, 503, 'SAFETY_UNAVAILABLE'],
+    [{ errCode: 'not-a-number' }, 503, 'SAFETY_UNAVAILABLE'],
     [null, 503, 'SAFETY_UNAVAILABLE']
   ];
 

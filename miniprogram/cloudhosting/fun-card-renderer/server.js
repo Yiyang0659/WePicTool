@@ -17,7 +17,10 @@ function failure(statusCode, code) {
 }
 
 function assessSecurityResponse(response) {
-  const errCode = response && Number(response.errCode);
+  const errCode = response && typeof response === 'object'
+    && Object.prototype.hasOwnProperty.call(response, 'errCode')
+    ? response.errCode
+    : undefined;
   if (errCode === 0) return { ok: true, code: 'OK' };
   if (errCode === 87014) return { ok: false, code: 'CONTENT_UNSAFE' };
   return { ok: false, code: 'SAFETY_UNAVAILABLE' };
