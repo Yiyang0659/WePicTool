@@ -77,6 +77,19 @@ test('replans identical briefs deterministically and changes a later variant', (
   assert.notDeepEqual(plain(first), plain(next));
 });
 
+test('plans a normalized fractional variant with defined phrase text', () => {
+  const fractionalBrief = normalizeCreativeBrief({ sourceText: '生日快乐', variant: 1.5 });
+  const result = planner.planRuleCandidates(fractionalBrief);
+
+  assert.equal(fractionalBrief.variant, 1.5);
+  result.candidates.forEach((candidate) => {
+    candidate.cards.forEach((card) => {
+      assert.equal(typeof card.text, 'string');
+    });
+  });
+  assert.equal(validator.validateCandidateSet(result.candidates, fractionalBrief).valid, true);
+});
+
 test('selects the expression mapping in deterministic three-strategy rotations', () => {
   assert.deepEqual(plain(selector.selectStrategyIds('cute-direct', 0)), [
     'suspense_reveal', 'visual_pause', 'fake_checklist'
@@ -140,6 +153,16 @@ test('rejects non-reveal text over twelve characters and incorrect reveal text',
 
   assert.equal(validator.validateCandidateSet(tooLong, brief).valid, false);
   assert.equal(validator.validateCandidateSet(wrongReveal, brief).valid, false);
+});
+
+test('rejects a reveal over forty characters even when it matches the source text', () => {
+  const longBrief = { sourceText: '字'.repeat(41) };
+  const candidates = validCandidates();
+  candidates.forEach((candidate) => {
+    candidate.cards[2].text = longBrief.sourceText;
+  });
+
+  assert.equal(validator.validateCandidateSet(candidates, longBrief).valid, false);
 });
 
 test('rejects empty text outside pause and ending cards', () => {

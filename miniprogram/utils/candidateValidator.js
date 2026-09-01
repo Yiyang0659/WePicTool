@@ -58,6 +58,9 @@ function validateCandidateSet(candidates, brief) {
         if (card.text !== sourceText) {
           errors.push(label + ' reveal 必须保留原句');
         }
+        if (textLength(card.text) > 40) {
+          errors.push(label + ' reveal 文案不能超过 40 字');
+        }
       } else if (textLength(card.text) > 12) {
         errors.push(label + ' 非 reveal 文案不能超过 12 字');
       }
