@@ -109,7 +109,7 @@ function composeScene(candidate, card, stylePack) {
   };
   var layers = card.text ? [textLayer] : [];
   return {
-    sceneId: 'scene_' + String(card.order).padStart(2, '0'),
+    sceneId: card.sceneId || ('scene_' + String(card.order).padStart(2, '0')),
     order: card.order,
     role: card.role,
     width: 1080,

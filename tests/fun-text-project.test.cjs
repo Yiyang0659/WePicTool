@@ -31,6 +31,7 @@ const model = loadMiniProgramModule('miniprogram/utils/funTextProject.js', {
   './candidatePlanner': planner,
   './styleMatcher': matcher,
   './sceneComposer': composer,
+  './candidateValidator': validator,
   '../config/stylePacks': stylePacks
 });
 
@@ -162,6 +163,20 @@ test('rejects card text outside the phase-one role limits', () => {
   assert.equal(next.candidates[0].editedScenes.find((scene) => scene.sceneId === pause.sceneId).layers.some((layer) => layer.type === 'text'), false);
 });
 
+test('restores a cleared pause card with a recomposed text layer', () => {
+  const project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const candidate = project.candidates[0];
+  const pause = candidate.editedScenes.find((scene) => scene.role === 'pause');
+  const cleared = model.updateCardText(project, candidate.candidateId, pause.sceneId, '');
+  const restored = model.updateCardText(cleared, candidate.candidateId, pause.sceneId, '再等等我一下呀');
+  const scene = restored.candidates[0].editedScenes.find((item) => item.sceneId === pause.sceneId);
+  const textLayer = scene.layers.find((layer) => layer.type === 'text');
+
+  assert.equal(textLayer.text, '再等等我一下呀');
+  assert.deepEqual(plain(textLayer.lines), ['再等等我', '一下呀']);
+  assert.equal(composer.validateScene(scene).valid, true);
+});
+
 test('rejects an unknown style pack without changing the source project', () => {
   const project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
 
@@ -191,4 +206,41 @@ test('render payload rejects missing, invalid, and undersized selected scenes', 
   const invalid = plain(selected);
   invalid.candidates[0].editedScenes[0].width = 360;
   assert.throws(() => model.buildRenderPayload(invalid), /场景不合法/);
+});
+
+test('render payload rejects duplicate scene identities and invalid card roles', () => {
+  const draft = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const selected = model.selectCandidate(draft, draft.candidates[0].candidateId);
+  const duplicate = plain(selected);
+  duplicate.candidates[0].editedScenes[1].sceneId = duplicate.candidates[0].editedScenes[0].sceneId;
+  assert.throws(() => model.buildRenderPayload(duplicate), /sceneId/);
+
+  const invalidRole = plain(selected);
+  invalidRole.candidates[0].cards[0].role = 'unknown-role';
+  assert.throws(() => model.buildRenderPayload(invalidRole), /卡片角色/);
+});
+
+test('render payload rejects a scene whose role no longer matches its logical card', () => {
+  const draft = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const selected = model.selectCandidate(draft, draft.candidates[0].candidateId);
+  const invalid = plain(selected);
+  invalid.candidates[0].editedScenes[0].role = 'pause';
+
+  assert.throws(() => model.buildRenderPayload(invalid), /逻辑卡片/);
+});
+
+test('switching style preserves moved scene identity for later text edits', () => {
+  const project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const candidate = project.candidates[0];
+  const moved = model.moveCard(project, candidate.candidateId, 1, 0);
+  const switched = model.switchCandidateStyle(moved, candidate.candidateId, 'chalk-chaos-v1');
+  const switchedCandidate = switched.candidates[0];
+  const edited = model.updateCardText(switched, candidate.candidateId, 'scene_02', '等一下呀');
+  const editedScene = edited.candidates[0].editedScenes.find((scene) => scene.sceneId === 'scene_02');
+
+  assert.deepEqual(plain(switchedCandidate.editedScenes.map((scene) => scene.sceneId)), [
+    'scene_02', 'scene_01', 'scene_03', 'scene_04', 'scene_05'
+  ]);
+  assert.deepEqual(plain(switchedCandidate.editedScenes.map((scene) => scene.order)), [1, 2, 3, 4, 5]);
+  assert.equal(editedScene.layers.find((layer) => layer.type === 'text').text, '等一下呀');
 });

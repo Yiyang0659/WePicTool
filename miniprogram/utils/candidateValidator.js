@@ -78,5 +78,6 @@ function validateCandidateSet(candidates, brief) {
 }
 
 module.exports = {
+  ALLOWED_ROLES: ALLOWED_ROLES,
   validateCandidateSet: validateCandidateSet
 };

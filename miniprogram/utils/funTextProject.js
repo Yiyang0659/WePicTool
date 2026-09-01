@@ -3,6 +3,7 @@ var planner = require('./candidatePlanner');
 var matcher = require('./styleMatcher');
 var composer = require('./sceneComposer');
 var stylePacks = require('../config/stylePacks');
+var candidateValidator = require('./candidateValidator');
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -82,25 +83,27 @@ function validateEditedText(role, text) {
   }
 }
 
-function cardsFromEditedScenes(candidate) {
+function logicalCardIndex(sceneId) {
+  var match = typeof sceneId === 'string' && /^scene_(\d{2})$/.exec(sceneId);
+  return match ? Number(match[1]) - 1 : -1;
+}
+
+function cardsFromEditedScenes(candidate, textOverrides) {
   return candidate.editedScenes.map(function (scene, index) {
-    var sourceScene = (candidate.originalScenes || []).find(function (item) {
-      return item.sceneId === scene.sceneId;
-    });
-    var sourceCard = sourceScene && candidate.cards[sourceScene.order - 1]
-      ? candidate.cards[sourceScene.order - 1]
-      : candidate.cards[index];
+    var sourceCard = candidate.cards[logicalCardIndex(scene.sceneId)] || candidate.cards[index];
+    var hasTextOverride = textOverrides && Object.prototype.hasOwnProperty.call(textOverrides, scene.sceneId);
     return Object.assign({}, sourceCard || {}, {
+      sceneId: scene.sceneId,
       order: index + 1,
       role: scene.role,
-      text: textFromScene(scene)
+      text: hasTextOverride ? textOverrides[scene.sceneId] : textFromScene(scene)
     });
   });
 }
 
-function composeEditedScenes(candidate, stylePackId) {
+function composeEditedScenes(candidate, stylePackId, textOverrides) {
   return composer.composeCandidate(Object.assign({}, candidate, {
-    cards: cardsFromEditedScenes(candidate)
+    cards: cardsFromEditedScenes(candidate, textOverrides)
   }), stylePackId);
 }
 
@@ -169,7 +172,9 @@ function updateCardText(project, candidateId, sceneId, text) {
     textLayer.text = text;
     textLayer.lines = splitText(text, scene.role);
   } else {
-    var recomposed = composeEditedScenes(candidate, candidate.stylePackId);
+    var textOverrides = {};
+    textOverrides[sceneId] = text;
+    var recomposed = composeEditedScenes(candidate, candidate.stylePackId, textOverrides);
     var recomposedScene = recomposed.find(function (item) { return item.sceneId === sceneId; });
     var recomposedText = recomposedScene && recomposedScene.layers.find(function (layer) {
       return layer.type === 'text';
@@ -224,17 +229,48 @@ function buildPreviewPayload(project) {
   };
 }
 
-function buildRenderPayload(project) {
-  if (!project || !project.selectedCandidateId) throw new Error('请先选择一套方案');
-  var candidate = requireCandidate(project, project.selectedCandidateId);
+function validateCandidateCards(candidate) {
+  if (!candidate || !Array.isArray(candidate.cards) || candidate.cards.length < 3 || candidate.cards.length > 8) {
+    throw new Error('候选卡片数量必须在 3 到 8 张之间');
+  }
+  candidate.cards.forEach(function (card, index) {
+    if (!card || card.order !== index + 1) throw new Error('候选卡片序号必须连续');
+    if (candidateValidator.ALLOWED_ROLES.indexOf(card.role) < 0) {
+      throw new Error('候选卡片角色无效');
+    }
+    if (typeof card.text !== 'string') throw new Error('候选卡片文字必须是字符串');
+  });
+}
+
+function validateRenderScenes(candidate) {
   if (!Array.isArray(candidate.editedScenes) || candidate.editedScenes.length < 3 || candidate.editedScenes.length > 8) {
     throw new Error('渲染卡片数量必须在 3 到 8 张之间');
   }
+  if (candidate.editedScenes.length !== candidate.cards.length) {
+    throw new Error('场景数量必须与候选卡片一致');
+  }
+  var sceneIds = new Set();
   candidate.editedScenes.forEach(function (scene, index) {
     if (!scene || scene.order !== index + 1) throw new Error('场景顺序不合法');
+    if (typeof scene.sceneId !== 'string' || sceneIds.has(scene.sceneId)) {
+      throw new Error('场景 sceneId 必须唯一');
+    }
+    sceneIds.add(scene.sceneId);
+    var logicalIndex = logicalCardIndex(scene.sceneId);
+    var logicalCard = candidate.cards[logicalIndex];
+    if (!logicalCard || scene.role !== logicalCard.role) {
+      throw new Error('场景与逻辑卡片不一致');
+    }
     var validation = composer.validateScene(scene);
     if (!validation.valid) throw new Error('场景不合法：' + validation.errors.join('；'));
   });
+}
+
+function buildRenderPayload(project) {
+  if (!project || !project.selectedCandidateId) throw new Error('请先选择一套方案');
+  var candidate = requireCandidate(project, project.selectedCandidateId);
+  validateCandidateCards(candidate);
+  validateRenderScenes(candidate);
   return {
     projectId: project.projectId,
     sourceText: project.sourceText,
