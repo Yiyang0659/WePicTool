@@ -222,6 +222,139 @@ test('requestRenderStack sends POST request and validates complete response', as
   assert.equal(calls.requests[0].url, 'https://renderer.test/render-stack');
 });
 
+test('renderer client trims supported card URLs before returning preview and render responses', async () => {
+  const client = require('../miniprogram/utils/funCardRendererClient');
+  const project = createSampleProject();
+  const previewPayload = model.buildPreviewPayload(project);
+  const previewCandidates = previewPayload.candidates.map((candidate) => ({
+    candidateId: candidate.candidateId,
+    stylePackId: candidate.stylePackId,
+    cards: candidate.scenes.map((scene, index) => ({
+      sceneId: scene.sceneId,
+      order: scene.order,
+      url: index === 0 ? '  http://127.0.0.1:8080/preview.png  ' : ` cloud://test/preview/${scene.sceneId}.png `
+    }))
+  }));
+  const { wxApi: previewWx } = recordingWx({
+    request(options) {
+      options.success({
+        statusCode: 200,
+        data: { ok: true, projectId: previewPayload.projectId, candidates: previewCandidates }
+      });
+    }
+  });
+
+  const preview = await client.requestPreviewStack(previewWx, previewPayload, { baseUrl: 'https://renderer.test' });
+  assert.equal(preview.candidates[0].cards[0].url, 'http://127.0.0.1:8080/preview.png');
+  assert.match(preview.candidates[0].cards[1].url, /^cloud:\/\//);
+
+  const selected = model.selectCandidate(project, project.candidates[0].candidateId);
+  const renderPayload = model.buildRenderPayload(selected);
+  const { wxApi: renderWx } = recordingWx({
+    request(options) {
+      options.success({
+        statusCode: 200,
+        data: {
+          ok: true,
+          projectId: renderPayload.projectId,
+          candidateId: renderPayload.candidateId,
+          cards: renderPayload.scenes.map((scene) => ({
+            sceneId: scene.sceneId,
+            order: scene.order,
+            url: ` https://cdn.example/final/${scene.sceneId}.png `
+          }))
+        }
+      });
+    }
+  });
+
+  const render = await client.requestRenderStack(renderWx, renderPayload, { baseUrl: 'https://renderer.test' });
+  assert.equal(render.cards[0].url, `https://cdn.example/final/${renderPayload.scenes[0].sceneId}.png`);
+});
+
+test('renderer client rejects blank and unsupported card URL schemes in preview and render responses', async () => {
+  const client = require('../miniprogram/utils/funCardRendererClient');
+  const project = createSampleProject();
+  const previewPayload = model.buildPreviewPayload(project);
+  const rejectedUrls = ['   ', 'javascript:alert(1)', 'data:image/png;base64,AA==', 'file:///tmp/card.png', 'ftp://example.com/card.png'];
+
+  for (const badUrl of rejectedUrls) {
+    const { wxApi } = recordingWx({
+      request(options) {
+        options.success({
+          statusCode: 200,
+          data: {
+            ok: true,
+            projectId: previewPayload.projectId,
+            candidates: previewPayload.candidates.map((candidate) => ({
+              candidateId: candidate.candidateId,
+              stylePackId: candidate.stylePackId,
+              cards: candidate.scenes.map((scene, index) => ({
+                sceneId: scene.sceneId,
+                order: scene.order,
+                url: index === 0 ? badUrl : `https://cdn.example/${scene.sceneId}.png`
+              }))
+            }))
+          }
+        });
+      }
+    });
+    await assert.rejects(
+      () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'https://renderer.test' }),
+      (err) => err.code === 'INVALID_RENDER_RESPONSE'
+    );
+  }
+
+  const selected = model.selectCandidate(project, project.candidates[0].candidateId);
+  const renderPayload = model.buildRenderPayload(selected);
+  const { wxApi: renderWx } = recordingWx({
+    request(options) {
+      options.success({
+        statusCode: 200,
+        data: {
+          ok: true,
+          projectId: renderPayload.projectId,
+          candidateId: renderPayload.candidateId,
+          cards: renderPayload.scenes.map((scene, index) => ({
+            sceneId: scene.sceneId,
+            order: scene.order,
+            url: index === 0 ? ' javascript:alert(1) ' : `https://cdn.example/${scene.sceneId}.png`
+          }))
+        }
+      });
+    }
+  });
+  await assert.rejects(
+    () => client.requestRenderStack(renderWx, renderPayload, { baseUrl: 'https://renderer.test' }),
+    (err) => err.code === 'INVALID_RENDER_RESPONSE'
+  );
+});
+
+test('renderer client normalizes non-safety server failures and keeps only explicit safety codes', async () => {
+  const client = require('../miniprogram/utils/funCardRendererClient');
+  const project = createSampleProject();
+  const previewPayload = model.buildPreviewPayload(project);
+  const cases = [
+    { statusCode: 500, data: { ok: false, code: 'RENDER_FAILED' }, expected: 'INVALID_RENDER_RESPONSE' },
+    { statusCode: 403, data: { ok: false, code: 'UNAUTHORIZED' }, expected: 'INVALID_RENDER_RESPONSE' },
+    { statusCode: 200, data: { ok: false, code: 'UPSTREAM_TIMEOUT' }, expected: 'INVALID_RENDER_RESPONSE' },
+    { statusCode: 403, data: { ok: false, code: 'CONTENT_UNSAFE' }, expected: 'CONTENT_UNSAFE' },
+    { statusCode: 503, data: { ok: false, code: 'SAFETY_UNAVAILABLE' }, expected: 'SAFETY_UNAVAILABLE' }
+  ];
+
+  for (const item of cases) {
+    const { wxApi } = recordingWx({
+      request(options) {
+        options.success({ statusCode: item.statusCode, data: item.data });
+      }
+    });
+    await assert.rejects(
+      () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'https://renderer.test' }),
+      (err) => err.code === item.expected
+    );
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 2. fun-text-candidates Page Tests
 // ---------------------------------------------------------------------------
@@ -380,6 +513,40 @@ test('onCanvasError triggers server preview fallback batch request only once and
   assert.match(page.data.candidates[0].fallbackImages[0], /https:\/\/cdn\.example\/preview\//);
 });
 
+test('automatic canvas errors request a server preview only once after a successful fallback', async () => {
+  const project = createSampleProject();
+  const previewPayload = model.buildPreviewPayload(project);
+  let requestCount = 0;
+  const { wxApi } = recordingWx({
+    request(options) {
+      requestCount += 1;
+      options.success({
+        statusCode: 200,
+        data: {
+          ok: true,
+          projectId: previewPayload.projectId,
+          candidates: previewPayload.candidates.map((candidate) => ({
+            candidateId: candidate.candidateId,
+            stylePackId: candidate.stylePackId,
+            cards: candidate.scenes.map((scene) => ({
+              sceneId: scene.sceneId,
+              order: scene.order,
+              url: `https://cdn.example/${scene.sceneId}.png`
+            }))
+          }))
+        }
+      });
+    }
+  });
+  const page = loadCandidatesPage(wxApi);
+  page.initProject(project);
+
+  await page.onCanvasError({ detail: { message: 'first font failure' } });
+  await page.onCanvasError({ detail: { message: 'later rendererror' } });
+
+  assert.equal(requestCount, 1);
+});
+
 test('server preview failure sets retry state without losing project data', async () => {
   const project = createSampleProject();
   const { wxApi } = recordingWx({
@@ -396,6 +563,51 @@ test('server preview failure sets retry state without losing project data', asyn
   assert.equal(page.data.serverPreviewFailed, true);
   assert.equal(page.data.candidates.length, 3);
   assert.equal(page.data.project.projectId, project.projectId);
+});
+
+test('explicit preview retry clears a failed automatic fallback latch and retries once', async () => {
+  const project = createSampleProject();
+  const previewPayload = model.buildPreviewPayload(project);
+  let requestCount = 0;
+  const { wxApi } = recordingWx({
+    request(options) {
+      requestCount += 1;
+      if (requestCount === 1) {
+        options.fail({ errMsg: 'request:fail network error' });
+        return;
+      }
+      options.success({
+        statusCode: 200,
+        data: {
+          ok: true,
+          projectId: previewPayload.projectId,
+          candidates: previewPayload.candidates.map((candidate) => ({
+            candidateId: candidate.candidateId,
+            stylePackId: candidate.stylePackId,
+            cards: candidate.scenes.map((scene) => ({
+              sceneId: scene.sceneId,
+              order: scene.order,
+              url: `https://cdn.example/${scene.sceneId}.png`
+            }))
+          }))
+        }
+      });
+    }
+  });
+  const page = loadCandidatesPage(wxApi);
+  page.initProject(project);
+
+  await page.onCanvasError({ detail: { message: 'font failure' } });
+  await page.onCanvasError({ detail: { message: 'duplicate automatic error' } });
+  assert.equal(requestCount, 1);
+  assert.equal(page.data.serverPreviewFailed, true);
+
+  page.onRetryPreview();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(requestCount, 2);
+  assert.equal(page.data.serverPreviewFailed, false);
+  assert.ok(page.data.candidates[0].fallbackImages);
 });
 
 test('candidates page template declares 3 stacks, swiper cards, and no system font fallback', () => {

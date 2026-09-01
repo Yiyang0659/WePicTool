@@ -26,7 +26,12 @@ Page({
 
   initProject: function (project) {
     if (!project) return;
-    this._previewLoading = false;
+    this._previewFallback = {
+      projectId: project.projectId,
+      attempted: false,
+      succeeded: false,
+      loading: false
+    };
 
     const candidates = (project.candidates || []).map(function (item) {
       return {
@@ -111,15 +116,24 @@ Page({
   },
 
   onCanvasError: async function () {
-    if (this._previewLoading || this.data.serverPreviewFailed || !this.data.project) {
+    if (!this.data.project) {
       return;
     }
-    this._previewLoading = true;
+    const projectId = this.data.project.projectId;
+    const fallback = this._previewFallback;
+    if (!fallback || fallback.projectId !== projectId || fallback.loading || fallback.attempted || fallback.succeeded) {
+      return;
+    }
+    fallback.attempted = true;
+    fallback.loading = true;
     this.setData({ serverPreviewLoading: true });
 
     try {
       const payload = funTextProject.buildPreviewPayload(this.data.project);
       const res = await funCardRendererClient.requestPreviewStack(wx, payload);
+      if (this._previewFallback !== fallback || !this.data.project || this.data.project.projectId !== projectId) {
+        return;
+      }
 
       const candidates = this.data.candidates.map(function (c) {
         const respCand = res.candidates.find(function (item) {
@@ -132,14 +146,18 @@ Page({
         });
       });
 
-      this._previewLoading = false;
+      fallback.loading = false;
+      fallback.succeeded = true;
       this.setData({
         candidates: candidates,
         serverPreviewLoading: false,
         serverPreviewFailed: false
       });
     } catch (err) {
-      this._previewLoading = false;
+      if (this._previewFallback !== fallback || !this.data.project || this.data.project.projectId !== projectId) {
+        return;
+      }
+      fallback.loading = false;
       this.setData({
         serverPreviewLoading: false,
         serverPreviewFailed: true
@@ -148,7 +166,13 @@ Page({
   },
 
   onRetryPreview: function () {
-    this._previewLoading = false;
+    if (!this.data.project) return;
+    this._previewFallback = {
+      projectId: this.data.project.projectId,
+      attempted: false,
+      succeeded: false,
+      loading: false
+    };
     this.setData({ serverPreviewFailed: false });
     this.onCanvasError();
   }

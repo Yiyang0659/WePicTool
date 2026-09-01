@@ -37,14 +37,14 @@ function requestRenderer(wxApi, path, payload, options) {
         var statusCode = res.statusCode;
         var data = res.data || {};
 
-        if (statusCode === 403 || data.code === 'CONTENT_UNSAFE') {
+        if (data && data.code === 'CONTENT_UNSAFE') {
           return reject(makeError('内容审核未通过', 'CONTENT_UNSAFE'));
         }
-        if (statusCode === 503 || data.code === 'SAFETY_UNAVAILABLE') {
+        if (data && data.code === 'SAFETY_UNAVAILABLE') {
           return reject(makeError('安全服务暂不可用', 'SAFETY_UNAVAILABLE'));
         }
         if (statusCode !== 200 || !data || data.ok !== true) {
-          return reject(makeError((data && data.code) || '服务端渲染响应异常', (data && data.code) || 'INVALID_RENDER_RESPONSE'));
+          return reject(makeError('服务端渲染响应异常', 'INVALID_RENDER_RESPONSE'));
         }
 
         resolve(data);
@@ -57,13 +57,26 @@ function requestRenderer(wxApi, path, payload, options) {
   });
 }
 
+function normalizeCardUrl(url) {
+  if (typeof url !== 'string') return '';
+  var normalized = url.trim();
+  return /^(?:https?|cloud):\/\/\S+$/.test(normalized) ? normalized : '';
+}
+
 function validateCards(cards, scenes) {
   if (!Array.isArray(cards) || cards.length !== scenes.length) return false;
-  return scenes.every(function (scene, index) {
+  var normalizedUrls = [];
+  var valid = scenes.every(function (scene, index) {
     var card = cards[index];
-    return card && card.sceneId === scene.sceneId && card.order === scene.order
-      && typeof card.url === 'string' && card.url.length > 0;
+    var url = card && normalizeCardUrl(card.url);
+    normalizedUrls[index] = url;
+    return card && card.sceneId === scene.sceneId && card.order === scene.order && url;
   });
+  if (!valid) return false;
+  cards.forEach(function (card, index) {
+    card.url = normalizedUrls[index];
+  });
+  return true;
 }
 
 function requestPreviewStack(wxApi, payload, options) {

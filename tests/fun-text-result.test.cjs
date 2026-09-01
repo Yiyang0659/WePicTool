@@ -148,7 +148,7 @@ test('saving sequentially guides the user through WeChat four-step flow and supp
   const mockRenderedCards = project.candidates[0].editedScenes.map((s) => ({
     sceneId: s.sceneId,
     order: s.order,
-    url: `/local/${s.sceneId}.png`
+    url: `http://127.0.0.1:8080/local/${s.sceneId}.png`
   }));
 
   let failOnce = true;
@@ -164,6 +164,9 @@ test('saving sequentially guides the user through WeChat four-step flow and supp
           cards: mockRenderedCards
         }
       });
+    },
+    downloadFile(options) {
+      options.success({ tempFilePath: '/local/downloaded-card.png' });
     },
     saveImageToPhotosAlbum(options) {
       if (failOnce && savedList.length === 1) {
