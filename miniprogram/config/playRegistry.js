@@ -18,6 +18,16 @@ const PLAY_REGISTRY = [
     renderer: 'layered-card',
     preview: 'multi-stack',
     exporter: 'grouped-sequence'
+  },
+  {
+    id: 'fun-text-stack',
+    version: 1,
+    title: '趣味字画',
+    status: 'available',
+    inputType: 'text',
+    renderer: 'fun-card-scene',
+    preview: 'single-stack',
+    exporter: 'ordered-sequence'
   }
 ];
 
