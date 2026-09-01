@@ -1,0 +1,1 @@
+<canvas id="cardCanvas" type="2d" class="fun-card-canvas" style="width: {{size}}px; height: {{size}}px;"></canvas>
