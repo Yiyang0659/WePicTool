@@ -132,6 +132,11 @@ function validateScene(scene) {
   var errors = [];
   if (!scene || scene.width !== 1080 || scene.height !== 1080) errors.push('场景必须为 1080 方图');
   if (!scene || !scene.background || typeof scene.background.color !== 'string') errors.push('场景缺少背景');
+  if (scene && scene.background && !stylePacks.STYLE_PACKS.some(function (pack) {
+    return pack.background.assetKey === scene.background.assetKey;
+  })) {
+    errors.push('背景素材不在视觉包白名单');
+  }
   if (!scene || !Array.isArray(scene.layers)) {
     errors.push('场景缺少图层');
     return { valid: false, errors: errors };
@@ -139,6 +144,12 @@ function validateScene(scene) {
   var textLayers = scene.layers.filter(function (layer) { return layer.type === 'text'; });
   var decorations = scene.layers.filter(function (layer) { return layer.type !== 'text'; });
   if (textLayers.length > 2) errors.push('文字图层不能超过两层');
+  if (textLayers.filter(function (layer) { return layer.id === 'text_main'; }).length > 1) {
+    errors.push('主文字图层不能超过一层');
+  }
+  if (textLayers.filter(function (layer) { return layer.id !== 'text_main'; }).length > 1) {
+    errors.push('辅助文字图层不能超过一层');
+  }
   if (decorations.length > 6) errors.push('装饰图层不能超过六层');
   scene.layers.forEach(function (layer) {
     if (!layer || typeof layer.id !== 'string') errors.push('图层缺少 id');
@@ -148,7 +159,17 @@ function validateScene(scene) {
     if (layer && layer.type === 'text' && (!Array.isArray(layer.lines) || !layer.lines.length)) {
       errors.push('文字图层缺少预计算换行');
     }
-    if (layer && layer.type !== 'text' && !assets.getAsset(layer.assetKey)) errors.push('装饰素材不在白名单');
+    if (layer && layer.type === 'text' && stylePacks.TEXT_EFFECT_KEYS.indexOf(layer.effectKey) < 0) {
+      errors.push('文字效果不在白名单');
+    }
+    if (layer && layer.type !== 'text') {
+      var asset = assets.getAsset(layer.assetKey);
+      if (!asset) {
+        errors.push('装饰素材不在白名单');
+      } else if (asset.type !== layer.type) {
+        errors.push('装饰素材类型不匹配');
+      }
+    }
   });
   return { valid: errors.length === 0, errors: errors };
 }

@@ -52,11 +52,14 @@ var STYLE_PACKS = [
   }
 ];
 
+var TEXT_EFFECT_KEYS = ['marker-bold', 'chalk-rough', 'collage-cutout', 'stamp-shadow'];
+
 function getStylePack(id) {
   return STYLE_PACKS.find(function (pack) { return pack.id === id; }) || null;
 }
 
 module.exports = {
   STYLE_PACKS: STYLE_PACKS,
+  TEXT_EFFECT_KEYS: TEXT_EFFECT_KEYS,
   getStylePack: getStylePack
 };

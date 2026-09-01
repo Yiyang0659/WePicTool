@@ -36,18 +36,64 @@ test('matches three different style packs to three candidates', () => {
   assert.equal(new Set(ids).size, 3);
 });
 
-test('registers exactly the phase-one procedural asset whitelist', () => {
+test('exposes the exact phase-one style and procedural asset inventories', () => {
   const registered = assets.listAssets();
-  assert.equal(registered.length, 18);
-  assert.deepEqual(plain(registered.map((asset) => asset.key)), [
+  const stickers = registered.filter((asset) => asset.type === 'sticker');
+  const doodles = registered.filter((asset) => asset.type === 'doodle');
+
+  assert.deepEqual(plain(stylePacks.STYLE_PACKS.map((pack) => pack.id)), [
+    'pink-note-v1', 'chalk-chaos-v1', 'paper-collage-v1'
+  ]);
+  assert.deepEqual(plain(stylePacks.TEXT_EFFECT_KEYS), [
+    'marker-bold', 'chalk-rough', 'collage-cutout', 'stamp-shadow'
+  ]);
+  assert.deepEqual(plain(stickers.map((asset) => asset.key)), [
     'sticker_0', 'sticker_1', 'sticker_2', 'sticker_3', 'sticker_4', 'sticker_5',
-    'sticker_6', 'sticker_7', 'sticker_8', 'sticker_9', 'sticker_10', 'sticker_11',
+    'sticker_6', 'sticker_7', 'sticker_8', 'sticker_9', 'sticker_10', 'sticker_11'
+  ]);
+  assert.deepEqual(plain(doodles.map((asset) => asset.key)), [
     'arrow-curve', 'heart-outline', 'circle-mark', 'underline-rough', 'scribble-cross', 'burst-lines'
   ]);
   registered.forEach((asset) => {
     assert.equal(asset.source, 'project-owned');
     assert.equal(asset.renderer, 'procedural-v1');
   });
+});
+
+function makeValidScene() {
+  const candidate = planner.planRuleCandidates(
+    normalizeCreativeBrief({ sourceText: '我今天想见你' })
+  ).candidates[0];
+  return plain(composer.composeCandidate(candidate, 'pink-note-v1')[0]);
+}
+
+test('rejects a text layer with an unknown effect key', () => {
+  const scene = makeValidScene();
+  scene.layers.find((layer) => layer.type === 'text').effectKey = 'unknown-effect';
+
+  assert.equal(composer.validateScene(scene).valid, false);
+});
+
+test('rejects a background asset outside the style-pack whitelist', () => {
+  const scene = makeValidScene();
+  scene.background.assetKey = 'unknown-background';
+
+  assert.equal(composer.validateScene(scene).valid, false);
+});
+
+test('rejects a decoration whose layer type differs from its registry type', () => {
+  const scene = makeValidScene();
+  scene.layers.find((layer) => layer.type === 'doodle').type = 'sticker';
+
+  assert.equal(composer.validateScene(scene).valid, false);
+});
+
+test('rejects two text main layers even when the total text layer limit is met', () => {
+  const scene = makeValidScene();
+  const main = scene.layers.find((layer) => layer.id === 'text_main');
+  scene.layers.push(Object.assign({}, main));
+
+  assert.equal(composer.validateScene(scene).valid, false);
 });
 
 test('composes deterministic editable 1080 square scenes', () => {
