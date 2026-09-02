@@ -104,7 +104,9 @@ test('record page categorizes funtext tasks and routes to template-result', () =
   page.onViewRecord({ currentTarget: { dataset: { recordid: 'rec_fun_1' } } });
 
   assert.ok(calls.navigations.some(url => url.includes('/pages/template-result/template-result')));
-  assert.ok(calls.emitted.some(e => e.name === 'funTextProject' || e.name === 'acceptTaskData'));
+  assert.equal(calls.emitted.length, 1);
+  assert.equal(calls.emitted[0].name, 'acceptTaskData');
+  assert.equal(calls.emitted[0].payload.task, storage.wepictool_records[0].taskSnapshot);
 });
 
 test('record page shows upgrade prompt on legacy bigtext records and offers recreation', () => {
@@ -134,8 +136,49 @@ test('record page shows upgrade prompt on legacy bigtext records and offers recr
   // Tap view legacy record
   page.onViewRecord({ currentTarget: { dataset: { recordid: 'rec_big_1' } } });
 
-  assert.ok(calls.modals.some(m => /旧版|升级|趣味字画/.test(m.content)));
+  assert.equal(calls.modals[0].content, '旧大字滑卡记录暂不支持直接打开，请重新制作');
   assert.ok(calls.navigations.includes('/pages/fun-text/fun-text'));
+});
+
+test('record page reopens layered-dressup with its P1 editor route', () => {
+  const storage = {
+    wepictool_records: [{
+      recordId: 'rec_layered_1',
+      type: 'layered-dressup',
+      createdAt: 1000,
+      taskSnapshot: { taskId: 'layered_1', type: 'layered-dressup' }
+    }]
+  };
+  const { wxApi, calls } = recordingWx(storage);
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../utils/task': require('../miniprogram/utils/task.js')
+  }, wxApi));
+
+  page.onShow();
+  page.onViewRecord({ currentTarget: { dataset: { recordid: 'rec_layered_1' } } });
+
+  assert.deepEqual(calls.navigations, ['/pages/dressup/dressup?mode=edit']);
+});
+
+test('record page preserves unsupported records and does not navigate them', () => {
+  const unsupported = {
+    recordId: 'rec_future_1',
+    type: 'future-stack',
+    createdAt: 1000,
+    taskSnapshot: { taskId: 'future_1', type: 'future-stack' }
+  };
+  const storage = { wepictool_records: [unsupported] };
+  const { wxApi, calls } = recordingWx(storage);
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../utils/task': require('../miniprogram/utils/task.js')
+  }, wxApi));
+
+  page.onShow();
+  page.onViewRecord({ currentTarget: { dataset: { recordid: 'rec_future_1' } } });
+
+  assert.equal(calls.navigations.length, 0);
+  assert.equal(calls.toasts[0].title, '该记录版本暂不支持');
+  assert.equal(calls.storage.wepictool_records[0], unsupported);
 });
 
 test('profile page clears history records and task cache', () => {

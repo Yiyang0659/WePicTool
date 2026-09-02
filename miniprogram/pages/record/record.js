@@ -17,6 +17,7 @@ Page({
       outfit: { label: '穿搭叠图', emoji: '👕' },
       funtext: { label: '趣味字画', emoji: '🎨' },
       dressup: { label: '滑滑换装', emoji: '👠' },
+      'layered-dressup': { label: '分层换装', emoji: '👠' },
       bigtext: { label: '大字滑卡', emoji: '🔤' },
       story: { label: '剧情滑卡', emoji: '🎬' },
       blindbox: { label: '盲盒抽卡', emoji: '🎁' },
@@ -198,16 +199,17 @@ Page({
 
     if (record.recordType === 'funtext') {
       const project = (record.taskSnapshot && record.taskSnapshot.projectSnapshot) || record.projectSnapshot;
-      if (!project) {
-        wx.showToast({ title: '字画项目数据已失效', icon: 'none' });
+      if (!project || project.version !== 1) {
+        wx.showToast({ title: '该记录版本暂不支持', icon: 'none' });
         return;
       }
       wx.navigateTo({
         url: '/pages/template-result/template-result',
         success: function (navRes) {
-          navRes.eventChannel.emit('funTextProject', { project: project });
           if (record.taskSnapshot) {
             navRes.eventChannel.emit('acceptTaskData', { task: record.taskSnapshot });
+          } else {
+            navRes.eventChannel.emit('funTextProject', { project: project });
           }
         }
       });
@@ -217,8 +219,8 @@ Page({
     if (record.recordType === 'bigtext') {
       wx.showModal({
         title: '旧版记录提示',
-        content: '该记录为旧版大字滑卡，现已全面升级为全新趣味字画。是否前往体验全新趣味字画？',
-        confirmText: '去体验',
+        content: '旧大字滑卡记录暂不支持直接打开，请重新制作',
+        confirmText: '重新制作',
         cancelText: '取消',
         success: function (res) {
           if (res.confirm) {
@@ -229,10 +231,15 @@ Page({
       return;
     }
 
-    if (record.recordType === 'dressup') {
+    if (record.recordType === 'dressup' || record.recordType === 'layered-dressup') {
       wx.navigateTo({
         url: '/pages/dressup/dressup?mode=edit'
       });
+      return;
+    }
+
+    if (record.recordType !== 'outfit') {
+      wx.showToast({ title: '该记录版本暂不支持', icon: 'none' });
       return;
     }
 
@@ -262,8 +269,13 @@ Page({
       return;
     }
 
-    if (record.recordType === 'dressup') {
+    if (record.recordType === 'dressup' || record.recordType === 'layered-dressup') {
       wx.navigateTo({ url: '/pages/dressup/dressup?mode=demo' });
+      return;
+    }
+
+    if (record.recordType !== 'outfit') {
+      wx.showToast({ title: '该记录版本暂不支持', icon: 'none' });
       return;
     }
 

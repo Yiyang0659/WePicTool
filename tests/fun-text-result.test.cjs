@@ -24,6 +24,16 @@ function createSampleProject() {
   return model.selectCandidate(project, project.candidates[0].candidateId);
 }
 
+function cardsForProject(project, prefix) {
+  const candidate = project.candidates.find((item) => item.candidateId === project.selectedCandidateId);
+  return candidate.editedScenes.map((scene) => ({
+    sceneId: scene.sceneId,
+    role: scene.role,
+    order: scene.order,
+    url: `${prefix || 'cloud://test/final'}/${scene.sceneId}.png`
+  }));
+}
+
 function recordingWx(overrides) {
   const calls = {
     toasts: [],
@@ -103,11 +113,7 @@ function codedError(code, message) {
 
 test('template-result renders 1080 stack, saves record locally and provides preview and edit actions', async () => {
   const project = createSampleProject();
-  const mockRenderedCards = project.candidates[0].editedScenes.map((s) => ({
-    sceneId: s.sceneId,
-    order: s.order,
-    url: `cloud://test/final/${s.sceneId}.png`
-  }));
+  const mockRenderedCards = cardsForProject(project);
 
   const { wxApi, calls } = recordingWx({
     request(options) {
@@ -135,6 +141,23 @@ test('template-result renders 1080 stack, saves record locally and provides prev
   const history = calls.storage['wepic_history_tasks'] || [];
   assert.ok(history.some(t => t.taskId === project.projectId && t.type === 'funtext'));
 
+  // The record tab reads wepictool_records, so a real result must be visible there.
+  const records = calls.storage.wepictool_records || [];
+  assert.equal(records.length, 1);
+  assert.equal(records[0].type, 'funtext');
+  assert.equal(records[0].text, project.sourceText);
+  assert.equal(records[0].totalCount, mockRenderedCards.length);
+  assert.deepEqual(Array.from(records[0].thumbnails), mockRenderedCards.slice(0, 4).map(card => card.url));
+  assert.equal(records[0].taskSnapshot.taskId, project.projectId);
+  assert.equal(records[0].taskSnapshot.projectSnapshot.projectId, project.projectId);
+
+  const recordPage = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../utils/task': require('../miniprogram/utils/task.js')
+  }, wxApi));
+  recordPage.onShow();
+  assert.equal(recordPage.data.records.length, 1);
+  assert.equal(recordPage.data.records[0].recordType, 'funtext');
+
   // Tap "先滑着看看" (onPreviewStack)
   page.onPreviewStack();
   assert.deepEqual(calls.navigations, ['/pages/preview/preview']);
@@ -148,6 +171,136 @@ test('template-result renders 1080 stack, saves record locally and provides prev
   // Tap "自己改改" (onEditStack)
   page.onEditStack();
   assert.ok(calls.navigations.includes('/pages/fun-text-editor/fun-text-editor'));
+});
+
+test('template-result upserts one record per project while preserving its original creation time and 20 item limit', async () => {
+  const project = createSampleProject();
+  const oldTask = {
+    taskId: project.projectId,
+    mode: 'funtext',
+    type: 'funtext',
+    projectSnapshot: project,
+    cards: [{ sceneId: 'stale', order: 1, url: 'cloud://test/stale.png' }]
+  };
+  const oldRecord = {
+    recordId: 'record_keep_me',
+    createdAt: 321,
+    type: 'funtext',
+    text: '旧文字',
+    totalCount: 1,
+    thumbnails: ['cloud://test/stale.png'],
+    taskSnapshot: oldTask
+  };
+  const unrelated = Array.from({ length: 19 }, (_, index) => ({
+    recordId: `other_${index}`,
+    createdAt: 100 - index,
+    type: 'outfit',
+    taskSnapshot: { taskId: `other_task_${index}` }
+  }));
+  const refreshedCards = cardsForProject(project, 'cloud://test/refreshed');
+  const { wxApi, calls } = recordingWx();
+  calls.storage.wepictool_records = unrelated.slice(0, 5).concat(oldRecord, unrelated.slice(5));
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: refreshedCards });
+      }
+    }
+  });
+
+  await page.initProject(project);
+  await page.initProject(project, refreshedCards);
+
+  const records = calls.storage.wepictool_records;
+  const matches = records.filter(record => record.taskSnapshot && record.taskSnapshot.taskId === project.projectId);
+  assert.equal(records.length, 20);
+  assert.equal(matches.length, 1);
+  assert.equal(records[0].recordId, 'record_keep_me');
+  assert.equal(records[0].createdAt, 321);
+  assert.equal(records[0].text, project.sourceText);
+  assert.equal(records[0].totalCount, refreshedCards.length);
+  assert.deepEqual(Array.from(records[0].thumbnails), refreshedCards.slice(0, 4).map(card => card.url));
+});
+
+test('template-result rerenders instead of reusing incomplete or snapshot-mismatched cached cards', async () => {
+  const project = createSampleProject();
+  const completeCards = cardsForProject(project);
+  const invalidCaches = [
+    completeCards.slice(0, -1),
+    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { sceneId: 'wrong-scene' }) : card),
+    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { order: 99 }) : card),
+    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { url: '' }) : card),
+    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { url: '   ' }) : card)
+  ];
+
+  for (const cachedCards of invalidCaches) {
+    let requests = 0;
+    const freshCards = cardsForProject(project, `cloud://test/fresh-${invalidCaches.indexOf(cachedCards)}`);
+    const { wxApi } = recordingWx();
+    const page = loadResultPage(wxApi, {
+      '../../utils/funCardRendererClient': {
+        requestRenderStack() {
+          requests += 1;
+          return Promise.resolve({ cards: freshCards });
+        }
+      }
+    });
+
+    await page.initProject(project, cachedCards);
+
+    assert.equal(requests, 1);
+    assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), freshCards.map(card => card.url));
+  }
+});
+
+test('template-result reuses complete cached cards that exactly match the selected scene snapshot', async () => {
+  const project = createSampleProject();
+  const completeCards = cardsForProject(project);
+  let requests = 0;
+  const { wxApi } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        requests += 1;
+        return Promise.reject(new Error('valid cache must not render'));
+      }
+    }
+  });
+
+  await page.initProject(project, completeCards);
+
+  assert.equal(requests, 0);
+  assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), completeCards.map(card => card.url));
+});
+
+test('template-result rejects unsupported funtext project versions without rendering or recording', async () => {
+  const project = Object.assign({}, createSampleProject(), { version: 2 });
+  let requests = 0;
+  let canvasQueries = 0;
+  const { wxApi, calls } = recordingWx({
+    createSelectorQuery() {
+      canvasQueries += 1;
+      throw new Error('unsupported versions must not reach Canvas');
+    }
+  });
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        requests += 1;
+        return Promise.reject(new Error('unsupported versions must not render'));
+      }
+    }
+  });
+
+  await page.initProject(project, cardsForProject(project));
+
+  assert.equal(requests, 0);
+  assert.equal(canvasQueries, 0);
+  assert.equal(page.data.renderFailed, true);
+  assert.equal(page.data.renderErrorMessage, '该记录版本暂不支持');
+  assert.equal(page.data.task, null);
+  assert.equal(calls.storage.wepic_history_tasks, undefined);
+  assert.equal(calls.storage.wepictool_records, undefined);
 });
 
 test('template-result fails closed without local fallback or history for safety and response errors', async () => {

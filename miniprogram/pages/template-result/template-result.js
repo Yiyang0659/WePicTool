@@ -9,6 +9,8 @@ const LOCAL_RENDER_FALLBACK_CODES = {
   FUN_RENDERER_NOT_CONFIGURED: true,
   NETWORK_ERROR: true
 };
+const RECORDS_KEY = 'wepictool_records';
+const MAX_RECORDS = 20;
 
 function canRenderLocally(error) {
   return Boolean(
@@ -16,6 +18,34 @@ function canRenderLocally(error) {
     && typeof error.code === 'string'
     && Object.prototype.hasOwnProperty.call(LOCAL_RENDER_FALLBACK_CODES, error.code)
   );
+}
+
+function isSupportedProject(project) {
+  return Boolean(project && project.version === 1);
+}
+
+function selectedScenes(project) {
+  const candidate = (project && Array.isArray(project.candidates))
+    ? project.candidates.find(function (item) { return item.candidateId === project.selectedCandidateId; })
+    : null;
+  return candidate && Array.isArray(candidate.editedScenes) ? candidate.editedScenes : [];
+}
+
+function hasCompleteCachedCards(project, cards) {
+  const scenes = selectedScenes(project);
+  if (!Array.isArray(cards) || cards.length !== scenes.length || scenes.length === 0) return false;
+  return cards.every(function (card, index) {
+    const scene = scenes[index];
+    return Boolean(
+      card
+      && scene
+      && card.sceneId === scene.sceneId
+      && card.role === scene.role
+      && card.order === scene.order
+      && typeof card.url === 'string'
+      && card.url.trim()
+    );
+  });
 }
 
 Page({
@@ -52,9 +82,28 @@ Page({
   initProject: async function (project, existingCards) {
     if (!project || !project.selectedCandidateId) return;
 
+    if (!isSupportedProject(project)) {
+      this.setData({
+        project: null,
+        task: null,
+        renderedCards: [],
+        rendering: false,
+        renderFailed: true,
+        renderErrorMessage: '该记录版本暂不支持',
+        saveCursor: 0,
+        showGuide: false,
+        currentIndex: 0
+      });
+      return;
+    }
+
+    const canReuseCards = hasCompleteCachedCards(project, existingCards);
+
     this.setData({
       project: project,
-      rendering: !existingCards || !existingCards.length,
+      task: null,
+      renderedCards: [],
+      rendering: !canReuseCards,
       renderFailed: false,
       renderErrorMessage: '',
       saveCursor: 0,
@@ -62,7 +111,7 @@ Page({
       currentIndex: 0
     });
 
-    if (existingCards && existingCards.length) {
+    if (canReuseCards) {
       this.applyRenderSuccess(project, existingCards);
       return;
     }
@@ -173,6 +222,36 @@ Page({
       wx.setStorageSync('wepic_history_tasks', filtered.slice(0, 20));
     } catch (e) {
       console.warn('保存历史任务失败:', e);
+    }
+
+    try {
+      const savedRecords = wx.getStorageSync(RECORDS_KEY);
+      const records = Array.isArray(savedRecords) ? savedRecords : [];
+      const original = records.find(function (record) {
+        return record && (
+          record.projectId === task.taskId
+          || (record.taskSnapshot && record.taskSnapshot.taskId === task.taskId)
+        );
+      });
+      const filtered = records.filter(function (record) {
+        return !record || (
+          record.projectId !== task.taskId
+          && (!record.taskSnapshot || record.taskSnapshot.taskId !== task.taskId)
+        );
+      });
+      const record = {
+        recordId: original && original.recordId ? original.recordId : 'record_' + Date.now(),
+        projectId: task.taskId,
+        createdAt: original && typeof original.createdAt === 'number' ? original.createdAt : task.createdAt,
+        type: 'funtext',
+        text: task.sourceText,
+        totalCount: cards.length,
+        thumbnails: cards.slice(0, 4).map(function (card) { return card.url; }),
+        taskSnapshot: task
+      };
+      wx.setStorageSync(RECORDS_KEY, [record].concat(filtered).slice(0, MAX_RECORDS));
+    } catch (e) {
+      console.warn('保存趣味字画记录失败:', e);
     }
 
     this.setData({
