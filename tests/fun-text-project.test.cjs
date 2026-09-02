@@ -35,6 +35,15 @@ const model = loadMiniProgramModule('miniprogram/utils/funTextProject.js', {
   '../config/stylePacks': stylePacks
 });
 
+function reverseObjectKeys(value) {
+  if (Array.isArray(value)) return value.map(reverseObjectKeys);
+  if (!value || typeof value !== 'object') return value;
+  return Object.keys(value).reverse().reduce((result, key) => {
+    result[key] = reverseObjectKeys(value[key]);
+    return result;
+  }, {});
+}
+
 test('creates a three-candidate local project with independent scene snapshots', () => {
   const project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
 
@@ -119,6 +128,20 @@ test('render payload contains only the explicitly selected candidate', () => {
   assert.equal(render.stylePackId, selected.stylePackId);
   assert.equal(Array.isArray(render.candidates), false);
   assert.deepEqual(plain(render.scenes), plain(next.candidates[1].editedScenes));
+});
+
+test('render fingerprint is deterministic when object insertion order changes', () => {
+  const draft = model.createFunTextProject({
+    sourceText: '稳定指纹',
+    expressionKey: 'funny-reversal',
+    now: 1000
+  });
+  const project = model.selectCandidate(draft, draft.candidates[0].candidateId);
+
+  assert.equal(
+    model.createRenderFingerprint(project),
+    model.createRenderFingerprint(reverseObjectKeys(project))
+  );
 });
 
 test('preview groups expose rendered selected cards in their stable order', () => {

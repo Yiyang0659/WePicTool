@@ -31,21 +31,80 @@ function selectedScenes(project) {
   return candidate && Array.isArray(candidate.editedScenes) ? candidate.editedScenes : [];
 }
 
-function hasCompleteCachedCards(project, cards) {
+function normalizedPersistentUrl(url) {
+  if (typeof url !== 'string') return '';
+  const normalized = url.trim();
+  return /^(?:https?|cloud):\/\/\S+$/i.test(normalized) ? normalized : '';
+}
+
+function renderFingerprint(project) {
+  try {
+    return funTextProject.createRenderFingerprint(project);
+  } catch (error) {
+    return '';
+  }
+}
+
+function normalizeReusableCards(project, cards, taskSnapshot) {
   const scenes = selectedScenes(project);
-  if (!Array.isArray(cards) || cards.length !== scenes.length || scenes.length === 0) return false;
-  return cards.every(function (card, index) {
+  const fingerprint = renderFingerprint(project);
+  if (
+    !fingerprint
+    || !taskSnapshot
+    || taskSnapshot.type !== 'funtext'
+    || taskSnapshot.taskId !== project.projectId
+    || taskSnapshot.renderFingerprint !== fingerprint
+    || renderFingerprint(taskSnapshot.projectSnapshot) !== fingerprint
+    || !Array.isArray(cards)
+    || cards.length !== scenes.length
+    || scenes.length === 0
+  ) return null;
+
+  const normalizedCards = [];
+  const valid = cards.every(function (card, index) {
     const scene = scenes[index];
-    return Boolean(
+    const url = card && normalizedPersistentUrl(card.url);
+    if (!(
       card
       && scene
       && card.sceneId === scene.sceneId
       && card.role === scene.role
       && card.order === scene.order
-      && typeof card.url === 'string'
-      && card.url.trim()
-    );
+      && card.renderFingerprint === fingerprint
+      && url
+    )) return false;
+    normalizedCards.push(Object.assign({}, card, { url: url }));
+    return true;
   });
+  return valid ? normalizedCards : null;
+}
+
+function canonicalFunTextRecordId(record) {
+  if (!record || record.type !== 'funtext') return '';
+  if (record.taskSnapshot && record.taskSnapshot.type !== 'funtext') return '';
+  const identityFields = [];
+  if (Object.prototype.hasOwnProperty.call(record, 'projectId')) {
+    identityFields.push(record.projectId);
+  }
+  if (record.projectSnapshot) {
+    identityFields.push(record.projectSnapshot.projectId);
+  }
+  if (record.taskSnapshot) {
+    identityFields.push(record.taskSnapshot.taskId);
+    if (record.taskSnapshot.projectSnapshot) {
+      identityFields.push(record.taskSnapshot.projectSnapshot.projectId);
+    }
+  }
+  if (identityFields.some(function (id) { return typeof id !== 'string' || id.length === 0; })) return '';
+  const ids = identityFields;
+  if (!ids.length || ids.some(function (id) { return id !== ids[0]; })) return '';
+  return ids[0];
+}
+
+function canonicalFunTextTaskId(task) {
+  if (!task || task.type !== 'funtext' || typeof task.taskId !== 'string' || !task.taskId) return '';
+  const snapshotId = task.projectSnapshot && task.projectSnapshot.projectId;
+  return snapshotId === task.taskId ? task.taskId : '';
 }
 
 Page({
@@ -73,13 +132,23 @@ Page({
       });
       eventChannel.on('acceptTaskData', function (data) {
         if (data && data.task && data.task.projectSnapshot) {
-          that.initProject(data.task.projectSnapshot, data.task.cards);
+          that.initProject(data.task.projectSnapshot, data.task.cards, data.task);
         }
       });
     }
   },
 
-  initProject: async function (project, existingCards) {
+  nextRenderGeneration: function () {
+    this._renderGeneration = (this._renderGeneration || 0) + 1;
+    return this._renderGeneration;
+  },
+
+  isCurrentRenderGeneration: function (generation) {
+    return this._renderGeneration === generation;
+  },
+
+  initProject: async function (project, existingCards, taskSnapshot) {
+    const generation = this.nextRenderGeneration();
     if (!project || !project.selectedCandidateId) return;
 
     if (!isSupportedProject(project)) {
@@ -97,13 +166,13 @@ Page({
       return;
     }
 
-    const canReuseCards = hasCompleteCachedCards(project, existingCards);
+    const reusableCards = normalizeReusableCards(project, existingCards, taskSnapshot);
 
     this.setData({
       project: project,
       task: null,
       renderedCards: [],
-      rendering: !canReuseCards,
+      rendering: !reusableCards,
       renderFailed: false,
       renderErrorMessage: '',
       saveCursor: 0,
@@ -111,18 +180,20 @@ Page({
       currentIndex: 0
     });
 
-    if (canReuseCards) {
-      this.applyRenderSuccess(project, existingCards);
+    if (reusableCards) {
+      this.applyRenderSuccess(project, reusableCards, generation);
       return;
     }
 
     try {
       const payload = funTextProject.buildRenderPayload(project);
       const res = await funCardRendererClient.requestRenderStack(wx, payload);
-      this.applyRenderSuccess(project, res.cards);
+      if (!this.isCurrentRenderGeneration(generation)) return;
+      this.applyRenderSuccess(project, res.cards, generation);
     } catch (err) {
+      if (!this.isCurrentRenderGeneration(generation)) return;
       if (canRenderLocally(err)) {
-        this.renderLocalCanvasStack(project);
+        this.renderLocalCanvasStack(project, generation);
         return;
       }
       this.setData({
@@ -133,8 +204,9 @@ Page({
     }
   },
 
-  renderLocalCanvasStack: function (project) {
+  renderLocalCanvasStack: function (project, generation) {
     const that = this;
+    if (!that.isCurrentRenderGeneration(generation)) return;
     const candidate = (project.candidates || []).find(function (c) {
       return c.candidateId === project.selectedCandidateId;
     });
@@ -150,6 +222,7 @@ Page({
 
     const query = wx.createSelectorQuery();
     query.select('#funTextExporterCanvas').fields({ node: true, size: true }).exec(async function (res) {
+      if (!that.isCurrentRenderGeneration(generation)) return;
       const canvasNode = res && res[0] && res[0].node;
       if (!canvasNode) {
         that.setData({
@@ -167,6 +240,7 @@ Page({
         const renderedCards = [];
 
         for (let i = 0; i < scenes.length; i++) {
+          if (!that.isCurrentRenderGeneration(generation)) return;
           const scene = scenes[i];
           ctx.clearRect(0, 0, 1080, 1080);
           painter.paintScene(ctx, scene, 1080);
@@ -184,6 +258,8 @@ Page({
             });
           });
 
+          if (!that.isCurrentRenderGeneration(generation)) return;
+
           renderedCards.push({
             sceneId: scene.sceneId,
             role: scene.role,
@@ -192,8 +268,10 @@ Page({
           });
         }
 
-        that.applyRenderSuccess(project, renderedCards);
+        if (!that.isCurrentRenderGeneration(generation)) return;
+        that.applyRenderSuccess(project, renderedCards, generation);
       } catch (error) {
+        if (!that.isCurrentRenderGeneration(generation)) return;
         that.setData({
           rendering: false,
           renderFailed: true,
@@ -203,21 +281,33 @@ Page({
     });
   },
 
-  applyRenderSuccess: function (project, cards) {
+  applyRenderSuccess: function (project, cards, generation) {
+    if (!this.isCurrentRenderGeneration(generation)) return;
+    const fingerprint = renderFingerprint(project);
+    if (!fingerprint) return;
+    const fingerprintedCards = cards.map(function (card) {
+      return Object.assign({}, card, {
+        url: typeof card.url === 'string' ? card.url.trim() : card.url,
+        renderFingerprint: fingerprint
+      });
+    });
     const task = {
       taskId: project.projectId,
       mode: 'funtext',
       type: 'funtext',
       sourceText: project.sourceText,
       projectSnapshot: project,
-      cards: cards,
+      cards: fingerprintedCards,
+      renderFingerprint: fingerprint,
       createdAt: project.createdAt || Date.now()
     };
 
     // 记录到本地存储
     try {
       const history = wx.getStorageSync('wepic_history_tasks') || [];
-      const filtered = Array.isArray(history) ? history.filter(function (t) { return t.taskId !== task.taskId; }) : [];
+      const filtered = Array.isArray(history) ? history.filter(function (t) {
+        return canonicalFunTextTaskId(t) !== task.taskId;
+      }) : [];
       filtered.unshift(task);
       wx.setStorageSync('wepic_history_tasks', filtered.slice(0, 20));
     } catch (e) {
@@ -227,26 +317,23 @@ Page({
     try {
       const savedRecords = wx.getStorageSync(RECORDS_KEY);
       const records = Array.isArray(savedRecords) ? savedRecords : [];
-      const original = records.find(function (record) {
-        return record && (
-          record.projectId === task.taskId
-          || (record.taskSnapshot && record.taskSnapshot.taskId === task.taskId)
-        );
+      const originalIndex = records.findIndex(function (record) {
+        return canonicalFunTextRecordId(record) === task.taskId;
       });
-      const filtered = records.filter(function (record) {
-        return !record || (
-          record.projectId !== task.taskId
-          && (!record.taskSnapshot || record.taskSnapshot.taskId !== task.taskId)
-        );
+      const original = originalIndex >= 0 ? records[originalIndex] : null;
+      const filtered = records.filter(function (storedRecord) {
+        return canonicalFunTextRecordId(storedRecord) !== task.taskId;
       });
       const record = {
         recordId: original && original.recordId ? original.recordId : 'record_' + Date.now(),
         projectId: task.taskId,
         createdAt: original && typeof original.createdAt === 'number' ? original.createdAt : task.createdAt,
         type: 'funtext',
+        projectSnapshot: project,
+        renderFingerprint: fingerprint,
         text: task.sourceText,
-        totalCount: cards.length,
-        thumbnails: cards.slice(0, 4).map(function (card) { return card.url; }),
+        totalCount: fingerprintedCards.length,
+        thumbnails: fingerprintedCards.slice(0, 4).map(function (card) { return card.url; }),
         taskSnapshot: task
       };
       wx.setStorageSync(RECORDS_KEY, [record].concat(filtered).slice(0, MAX_RECORDS));
@@ -257,7 +344,7 @@ Page({
     this.setData({
       project: project,
       task: task,
-      renderedCards: cards,
+      renderedCards: fingerprintedCards,
       rendering: false,
       renderFailed: false,
       saveCursor: 0
@@ -265,7 +352,7 @@ Page({
   },
 
   onRetryRender: function () {
-    if (this.data.project) {
+    if (this.data.project && !this.data.rendering) {
       this.initProject(this.data.project);
     }
   },

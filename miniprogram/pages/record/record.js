@@ -1,8 +1,28 @@
 // pages/record/record.js
 const { normalizeTaskGroups, buildSendability, createMockTask } = require('../../utils/task');
+const funTextProject = require('../../utils/funTextProject');
 
 const RECORDS_KEY = 'wepictool_records';
 const MAX_RECORDS = 20;
+
+function projectFingerprint(project) {
+  if (!project || project.version !== 1) return '';
+  try {
+    return funTextProject.createRenderFingerprint(project);
+  } catch (error) {
+    return '';
+  }
+}
+
+function isValidFunTextTask(task) {
+  if (!task || task.type !== 'funtext' || !Array.isArray(task.cards)) return false;
+  const project = task.projectSnapshot;
+  return Boolean(
+    projectFingerprint(project)
+    && typeof task.taskId === 'string'
+    && task.taskId === project.projectId
+  );
+}
 
 Page({
   data: {
@@ -198,16 +218,25 @@ Page({
     }
 
     if (record.recordType === 'funtext') {
-      const project = (record.taskSnapshot && record.taskSnapshot.projectSnapshot) || record.projectSnapshot;
-      if (!project || project.version !== 1) {
+      const project = record.projectSnapshot;
+      const fingerprint = projectFingerprint(project);
+      if (!fingerprint) {
         wx.showToast({ title: '该记录版本暂不支持', icon: 'none' });
         return;
       }
+      const task = record.taskSnapshot;
+      const canRestoreTask = isValidFunTextTask(task)
+        && projectFingerprint(task.projectSnapshot) === fingerprint
+        && record.renderFingerprint === fingerprint
+        && task.renderFingerprint === fingerprint
+        && task.cards.every(function (card) {
+          return card && card.renderFingerprint === fingerprint;
+        });
       wx.navigateTo({
         url: '/pages/template-result/template-result',
         success: function (navRes) {
-          if (record.taskSnapshot) {
-            navRes.eventChannel.emit('acceptTaskData', { task: record.taskSnapshot });
+          if (canRestoreTask) {
+            navRes.eventChannel.emit('acceptTaskData', { task: task });
           } else {
             navRes.eventChannel.emit('funTextProject', { project: project });
           }

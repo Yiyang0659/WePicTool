@@ -111,6 +111,16 @@ function codedError(code, message) {
   return error;
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 test('template-result renders 1080 stack, saves record locally and provides preview and edit actions', async () => {
   const project = createSampleProject();
   const mockRenderedCards = cardsForProject(project);
@@ -150,9 +160,15 @@ test('template-result renders 1080 stack, saves record locally and provides prev
   assert.deepEqual(Array.from(records[0].thumbnails), mockRenderedCards.slice(0, 4).map(card => card.url));
   assert.equal(records[0].taskSnapshot.taskId, project.projectId);
   assert.equal(records[0].taskSnapshot.projectSnapshot.projectId, project.projectId);
+  assert.equal(records[0].projectSnapshot, project);
+  assert.equal(typeof records[0].renderFingerprint, 'string');
+  assert.ok(records[0].renderFingerprint.length > 0);
+  assert.equal(records[0].taskSnapshot.renderFingerprint, records[0].renderFingerprint);
+  assert.ok(records[0].taskSnapshot.cards.every(card => card.renderFingerprint === records[0].renderFingerprint));
 
   const recordPage = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
-    '../../utils/task': require('../miniprogram/utils/task.js')
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
   }, wxApi));
   recordPage.onShow();
   assert.equal(recordPage.data.records.length, 1);
@@ -222,20 +238,164 @@ test('template-result upserts one record per project while preserving its origin
   assert.deepEqual(Array.from(records[0].thumbnails), refreshedCards.slice(0, 4).map(card => card.url));
 });
 
-test('template-result rerenders instead of reusing incomplete or snapshot-mismatched cached cards', async () => {
+test('template-result never replaces an outfit record whose projectId collides with funtext', async () => {
+  const project = createSampleProject();
+  const collidingOutfit = {
+    recordId: 'outfit_collision',
+    projectId: project.projectId,
+    createdAt: 111,
+    type: 'outfit',
+    taskSnapshot: { taskId: project.projectId, type: 'outfit' }
+  };
+  const { wxApi, calls } = recordingWx();
+  calls.storage.wepictool_records = [collidingOutfit];
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: cardsForProject(project) });
+      }
+    }
+  });
+
+  await page.initProject(project);
+
+  assert.equal(calls.storage.wepictool_records.length, 2);
+  assert.equal(calls.storage.wepictool_records[1], collidingOutfit);
+  assert.equal(calls.storage.wepictool_records[0].type, 'funtext');
+});
+
+test('template-result preserves a funtext record with conflicting internal identities and safely adds the new result', async () => {
+  const project = createSampleProject();
+  const conflicting = {
+    recordId: 'funtext_conflict',
+    projectId: project.projectId,
+    createdAt: 222,
+    type: 'funtext',
+    projectSnapshot: Object.assign({}, project, { projectId: 'different_project' }),
+    taskSnapshot: {
+      taskId: 'different_project',
+      type: 'funtext',
+      projectSnapshot: Object.assign({}, project, { projectId: 'different_project' })
+    }
+  };
+  const { wxApi, calls } = recordingWx();
+  calls.storage.wepictool_records = [conflicting];
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: cardsForProject(project) });
+      }
+    }
+  });
+
+  await page.initProject(project);
+
+  assert.equal(calls.storage.wepictool_records.length, 2);
+  assert.equal(calls.storage.wepictool_records[1], conflicting);
+  assert.notEqual(calls.storage.wepictool_records[0].recordId, conflicting.recordId);
+  assert.equal(calls.storage.wepictool_records[0].projectId, project.projectId);
+});
+
+test('template-result treats a malformed present funtext identity field as a conflict instead of ignoring it', async () => {
+  const project = createSampleProject();
+  const malformed = {
+    recordId: 'funtext_malformed_identity',
+    projectId: 123,
+    createdAt: 333,
+    type: 'funtext',
+    taskSnapshot: {
+      taskId: project.projectId,
+      type: 'funtext',
+      projectSnapshot: project
+    }
+  };
+  const { wxApi, calls } = recordingWx();
+  calls.storage.wepictool_records = [malformed];
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: cardsForProject(project) });
+      }
+    }
+  });
+
+  await page.initProject(project);
+
+  assert.equal(calls.storage.wepictool_records.length, 2);
+  assert.equal(calls.storage.wepictool_records[1], malformed);
+  assert.equal(calls.storage.wepictool_records[0].projectId, project.projectId);
+});
+
+test('template-result collapses every record with the same valid canonical funtext identity', async () => {
+  const project = createSampleProject();
+  const duplicate = (recordId, createdAt) => ({
+    recordId,
+    projectId: project.projectId,
+    createdAt,
+    type: 'funtext',
+    projectSnapshot: project,
+    taskSnapshot: {
+      taskId: project.projectId,
+      type: 'funtext',
+      projectSnapshot: project
+    }
+  });
+  const first = duplicate('canonical_first', 111);
+  const second = duplicate('canonical_second', 222);
+  const { wxApi, calls } = recordingWx();
+  calls.storage.wepictool_records = [first, second];
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: cardsForProject(project) });
+      }
+    }
+  });
+
+  await page.initProject(project);
+
+  const matching = calls.storage.wepictool_records.filter(record => record.type === 'funtext' && record.projectId === project.projectId);
+  assert.equal(matching.length, 1);
+  assert.equal(matching[0].recordId, first.recordId);
+  assert.equal(matching[0].createdAt, first.createdAt);
+});
+
+test('template-result rerenders legacy caches and cards with non-persistent URL schemes', async () => {
   const project = createSampleProject();
   const completeCards = cardsForProject(project);
-  const invalidCaches = [
-    completeCards.slice(0, -1),
-    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { sceneId: 'wrong-scene' }) : card),
-    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { order: 99 }) : card),
-    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { url: '' }) : card),
-    completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { url: '   ' }) : card)
+  const seedWx = recordingWx();
+  const seedPage = loadResultPage(seedWx.wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: completeCards });
+      }
+    }
+  });
+  await seedPage.initProject(project);
+  const persistedTask = seedPage.data.task;
+  const invalidUrls = [
+    'wxfile://tmp/render.png',
+    '/tmp/render.png',
+    'javascript:alert(1)',
+    'data:image/png;base64,AAAA',
+    '',
+    '   '
   ];
 
-  for (const cachedCards of invalidCaches) {
+  const invalidCaches = [
+    { cards: completeCards, task: null, label: 'legacy cache without fingerprint' },
+    { cards: completeCards.slice(0, -1), task: persistedTask, label: 'incomplete cache' },
+    { cards: completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { sceneId: 'wrong-scene' }) : card), task: persistedTask, label: 'wrong scene' },
+    { cards: completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { order: 99 }) : card), task: persistedTask, label: 'wrong order' }
+  ].concat(invalidUrls.map(url => ({
+    cards: persistedTask.cards.map((card, index) => index === 0 ? Object.assign({}, card, { url }) : card),
+    task: persistedTask,
+    label: url || 'empty URL'
+  })));
+
+  for (const cache of invalidCaches) {
     let requests = 0;
-    const freshCards = cardsForProject(project, `cloud://test/fresh-${invalidCaches.indexOf(cachedCards)}`);
+    const freshCards = cardsForProject(project, `cloud://test/fresh-${invalidCaches.indexOf(cache)}`);
     const { wxApi } = recordingWx();
     const page = loadResultPage(wxApi, {
       '../../utils/funCardRendererClient': {
@@ -246,16 +406,27 @@ test('template-result rerenders instead of reusing incomplete or snapshot-mismat
       }
     });
 
-    await page.initProject(project, cachedCards);
+    await page.initProject(project, cache.cards, cache.task);
 
-    assert.equal(requests, 1);
+    assert.equal(requests, 1, cache.label);
     assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), freshCards.map(card => card.url));
   }
 });
 
-test('template-result reuses complete cached cards that exactly match the selected scene snapshot', async () => {
+test('template-result reuses only fingerprinted persistent cards and trims their URLs', async () => {
   const project = createSampleProject();
   const completeCards = cardsForProject(project);
+  const seedWx = recordingWx();
+  const seedPage = loadResultPage(seedWx.wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: completeCards });
+      }
+    }
+  });
+  await seedPage.initProject(project);
+  const persistedTask = JSON.parse(JSON.stringify(seedPage.data.task));
+  persistedTask.cards[0].url = `  ${persistedTask.cards[0].url}  `;
   let requests = 0;
   const { wxApi } = recordingWx();
   const page = loadResultPage(wxApi, {
@@ -267,10 +438,182 @@ test('template-result reuses complete cached cards that exactly match the select
     }
   });
 
-  await page.initProject(project, completeCards);
+  await page.initProject(project, persistedTask.cards, persistedTask);
 
   assert.equal(requests, 0);
   assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), completeCards.map(card => card.url));
+});
+
+test('template-result rejects a cache when nested selected-scene content changed but ids and order stayed equal', async () => {
+  const project = createSampleProject();
+  const completeCards = cardsForProject(project);
+  const seedWx = recordingWx();
+  const seedPage = loadResultPage(seedWx.wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.resolve({ cards: completeCards });
+      }
+    }
+  });
+  await seedPage.initProject(project);
+
+  const changedProject = JSON.parse(JSON.stringify(project));
+  const selected = changedProject.candidates.find(candidate => candidate.candidateId === changedProject.selectedCandidateId);
+  selected.editedScenes[0].layers[0].text = '渲染内容已经变化';
+  selected.editedScenes[0].layers[0].lines = ['渲染内容', '已经变化'];
+  const freshCards = cardsForProject(changedProject, 'cloud://test/content-changed');
+  let requests = 0;
+  const { wxApi } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        requests += 1;
+        return Promise.resolve({ cards: freshCards });
+      }
+    }
+  });
+
+  await page.initProject(changedProject, seedPage.data.task.cards, seedPage.data.task);
+
+  assert.equal(requests, 1);
+  assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), freshCards.map(card => card.url));
+});
+
+test('template-result ignores a stale remote success after a newer project succeeds', async () => {
+  const firstProject = createSampleProject();
+  const secondProject = Object.assign({}, createSampleProject(), {
+    projectId: 'funtext_second',
+    sourceText: '第二个项目'
+  });
+  const firstRequest = deferred();
+  const secondRequest = deferred();
+  let requestCount = 0;
+  const { wxApi, calls } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        requestCount += 1;
+        return requestCount === 1 ? firstRequest.promise : secondRequest.promise;
+      }
+    }
+  });
+
+  const firstInit = page.initProject(firstProject);
+  const secondInit = page.initProject(secondProject);
+  secondRequest.resolve({ cards: cardsForProject(secondProject, 'cloud://test/second') });
+  await secondInit;
+  firstRequest.resolve({ cards: cardsForProject(firstProject, 'cloud://test/first') });
+  await firstInit;
+
+  assert.equal(page.data.project.projectId, secondProject.projectId);
+  assert.equal(page.data.task.taskId, secondProject.projectId);
+  assert.deepEqual(Array.from(calls.storage.wepictool_records, record => record.projectId), [secondProject.projectId]);
+  assert.deepEqual(Array.from(calls.storage.wepic_history_tasks, task => task.taskId), [secondProject.projectId]);
+});
+
+test('template-result ignores an older failure when the same project retry already succeeded', async () => {
+  const project = createSampleProject();
+  const firstRequest = deferred();
+  const secondRequest = deferred();
+  let requestCount = 0;
+  const { wxApi, calls } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        requestCount += 1;
+        return requestCount === 1 ? firstRequest.promise : secondRequest.promise;
+      }
+    }
+  });
+
+  const firstInit = page.initProject(project);
+  const secondInit = page.initProject(project);
+  secondRequest.resolve({ cards: cardsForProject(project, 'cloud://test/retry-success') });
+  await secondInit;
+  firstRequest.reject(codedError('CONTENT_UNSAFE', 'stale failure'));
+  await firstInit;
+
+  assert.equal(page.data.renderFailed, false);
+  assert.equal(page.data.task.taskId, project.projectId);
+  assert.equal(calls.storage.wepictool_records.length, 1);
+  assert.match(page.data.renderedCards[0].url, /retry-success/);
+});
+
+test('template-result ignores retry taps while a render request is still pending', async () => {
+  const project = createSampleProject();
+  const pendingRequest = deferred();
+  let requestCount = 0;
+  const { wxApi } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        requestCount += 1;
+        return pendingRequest.promise;
+      }
+    }
+  });
+
+  const init = page.initProject(project);
+  page.onRetryRender();
+
+  assert.equal(requestCount, 1);
+  pendingRequest.resolve({ cards: cardsForProject(project) });
+  await init;
+});
+
+test('template-result stops a stale local Canvas export after a newer project succeeds', async () => {
+  const firstProject = createSampleProject();
+  const secondProject = Object.assign({}, createSampleProject(), {
+    projectId: 'funtext_canvas_newer',
+    sourceText: '新的项目'
+  });
+  const firstExport = deferred();
+  let selectorCallback;
+  let exportCalls = 0;
+  let requestCount = 0;
+  const canvasNode = {
+    getContext() {
+      return { clearRect() {} };
+    }
+  };
+  const { wxApi, calls } = recordingWx({
+    createSelectorQuery() {
+      return {
+        select() { return this; },
+        fields() { return this; },
+        exec(callback) { selectorCallback = callback; }
+      };
+    },
+    canvasToTempFilePath(options) {
+      exportCalls += 1;
+      firstExport.promise.then(() => options.success({ tempFilePath: 'wxfile://stale.png' }));
+    }
+  });
+  const page = loadResultPage(wxApi, {
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        requestCount += 1;
+        if (requestCount === 1) return Promise.reject(codedError('NETWORK_ERROR'));
+        return Promise.resolve({ cards: cardsForProject(secondProject, 'cloud://test/canvas-newer') });
+      }
+    },
+    '../../utils/scenePainter': { paintScene() {} }
+  });
+
+  await page.initProject(firstProject);
+  selectorCallback([{ node: canvasNode }]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(exportCalls, 1);
+
+  await page.initProject(secondProject);
+  firstExport.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(exportCalls, 1);
+  assert.equal(page.data.task.taskId, secondProject.projectId);
+  assert.equal(page.data.renderFailed, false);
+  assert.deepEqual(Array.from(calls.storage.wepictool_records, record => record.projectId), [secondProject.projectId]);
 });
 
 test('template-result rejects unsupported funtext project versions without rendering or recording', async () => {

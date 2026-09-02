@@ -9,6 +9,37 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function stableSerialize(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map(function (item) {
+      return typeof item === 'undefined' ? 'null' : stableSerialize(item);
+    }).join(',') + ']';
+  }
+  return '{' + Object.keys(value).sort().filter(function (key) {
+    return typeof value[key] !== 'undefined';
+  }).map(function (key) {
+    return JSON.stringify(key) + ':' + stableSerialize(value[key]);
+  }).join(',') + '}';
+}
+
+function hashFingerprint(serialized) {
+  var first = 2166136261;
+  var second = 2246822507;
+  for (var index = 0; index < serialized.length; index++) {
+    var code = serialized.charCodeAt(index);
+    first ^= code;
+    first = Math.imul(first, 16777619);
+    second ^= code + index;
+    second = Math.imul(second, 3266489909);
+  }
+  return [first, second].map(function (value) {
+    return ('00000000' + (value >>> 0).toString(16)).slice(-8);
+  }).join('');
+}
+
 function timestamp(value) {
   var number = Number(value);
   return Number.isFinite(number) ? number : Date.now();
@@ -296,6 +327,21 @@ function buildRenderPayload(project) {
   };
 }
 
+function createRenderFingerprint(project) {
+  var payload = buildRenderPayload(project);
+  var serialized = stableSerialize({
+    projectId: payload.projectId,
+    playId: project.playId,
+    version: project.version,
+    sourceText: payload.sourceText,
+    selectedCandidateId: project.selectedCandidateId,
+    candidateId: payload.candidateId,
+    stylePackId: payload.stylePackId,
+    scenes: payload.scenes
+  });
+  return 'funtext-render-v1:' + serialized.length.toString(16) + ':' + hashFingerprint(serialized);
+}
+
 function buildPreviewGroups(project, renderedCards) {
   if (!project || !project.selectedCandidateId) return [];
   var candidate = requireCandidate(project, project.selectedCandidateId);
@@ -322,5 +368,6 @@ module.exports = {
   moveCard: moveCard,
   buildPreviewPayload: buildPreviewPayload,
   buildRenderPayload: buildRenderPayload,
+  createRenderFingerprint: createRenderFingerprint,
   buildPreviewGroups: buildPreviewGroups
 };

@@ -62,11 +62,13 @@ function recordingWx(storage) {
 }
 
 test('record page categorizes funtext tasks and routes to template-result', () => {
-  const sampleProject = model.createFunTextProject({
+  const draft = model.createFunTextProject({
     sourceText: '今天想见你',
     expressionKey: 'funny-reversal',
     now: 1000
   });
+  const sampleProject = model.selectCandidate(draft, draft.candidates[0].candidateId);
+  const fingerprint = model.createRenderFingerprint(sampleProject);
 
   const storage = {
     wepictool_records: [
@@ -78,12 +80,15 @@ test('record page categorizes funtext tasks and routes to template-result', () =
         title: '今天想见你',
         summary: '今天想见你',
         thumbnails: ['cloud://test/c1.png'],
+        projectSnapshot: sampleProject,
+        renderFingerprint: fingerprint,
         taskSnapshot: {
-          taskId: 'proj_1',
+          taskId: sampleProject.projectId,
           mode: 'funtext',
           type: 'funtext',
           projectSnapshot: sampleProject,
-          cards: [{ sceneId: 's1', order: 1, url: 'cloud://test/c1.png' }]
+          renderFingerprint: fingerprint,
+          cards: [{ sceneId: 's1', order: 1, url: 'cloud://test/c1.png', renderFingerprint: fingerprint }]
         }
       }
     ]
@@ -91,7 +96,8 @@ test('record page categorizes funtext tasks and routes to template-result', () =
 
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
-    '../../utils/task': require('../miniprogram/utils/task.js')
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
   }, wxApi));
 
   page.onShow();
@@ -107,6 +113,113 @@ test('record page categorizes funtext tasks and routes to template-result', () =
   assert.equal(calls.emitted.length, 1);
   assert.equal(calls.emitted[0].name, 'acceptTaskData');
   assert.equal(calls.emitted[0].payload.task, storage.wepictool_records[0].taskSnapshot);
+});
+
+test('record page sends only the top-level project for a legacy record without fingerprints', () => {
+  const draft = model.createFunTextProject({
+    sourceText: '旧记录需要重新渲染',
+    expressionKey: 'funny-reversal',
+    now: 1000
+  });
+  const project = model.selectCandidate(draft, draft.candidates[0].candidateId);
+  const storage = {
+    wepictool_records: [{
+      recordId: 'rec_legacy_no_fingerprint',
+      type: 'funtext',
+      createdAt: 1000,
+      projectSnapshot: project,
+      taskSnapshot: {
+        taskId: project.projectId,
+        type: 'funtext',
+        projectSnapshot: project,
+        cards: [{ sceneId: 'scene_01', order: 1, url: 'cloud://test/legacy.png' }]
+      }
+    }]
+  };
+  const { wxApi, calls } = recordingWx(storage);
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
+  }, wxApi));
+
+  page.onShow();
+  page.onViewRecord({ currentTarget: { dataset: { recordid: 'rec_legacy_no_fingerprint' } } });
+
+  assert.equal(calls.emitted.length, 1);
+  assert.equal(calls.emitted[0].name, 'funTextProject');
+  assert.equal(calls.emitted[0].payload.project, project);
+});
+
+test('record page falls back to one funTextProject event when task and top-level projects disagree', () => {
+  const draft = model.createFunTextProject({
+    projectId: 'project_top_level',
+    sourceText: '以顶层项目为准',
+    expressionKey: 'funny-reversal',
+    now: 1000
+  });
+  const topLevelProject = model.selectCandidate(draft, draft.candidates[0].candidateId);
+  const staleTaskProject = Object.assign({}, topLevelProject, { sourceText: '过期任务内容' });
+  const storage = {
+    wepictool_records: [{
+      recordId: 'rec_inconsistent',
+      type: 'funtext',
+      createdAt: 1000,
+      projectSnapshot: topLevelProject,
+      taskSnapshot: {
+        taskId: topLevelProject.projectId,
+        type: 'funtext',
+        projectSnapshot: staleTaskProject,
+        cards: [{ sceneId: 'scene_01', order: 1, url: 'cloud://test/stale.png' }]
+      }
+    }]
+  };
+  const { wxApi, calls } = recordingWx(storage);
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
+  }, wxApi));
+
+  page.onShow();
+  page.onViewRecord({ currentTarget: { dataset: { recordid: 'rec_inconsistent' } } });
+
+  assert.equal(calls.emitted.length, 1);
+  assert.equal(calls.emitted[0].name, 'funTextProject');
+  assert.equal(calls.emitted[0].payload.project, topLevelProject);
+});
+
+test('record page falls back to one funTextProject event when task snapshot is not a valid funtext task', () => {
+  const draft = model.createFunTextProject({
+    sourceText: '顶层项目仍然有效',
+    expressionKey: 'funny-reversal',
+    now: 1000
+  });
+  const project = model.selectCandidate(draft, draft.candidates[0].candidateId);
+  const storage = {
+    wepictool_records: [{
+      recordId: 'rec_invalid_task',
+      type: 'funtext',
+      createdAt: 1000,
+      projectSnapshot: project,
+      taskSnapshot: {
+        taskId: project.projectId,
+        type: 'outfit',
+        projectSnapshot: project,
+        cards: []
+      }
+    }]
+  };
+  const { wxApi, calls } = recordingWx(storage);
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
+  }, wxApi));
+
+  page.onShow();
+  page.onViewRecord({ currentTarget: { dataset: { recordid: 'rec_invalid_task' } } });
+
+  assert.equal(calls.emitted.length, 1);
+  assert.equal(calls.emitted[0].name, 'funTextProject');
+  assert.equal(calls.emitted[0].payload.project, project);
 });
 
 test('record page shows upgrade prompt on legacy bigtext records and offers recreation', () => {
@@ -125,7 +238,8 @@ test('record page shows upgrade prompt on legacy bigtext records and offers recr
 
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
-    '../../utils/task': require('../miniprogram/utils/task.js')
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
   }, wxApi));
 
   page.onShow();
@@ -151,7 +265,8 @@ test('record page reopens layered-dressup with its P1 editor route', () => {
   };
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
-    '../../utils/task': require('../miniprogram/utils/task.js')
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
   }, wxApi));
 
   page.onShow();
@@ -170,7 +285,8 @@ test('record page preserves unsupported records and does not navigate them', () 
   const storage = { wepictool_records: [unsupported] };
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
-    '../../utils/task': require('../miniprogram/utils/task.js')
+    '../../utils/task': require('../miniprogram/utils/task.js'),
+    '../../utils/funTextProject': model
   }, wxApi));
 
   page.onShow();
