@@ -64,6 +64,20 @@ function loadEditorPage(wxApi, customDeps) {
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text-editor/fun-text-editor.js', deps, wxApi));
 }
 
+function handlerBoundToElement(wxml, className, binding) {
+  const matcher = new RegExp('<[^>]*class="[^\"]*' + className + '[^\"]*"[^>]*' + binding + '="([^\"]+)"', 's');
+  const match = wxml.match(matcher);
+  assert.ok(match, className + ' must bind ' + binding);
+  return match[1];
+}
+
+function handlerBoundToMovableView(wxml, binding) {
+  const matcher = new RegExp('<movable-view[\\s\\S]*?' + binding + '="([^\"]+)"');
+  const match = wxml.match(matcher);
+  assert.ok(match, 'movable-view must bind ' + binding);
+  return match[1];
+}
+
 test('editor page initializes with selected candidate and exposes only the three approved editing areas', () => {
   const { wxApi } = recordingWx({});
   const page = loadEditorPage(wxApi);
@@ -79,14 +93,20 @@ test('editor page initializes with selected candidate and exposes only the three
   assert.deepEqual(page.data.stylePacks.map(p => p.id), ['pink-note-v1', 'chalk-chaos-v1', 'paper-collage-v1']);
 });
 
-test('editing current card text updates the scene text and preserves project immutability', () => {
+test('editor WXML binds the declared text handlers and they update the current card', () => {
   const { wxApi } = recordingWx({});
   const page = loadEditorPage(wxApi);
   const project = createSampleProject();
+  const wxml = readMiniProgramFile('miniprogram/pages/fun-text-editor/fun-text-editor.wxml');
   page.initProject(project);
 
   const initialText = page.data.scenes[0].layers.find(l => l.type === 'text').text;
-  page.onStartEditText();
+  const editHandler = handlerBoundToElement(wxml, 'edit-text-row', 'bindtap');
+  const confirmHandler = handlerBoundToElement(wxml, 'btn-modal-confirm', 'bindtap');
+  assert.equal(editHandler, 'onEditText');
+  assert.equal(confirmHandler, 'onConfirmText');
+
+  page[editHandler]();
   assert.equal(page.data.editingTextModalVisible, true);
   assert.equal(page.data.editingText, initialText);
 
@@ -94,7 +114,7 @@ test('editing current card text updates the scene text and preserves project imm
   assert.equal(page.data.editingText, '先等等');
   assert.equal(page.data.editingCharCount, 3);
 
-  page.onConfirmEditText();
+  page[confirmHandler]();
   assert.equal(page.data.editingTextModalVisible, false);
   const updatedText = page.data.scenes[0].layers.find(l => l.type === 'text').text;
   assert.equal(updatedText, '先等等');
@@ -108,9 +128,9 @@ test('editing card text enforces phase-one role length limits', () => {
   page.initProject(project);
 
   // Card 0 is a hook (non-reveal, max 12 chars)
-  page.onStartEditText();
+  page.onEditText();
   page.onInputEditText({ detail: { value: '字'.repeat(13) } });
-  page.onConfirmEditText();
+  page.onConfirmText();
 
   assert.ok(calls.toasts.some(t => /12/.test(t.title) || /超过/.test(t.title)));
   assert.notEqual(page.data.scenes[0].layers.find(l => l.type === 'text').text, '字'.repeat(13));
@@ -123,9 +143,9 @@ test('switching style pack recomposes the entire stack with current text and ord
   page.initProject(project);
 
   // Edit card 0 text first
-  page.onStartEditText();
+  page.onEditText();
   page.onInputEditText({ detail: { value: '先等等' } });
-  page.onConfirmEditText();
+  page.onConfirmText();
 
   page.onSelectStylePack({ currentTarget: { dataset: { stylePackId: 'chalk-chaos-v1' } } });
 
@@ -134,23 +154,51 @@ test('switching style pack recomposes the entire stack with current text and ord
   assert.equal(page.data.project.candidates[0].stylePackId, 'chalk-chaos-v1');
 });
 
-test('reordering cards updates scene orders and marks first card as WeChat cover', () => {
+test('movable thumbnail lifecycle moves third card to first exactly once and retains the cover label', () => {
   const { wxApi } = recordingWx({});
-  const page = loadEditorPage(wxApi);
+  const calls = [];
+  const page = loadEditorPage(wxApi, {
+    '../../utils/funTextProject': Object.assign({}, model, {
+      moveCard(project, candidateId, fromIndex, toIndex) {
+        calls.push({ projectId: project.projectId, candidateId, fromIndex, toIndex });
+        return model.moveCard(project, candidateId, fromIndex, toIndex);
+      }
+    })
+  });
   const project = createSampleProject();
+  const wxml = readMiniProgramFile('miniprogram/pages/fun-text-editor/fun-text-editor.wxml');
   page.initProject(project);
 
   const initialScenes = page.data.scenes.slice();
   const movingSceneId = initialScenes[2].sceneId;
+  const startHandler = handlerBoundToMovableView(wxml, 'bindtouchstart');
+  const moveHandler = handlerBoundToMovableView(wxml, 'bindchange');
+  const endHandler = handlerBoundToMovableView(wxml, 'bindtouchend');
+  assert.equal(startHandler, 'onSortStart');
+  assert.equal(moveHandler, 'onSortMove');
+  assert.equal(endHandler, 'onSortEnd');
+  assert.match(wxml, /<movable-area/);
+  assert.match(wxml, /<movable-view/);
 
-  // Move card from index 2 to index 0
-  page.onMoveCard({ fromIndex: 2, toIndex: 0 });
+  page[startHandler]({ currentTarget: { dataset: { index: 2 } } });
+  page[moveHandler]({ detail: { x: page.data.sortItems[0].x } });
+  page[moveHandler]({ detail: { x: page.data.sortItems[0].x } });
+  assert.equal(calls.length, 0, 'moving only updates the destination preview');
+  page[endHandler]();
+  page[endHandler]();
 
+  assert.deepEqual(calls, [{
+    projectId: project.projectId,
+    candidateId: project.selectedCandidateId,
+    fromIndex: 2,
+    toIndex: 0
+  }]);
   assert.equal(page.data.scenes[0].sceneId, movingSceneId);
   assert.equal(page.data.scenes[0].order, 1);
   assert.equal(page.data.scenes[1].order, 2);
   assert.equal(page.data.scenes[2].order, 3);
   assert.deepEqual(page.data.scenes.map(s => s.order), page.data.scenes.map((_, i) => i + 1));
+  assert.equal(page.data.sortItems[0].label, '微信封面');
 });
 
 test('onConfirmEdits emits full updated project and navigates to template-result', () => {

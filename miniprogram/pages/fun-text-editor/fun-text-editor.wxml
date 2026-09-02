@@ -17,34 +17,30 @@
       <text class="section-hint">点击选中卡片，首张为微信封面</text>
     </view>
     <scroll-view class="cards-scroll" scroll-x="true">
-      <view class="cards-strip">
-        <view
-          wx:for="{{scenes}}"
+      <movable-area class="cards-movable-area" style="width: {{sortAreaWidth}}px; height: {{sortItemWidth}}px;">
+        <movable-view
+          wx:for="{{sortItems}}"
           wx:key="sceneId"
-          class="card-thumb-item {{index === currentCardIndex ? 'thumb-active' : ''}}"
+          class="card-thumb-movable"
+          style="width: {{sortItemWidth}}px; height: {{sortItemWidth}}px;"
+          direction="horizontal"
+          x="{{item.x}}"
+          y="{{0}}"
           data-index="{{index}}"
-          bindtap="onSelectCard"
+          bindtouchstart="onSortStart"
+          bindchange="onSortMove"
+          bindtouchend="onSortEnd"
         >
-          <view class="thumb-badge {{index === 0 ? 'badge-cover' : ''}}">
-            {{index === 0 ? '微信封面' : (index + 1)}}
+          <view
+            class="card-thumb-item {{index === currentCardIndex ? 'thumb-active' : ''}} {{index === draggingIndex ? 'thumb-dragging' : ''}}"
+            data-index="{{index}}"
+            bindtap="onSelectCard"
+          >
+            <view class="thumb-badge {{index === 0 ? 'badge-cover' : ''}}">{{item.label}}</view>
+            <view class="thumb-text">{{item.layers[0].text || '……'}}</view>
           </view>
-          <view class="thumb-text">{{item.layers[0].text || '……'}}</view>
-          <view class="thumb-order-controls" wx:if="{{index === currentCardIndex}}">
-            <view
-              wx:if="{{index > 0}}"
-              class="btn-order-arrow"
-              data-index="{{index}}"
-              catchtap="onMoveCardLeft"
-            >‹</view>
-            <view
-              wx:if="{{index < scenes.length - 1}}"
-              class="btn-order-arrow"
-              data-index="{{index}}"
-              catchtap="onMoveCardRight"
-            >›</view>
-          </view>
-        </view>
-      </view>
+        </movable-view>
+      </movable-area>
     </scroll-view>
   </view>
 
@@ -54,7 +50,7 @@
       <text class="section-title">改文字</text>
       <text class="section-hint">仅修改当前卡（第 {{currentCardIndex + 1}} 张）</text>
     </view>
-    <view class="edit-text-row" bindtap="onStartEditText">
+    <view class="edit-text-row" bindtap="onEditText">
       <view class="edit-text-preview">
         {{currentScene.layers[0].text ? currentScene.layers[0].text : '（此卡为纯涂鸦停顿，点此添加文字）'}}
       </view>
@@ -105,7 +101,7 @@
       </view>
       <view class="modal-actions">
         <button class="btn-modal-cancel" bindtap="onCancelEditText">取消</button>
-        <button class="btn-modal-confirm" bindtap="onConfirmEditText">确定</button>
+        <button class="btn-modal-confirm" bindtap="onConfirmText">确定</button>
       </view>
     </view>
   </view>

@@ -9,6 +9,37 @@ const STYLE_PACK_NAMES = {
   'paper-collage-v1': '剪贴报纸'
 };
 
+function getSortItemWidth() {
+  try {
+    const systemInfo = typeof wx !== 'undefined' && wx.getSystemInfoSync && wx.getSystemInfoSync();
+    const windowWidth = systemInfo && Number(systemInfo.windowWidth);
+    if (Number.isFinite(windowWidth) && windowWidth > 0) {
+      return Math.round(windowWidth * 140 / 750);
+    }
+  } catch (err) {
+    // 预览或测试环境可能没有系统信息，使用 375px 宽屏幕下的等比例尺寸。
+  }
+  return 70;
+}
+
+function buildSortItems(scenes) {
+  const width = getSortItemWidth();
+  const gap = Math.round(width * 16 / 140);
+  const items = (scenes || []).map(function (scene, index) {
+    const x = index * (width + gap);
+    return Object.assign({}, scene, {
+      x: x,
+      centerX: x + width / 2,
+      label: index === 0 ? '微信封面' : String(index + 1)
+    });
+  });
+  return {
+    items: items,
+    width: width,
+    areaWidth: items.length ? items[items.length - 1].x + width : 0
+  };
+}
+
 Page({
   data: {
     project: null,
@@ -22,7 +53,12 @@ Page({
     editingCharCount: 0,
     maxCharCount: 12,
     canvasRevision: 0,
-    draggingIndex: -1
+    draggingIndex: -1,
+    sortFromIndex: -1,
+    sortToIndex: -1,
+    sortItems: [],
+    sortItemWidth: 70,
+    sortAreaWidth: 0
   },
 
   onLoad: function () {
@@ -60,6 +96,7 @@ Page({
       };
     });
 
+    const sortGeometry = buildSortItems(scenes);
     this.setData({
       project: project,
       selectedCandidate: selectedCandidate,
@@ -71,7 +108,13 @@ Page({
       editingText: '',
       editingCharCount: 0,
       maxCharCount: (scenes[0] && scenes[0].role === 'reveal') ? 40 : 12,
-      canvasRevision: 0
+      canvasRevision: 0,
+      draggingIndex: -1,
+      sortFromIndex: -1,
+      sortToIndex: -1,
+      sortItems: sortGeometry.items,
+      sortItemWidth: sortGeometry.width,
+      sortAreaWidth: sortGeometry.areaWidth
     });
   },
 
@@ -87,7 +130,7 @@ Page({
   },
 
   // 1. 改当前卡文字
-  onStartEditText: function () {
+  onEditText: function () {
     const scene = this.data.scenes[this.data.currentCardIndex];
     if (!scene) return;
     const textLayer = (scene.layers || []).find(function (layer) { return layer.type === 'text'; });
@@ -114,7 +157,7 @@ Page({
     this.setData({ editingTextModalVisible: false });
   },
 
-  onConfirmEditText: function () {
+  onConfirmText: function () {
     const scene = this.data.scenes[this.data.currentCardIndex];
     if (!scene || !this.data.project || !this.data.selectedCandidate) return;
 
@@ -192,14 +235,44 @@ Page({
     }
   },
 
-  // 3. 调整顺序
-  onMoveCard: function (eventOrParams) {
-    const params = eventOrParams || {};
-    const dataset = (params.currentTarget && params.currentTarget.dataset) || {};
-    const fromIndex = typeof params.fromIndex === 'number' ? params.fromIndex : Number(dataset.fromIndex);
-    const toIndex = typeof params.toIndex === 'number' ? params.toIndex : Number(dataset.toIndex);
+  // 3. 调整顺序：移动过程中只计算落点，触摸结束时再提交一次排序。
+  onSortStart: function (event) {
+    const index = Number(event && event.currentTarget && event.currentTarget.dataset.index);
+    if (!Number.isInteger(index) || index < 0 || index >= this.data.sortItems.length) return;
+    this.setData({
+      draggingIndex: index,
+      sortFromIndex: index,
+      sortToIndex: index
+    });
+  },
 
-    if (!Number.isFinite(fromIndex) || !Number.isFinite(toIndex) || fromIndex === toIndex) return;
+  onSortMove: function (event) {
+    if (this.data.sortFromIndex < 0) return;
+    const x = Number(event && event.detail && event.detail.x);
+    if (!Number.isFinite(x)) return;
+    const dragCenterX = x + this.data.sortItemWidth / 2;
+    let nearestIndex = this.data.sortFromIndex;
+    let nearestDistance = Infinity;
+    this.data.sortItems.forEach(function (item, index) {
+      const distance = Math.abs(dragCenterX - item.centerX);
+      if (distance < nearestDistance) {
+        nearestIndex = index;
+        nearestDistance = distance;
+      }
+    });
+    if (nearestIndex !== this.data.sortToIndex) {
+      this.setData({ sortToIndex: nearestIndex });
+    }
+  },
+
+  onSortEnd: function () {
+    const fromIndex = this.data.sortFromIndex;
+    const toIndex = this.data.sortToIndex;
+    if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex < 0) return;
+
+    // 先清空生命周期状态，避免 bindchange 与重复 touchend 造成第二次移动。
+    this.setData({ draggingIndex: -1, sortFromIndex: -1, sortToIndex: -1 });
+    if (fromIndex === toIndex || !this.data.project || !this.data.selectedCandidate) return;
 
     try {
       const updatedProject = funTextProject.moveCard(
@@ -208,39 +281,25 @@ Page({
         fromIndex,
         toIndex
       );
-
       const candidate = updatedProject.candidates.find(function (c) {
         return c.candidateId === updatedProject.selectedCandidateId;
       });
       const scenes = candidate.editedScenes;
-      const newCurrentIndex = toIndex;
-      const currentScene = scenes[newCurrentIndex];
+      const sortGeometry = buildSortItems(scenes);
 
       this.setData({
         project: updatedProject,
         selectedCandidate: candidate,
         scenes: scenes,
-        currentCardIndex: newCurrentIndex,
-        currentScene: currentScene,
+        currentCardIndex: toIndex,
+        currentScene: scenes[toIndex],
+        sortItems: sortGeometry.items,
+        sortItemWidth: sortGeometry.width,
+        sortAreaWidth: sortGeometry.areaWidth,
         canvasRevision: this.data.canvasRevision + 1
       });
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '调整顺序失败', icon: 'none' });
-    }
-  },
-
-  // 拖动排序触发：点击前移 / 后移
-  onMoveCardLeft: function (event) {
-    const index = Number(event.currentTarget.dataset.index);
-    if (index > 0) {
-      this.onMoveCard({ fromIndex: index, toIndex: index - 1 });
-    }
-  },
-
-  onMoveCardRight: function (event) {
-    const index = Number(event.currentTarget.dataset.index);
-    if (index < this.data.scenes.length - 1) {
-      this.onMoveCard({ fromIndex: index, toIndex: index + 1 });
     }
   },
 
