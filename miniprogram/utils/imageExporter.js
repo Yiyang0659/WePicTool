@@ -41,6 +41,15 @@ function resolveImagePath(wxApi, url) {
       wxApi.downloadFile({
         url: url,
         success: function (res) {
+          if (
+            res &&
+            res.statusCode !== undefined &&
+            res.statusCode !== null &&
+            (!Number.isFinite(Number(res.statusCode)) || Number(res.statusCode) < 200 || Number(res.statusCode) >= 300)
+          ) {
+            reject(makeError('网络图片下载失败 HTTP ' + res.statusCode, 'DOWNLOAD_FAILED', { cause: res }));
+            return;
+          }
           if (res && res.tempFilePath) {
             resolve(res.tempFilePath);
           } else {
@@ -80,6 +89,7 @@ async function saveImagesSequentially(wxApi, urls, options) {
   var items = Array.isArray(urls) ? urls : [];
   var startIndex = Math.max(0, Number(opts.startIndex) || 0);
   var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+  var pathResolver = typeof opts.resolvePath === 'function' ? opts.resolvePath : resolveImagePath;
 
   var savedCount = 0;
   for (var i = startIndex; i < items.length; i++) {
@@ -87,7 +97,7 @@ async function saveImagesSequentially(wxApi, urls, options) {
       onProgress(i + 1, items.length);
     }
     try {
-      var filePath = await resolveImagePath(wxApi, items[i]);
+      var filePath = await pathResolver(wxApi, items[i], i);
       await saveSingleImage(wxApi, filePath);
       savedCount += 1;
     } catch (err) {

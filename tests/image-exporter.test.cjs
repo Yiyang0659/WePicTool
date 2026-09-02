@@ -43,6 +43,23 @@ test('resolveImagePath handles cloud, https and local paths', async () => {
   assert.equal(localRes, '/assets/fun-text/demo/01.png');
 });
 
+test('resolveImagePath rejects a non-2xx HTTP download even when a temp path is returned', async () => {
+  const exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js');
+  const wxApi = {
+    downloadFile(options) {
+      options.success({
+        statusCode: 404,
+        tempFilePath: 'wxfile://error-response.png'
+      });
+    }
+  };
+
+  await assert.rejects(
+    () => exporter.resolveImagePath(wxApi, 'https://test.com/missing.png'),
+    (error) => error.code === 'DOWNLOAD_FAILED' && /HTTP 404/.test(error.message)
+  );
+});
+
 function fakeWxThatFailsAt(failedIndex, saved) {
   let calls = 0;
   return {

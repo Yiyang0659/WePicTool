@@ -133,7 +133,7 @@ test('preview groups expose rendered selected cards in their stable order', () =
 
   assert.equal(groups.length, 1);
   assert.equal(groups[0].key, candidate.candidateId);
-  assert.equal(groups[0].name, candidate.title);
+  assert.equal(groups[0].name, '趣味字画');
   assert.equal(groups[0].cards[0].id, candidate.editedScenes[0].sceneId);
   assert.equal(groups[0].cards[0].url, 'https://example.test/scene_01.png');
   assert.equal(groups[0].cards[0].ratio, '1:1');

@@ -95,6 +95,12 @@ function loadResultPage(wxApi, customDeps) {
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/template-result/template-result.js', deps, wxApi));
 }
 
+function codedError(code, message) {
+  const error = new Error(message || code);
+  error.code = code;
+  return error;
+}
+
 test('template-result renders 1080 stack, saves record locally and provides preview and edit actions', async () => {
   const project = createSampleProject();
   const mockRenderedCards = project.candidates[0].editedScenes.map((s) => ({
@@ -136,11 +142,93 @@ test('template-result renders 1080 stack, saves record locally and provides prev
   assert.equal(calls.emitted[0].name, 'acceptTaskData');
   const previewData = calls.emitted[0].payload;
   assert.equal(previewData.ratio, '1:1');
+  assert.equal(previewData.groups[0].name, '趣味字画');
   assert.equal(previewData.groups[0].cards.length, mockRenderedCards.length);
 
   // Tap "自己改改" (onEditStack)
   page.onEditStack();
   assert.ok(calls.navigations.includes('/pages/fun-text-editor/fun-text-editor'));
+});
+
+test('template-result fails closed without local fallback or history for safety and response errors', async () => {
+  const project = createSampleProject();
+  const failClosedCodes = [
+    'CONTENT_UNSAFE',
+    'SAFETY_UNAVAILABLE',
+    'INVALID_RENDER_RESPONSE',
+    'WX_API_UNAVAILABLE',
+    undefined
+  ];
+
+  for (const code of failClosedCodes) {
+    let canvasQueries = 0;
+    const { wxApi, calls } = recordingWx({
+      createSelectorQuery() {
+        canvasQueries += 1;
+        return {
+          select() { return this; },
+          fields() { return this; },
+          exec(callback) { callback([]); }
+        };
+      }
+    });
+    const page = loadResultPage(wxApi, {
+      '../../utils/funCardRendererClient': {
+        requestRenderStack() {
+          return Promise.reject(codedError(code));
+        }
+      }
+    });
+
+    await page.initProject(project);
+
+    assert.equal(canvasQueries, 0, `${code} must not start local Canvas export`);
+    assert.equal(page.data.renderFailed, true, `${code} must leave the page failed`);
+    assert.equal(page.data.task, null, `${code} must not create a task`);
+    assert.equal(calls.storage.wepic_history_tasks, undefined, `${code} must not write history`);
+  }
+});
+
+test('template-result uses local Canvas only for explicit renderer connection errors', async () => {
+  const project = createSampleProject();
+  for (const code of ['FUN_RENDERER_NOT_CONFIGURED', 'NETWORK_ERROR']) {
+    let exported = 0;
+    const canvasNode = {
+      getContext() {
+        return { clearRect() {} };
+      }
+    };
+    const { wxApi, calls } = recordingWx({
+      createSelectorQuery() {
+        return {
+          select() { return this; },
+          fields() { return this; },
+          exec(callback) { callback([{ node: canvasNode }]); }
+        };
+      },
+      canvasToTempFilePath(options) {
+        exported += 1;
+        options.success({ tempFilePath: `wxfile://local-${exported}.png` });
+      }
+    });
+    const page = loadResultPage(wxApi, {
+      '../../utils/funCardRendererClient': {
+        requestRenderStack() {
+          return Promise.reject(codedError(code));
+        }
+      },
+      '../../utils/scenePainter': {
+        paintScene() {}
+      }
+    });
+
+    await page.initProject(project);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(page.data.renderFailed, false, code);
+    assert.equal(page.data.renderedCards.length, project.candidates[0].editedScenes.length, code);
+    assert.equal((calls.storage.wepic_history_tasks || []).length, 1, code);
+  }
 });
 
 test('saving sequentially guides the user through WeChat four-step flow and supports resume on error', async () => {

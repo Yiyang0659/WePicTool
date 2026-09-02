@@ -302,7 +302,7 @@ function buildPreviewGroups(project, renderedCards) {
   var cards = Array.isArray(renderedCards) ? renderedCards : [];
   return [{
     key: candidate.candidateId,
-    name: candidate.title,
+    name: '趣味字画',
     cards: cards.map(function (card, index) {
       return Object.assign({}, card, {
         id: card.sceneId || card.id || ('card_' + (index + 1)),

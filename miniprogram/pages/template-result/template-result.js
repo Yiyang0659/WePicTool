@@ -5,6 +5,15 @@ const funCardRendererClient = require('../../utils/funCardRendererClient');
 const imageExporter = require('../../utils/imageExporter');
 const painter = require('../../utils/scenePainter');
 
+const LOCAL_RENDER_FALLBACK_CODES = {
+  FUN_RENDERER_NOT_CONFIGURED: true,
+  NETWORK_ERROR: true
+};
+
+function canRenderLocally(error) {
+  return Boolean(error && LOCAL_RENDER_FALLBACK_CODES[error.code]);
+}
+
 Page({
   data: {
     project: null,
@@ -59,8 +68,15 @@ Page({
       const res = await funCardRendererClient.requestRenderStack(wx, payload);
       this.applyRenderSuccess(project, res.cards);
     } catch (err) {
-      // 云端未连接或失败时，无缝切换为本地 Canvas 2D 离线导出
-      this.renderLocalCanvasStack(project);
+      if (canRenderLocally(err)) {
+        this.renderLocalCanvasStack(project);
+        return;
+      }
+      this.setData({
+        rendering: false,
+        renderFailed: true,
+        renderErrorMessage: (err && err.message) || '高清渲染失败，请重试'
+      });
     }
   },
 

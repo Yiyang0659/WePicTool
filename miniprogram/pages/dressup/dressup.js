@@ -259,10 +259,14 @@ Page({
   saveItemsSequentially: async function (items, successTitle) {
     this.setData({ saving: true });
     var urls = items.map(getItemUrl).filter(Boolean);
+    var that = this;
     try {
       var res = await imageExporter.saveImagesSequentially(wx, urls, {
         onProgress: function (current, total) {
           wx.showLoading({ title: '保存 ' + current + '/' + total, mask: true });
+        },
+        resolvePath: function (wxApi, url) {
+          return that.resolveImageFilePath(url);
         }
       });
       wx.hideLoading();

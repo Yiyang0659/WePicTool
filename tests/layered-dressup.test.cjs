@@ -314,3 +314,42 @@ test('upload entry ignores a saved demo-only draft', () => {
   assert.equal(page.data.project.sourceMode, 'upload');
   assert.equal(page.data.groupList.every(group => group.count === 0), true);
 });
+
+test('saving a built-in dressup asset copies it into USER_DATA_PATH before album save', async () => {
+  const sourceItem = registry.getAssetPack('funny-paper-doll-v1').groups.head[0];
+  const writes = [];
+  const saved = [];
+  const wxApi = {
+    env: { USER_DATA_PATH: 'wxfile://user-data' },
+    getFileSystemManager() {
+      return {
+        mkdir(options) { options.success(); },
+        access(options) { options.fail({ errMsg: 'not found' }); },
+        readFile(options) { options.success({ data: new Uint8Array([1, 2, 3]) }); },
+        writeFile(options) {
+          writes.push(options.filePath);
+          options.success();
+        }
+      };
+    },
+    showLoading() {},
+    hideLoading() {},
+    saveImageToPhotosAlbum(options) {
+      saved.push(options.filePath);
+      options.success({});
+    }
+  };
+  const definition = loadMiniProgramPage('miniprogram/pages/dressup/dressup.js', {
+    '../../config/playRegistry': registry,
+    '../../utils/layeredDressup': dressup,
+    '../../utils/imageExporter': require('../miniprogram/utils/imageExporter.js')
+  }, wxApi);
+  const page = instantiatePage(definition);
+
+  await page.saveItemsSequentially([sourceItem], '已保存头像与发型组');
+
+  const expected = 'wxfile://user-data/layered-dressup/system_' + sourceItem.url.split('/').pop();
+  assert.deepEqual(writes, [expected]);
+  assert.deepEqual(saved, [expected]);
+  assert.equal(saved.includes(sourceItem.url), false);
+});
