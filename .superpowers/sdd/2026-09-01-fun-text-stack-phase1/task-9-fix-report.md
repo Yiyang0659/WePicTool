@@ -39,3 +39,32 @@ npm test && npm run check:syntax && npm run check:miniprogram && npm run lint &&
 ## Scope Guard
 
 Only the Task 9 editor page, its focused tests, and required current-state/iteration documentation changed. P2.2 planning, result handling, and preview fallback code were left intact.
+
+## Fix Round 2
+
+### Root Cause
+
+`onConfirmText` replaced `scenes` and `currentScene` from the updated project but left the derived `sortItems` array untouched. Its thumbnail layers therefore still referenced the pre-edit scene snapshot.
+
+### RED
+
+```text
+node --test tests/fun-text-editor-page.test.cjs
+8 tests: 7 passed, 1 failed
+```
+
+After confirming “先等等”, the first thumbnail still rendered “我本来想说”.
+
+### GREEN
+
+`onConfirmText` now rebuilds `sortItems`, its width, and its area width from the updated selected candidate. It deliberately leaves `draggingIndex`, `sortFromIndex`, and `sortToIndex` untouched. The regression test verifies the thumbnail text refresh plus stable order, cover label, geometry, and drag state.
+
+### Verification
+
+```text
+node --test tests/fun-text-editor-page.test.cjs tests/fun-text-project.test.cjs
+22 passed, 0 failed
+
+npm test && npm run check:syntax && npm run check:miniprogram && npm run lint && npm run check:docs && git diff --check
+157 passed, 0 failed; all governance checks passed
+```

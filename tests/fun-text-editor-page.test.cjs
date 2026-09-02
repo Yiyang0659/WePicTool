@@ -121,6 +121,40 @@ test('editor WXML binds the declared text handlers and they update the current c
   assert.equal(page.data.project.candidates[0].editedScenes[0].layers.find(l => l.type === 'text').text, '先等等');
 });
 
+test('confirming text refreshes its thumbnail without changing cover geometry or drag state', () => {
+  const { wxApi } = recordingWx({});
+  const page = loadEditorPage(wxApi);
+  const project = createSampleProject();
+  page.initProject(project);
+
+  page.onSortStart({ currentTarget: { dataset: { index: 2 } } });
+  const thumbnailGeometry = page.data.sortItems.map(item => ({
+    sceneId: item.sceneId,
+    order: item.order,
+    x: item.x,
+    centerX: item.centerX,
+    label: item.label
+  }));
+
+  page.onEditText();
+  page.onInputEditText({ detail: { value: '先等等' } });
+  page.onConfirmText();
+
+  assert.equal(page.data.currentScene.layers.find(layer => layer.type === 'text').text, '先等等');
+  assert.equal(page.data.sortItems[0].layers.find(layer => layer.type === 'text').text, '先等等');
+  assert.deepEqual(page.data.sortItems.map(item => ({
+    sceneId: item.sceneId,
+    order: item.order,
+    x: item.x,
+    centerX: item.centerX,
+    label: item.label
+  })), thumbnailGeometry);
+  assert.equal(page.data.sortItems[0].label, '微信封面');
+  assert.equal(page.data.draggingIndex, 2);
+  assert.equal(page.data.sortFromIndex, 2);
+  assert.equal(page.data.sortToIndex, 2);
+});
+
 test('editing card text enforces phase-one role length limits', () => {
   const { wxApi, calls } = recordingWx({});
   const page = loadEditorPage(wxApi);

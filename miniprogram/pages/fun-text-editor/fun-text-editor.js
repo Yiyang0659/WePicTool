@@ -190,12 +190,16 @@ Page({
       });
       const scenes = candidate.editedScenes;
       const currentScene = scenes[this.data.currentCardIndex];
+      const sortGeometry = buildSortItems(scenes);
 
       this.setData({
         project: updatedProject,
         selectedCandidate: candidate,
         scenes: scenes,
         currentScene: currentScene,
+        sortItems: sortGeometry.items,
+        sortItemWidth: sortGeometry.width,
+        sortAreaWidth: sortGeometry.areaWidth,
         editingTextModalVisible: false,
         canvasRevision: this.data.canvasRevision + 1
       });
