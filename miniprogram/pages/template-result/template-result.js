@@ -11,7 +11,11 @@ const LOCAL_RENDER_FALLBACK_CODES = {
 };
 
 function canRenderLocally(error) {
-  return Boolean(error && LOCAL_RENDER_FALLBACK_CODES[error.code]);
+  return Boolean(
+    error
+    && typeof error.code === 'string'
+    && Object.prototype.hasOwnProperty.call(LOCAL_RENDER_FALLBACK_CODES, error.code)
+  );
 }
 
 Page({

@@ -157,6 +157,9 @@ test('template-result fails closed without local fallback or history for safety 
     'SAFETY_UNAVAILABLE',
     'INVALID_RENDER_RESPONSE',
     'WX_API_UNAVAILABLE',
+    'constructor',
+    'toString',
+    '__proto__',
     undefined
   ];
 

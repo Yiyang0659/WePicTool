@@ -53,3 +53,45 @@ npm test && npm run check:syntax && npm run check:miniprogram && npm run lint &&
 ```
 
 README does not need an update because this is a compatibility and fail-closed correction to existing flows; routes, run commands, deployment instructions, and external feature scope are unchanged.
+
+## Round 2: Prototype-Key Fail-Closed Correction
+
+### Root Cause
+
+`LOCAL_RENDER_FALLBACK_CODES` was a regular object and `canRenderLocally` used bracket lookup. Consequently, inherited truthy properties such as `constructor`, `toString`, and `__proto__` were incorrectly treated as local-render fallback codes. This could let an unknown renderer error start the local Canvas path and create a history task.
+
+### RED
+
+Before production edits, added the three inherited property names to the existing result-page fail-closed behavior test and ran:
+
+```text
+node --test tests/fun-text-result.test.cjs
+4 passed, 1 failed
+```
+
+The failure was expected: `constructor must not start local Canvas export` received one Canvas query instead of zero. The test exercises the real page behavior, and the same assertion covers `toString` and `__proto__` after the first failing case is corrected.
+
+### GREEN
+
+`canRenderLocally` now requires a string error code and calls `Object.prototype.hasOwnProperty.call` against the allowlist. Only the own keys `FUN_RENDERER_NOT_CONFIGURED` and `NETWORK_ERROR` can invoke local Canvas rendering; inherited, malformed, and unknown codes remain failed closed and cannot write history.
+
+Focused evidence:
+
+```text
+node --test tests/fun-text-result.test.cjs
+5 passed, 0 failed
+```
+
+Additional focused verification:
+
+```text
+node --test tests/image-exporter.test.cjs tests/fun-text-result.test.cjs tests/fun-text-project.test.cjs tests/layered-dressup.test.cjs && npm run check:miniprogram
+40 passed, 0 failed; mini-program preflight passed
+```
+
+### Full Verification
+
+```text
+npm test && npm run check:syntax && npm run check:miniprogram && npm run lint && npm run check:docs && git diff --check
+161 passed, 0 failed; all listed checks exited 0
+```
