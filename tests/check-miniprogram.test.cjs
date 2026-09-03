@@ -205,6 +205,16 @@ test('release preflight rejects IPv6 and normalized IPv4 loopback font hosts', (
   }
 });
 
+test('release preflight rejects non-canonical HTTP renderer URLs after URL parsing', (t) => {
+  const fixtureRoot = makeFixture(t);
+  writeEnv(fixtureRoot, { FUN_CARD_RENDERER_URL: 'http:renderer.wepictool.cn' });
+
+  const result = runCheck(fixtureRoot, '--release');
+
+  assert.equal(result.status, 1, combinedOutput(result));
+  assert.match(combinedOutput(result), /使用 HTTP/);
+});
+
 test('release preflight rejects a non-boolean fun text emergency flag', (t) => {
   const fixtureRoot = makeFixture(t);
   writeEnv(fixtureRoot, { ENABLE_FUN_TEXT_STACK_ENTRY: 'false' });

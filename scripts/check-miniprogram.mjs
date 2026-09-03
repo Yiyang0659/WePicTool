@@ -163,15 +163,18 @@ if (exists('miniprogram/config/env.js')) {
     } else if (!rendererUrl) {
       issue('FUN_CARD_RENDERER_URL 为空或未填写；授权字体公网地址尚未配置。', true);
     } else {
-      if (/^http:\/\//i.test(rendererUrl)) {
-        issue('FUN_CARD_RENDERER_URL 使用 HTTP；仅本地开发可用，发布必须使用 HTTPS。', true);
-      }
       if (isPlaceholder(rendererUrl)) {
         issue('FUN_CARD_RENDERER_URL 仍是占位 URL；必须替换为真实 HTTPS 字体域名。', true);
       }
       try {
         const parsedUrl = new URL(rendererUrl);
-        if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('unsupported protocol');
+        if (parsedUrl.protocol !== 'https:') {
+          if (parsedUrl.protocol === 'http:') {
+            issue('FUN_CARD_RENDERER_URL 使用 HTTP；仅本地开发可用，发布必须使用 HTTPS。', true);
+          } else {
+            throw new Error('unsupported protocol');
+          }
+        }
         if (isLoopbackHostname(parsedUrl.hostname)) {
           issue('FUN_CARD_RENDERER_URL 指向 localhost/loopback；不能用于发布。', true);
         }
