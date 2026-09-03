@@ -57,6 +57,7 @@ function recordingWx(overrides) {
 
 function loadEditorPage(wxApi, customDeps) {
   const deps = Object.assign({
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/funTextProject': model,
     '../../config/stylePacks': stylePacks
   }, customDeps || {});

@@ -3,9 +3,9 @@
 const CLOUD_ENV_ID = 'cloud1-d0g1blfsde474b168';
 // POST 生产请求通过 wx.cloud.callContainer 调用该服务名，不在客户端保存任何服务端秘密。
 const FUN_CARD_RENDERER_SERVICE = 'fun-card-renderer';
-// 字体公开 HTTPS 地址；只有明确的本机 loopback 地址会让 POST 在开发时改走 wx.request。
+// 仅用于授权字体加载；小程序 renderer POST 始终走 callContainer，不根据此 URL 改走 wx.request。
 const FUN_CARD_RENDERER_URL = 'http://127.0.0.1:8080';
-// 紧急发布回滚开关：false 时保留首页五张静态示例，但关闭趣味字画交互入口。
+// 紧急发布回滚开关：false 保留首页静态示例，关闭输入/候选/编辑/记录恢复/渲染/保存。
 const ENABLE_FUN_TEXT_STACK_ENTRY = true;
 
 module.exports = {

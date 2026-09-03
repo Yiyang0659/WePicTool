@@ -74,12 +74,14 @@ function recordingWx(overrides) {
       if (typeof options.success === 'function') options.success({});
     }
   }, overrides || {});
+  wxApi.cloud = { callContainer: wxApi.callContainer };
+  delete wxApi.callContainer;
   return { wxApi, calls };
 }
 
 function loadResultPage(wxApi, customDeps) {
   const client = loadMiniProgramModule('miniprogram/utils/funCardRendererClient.js', {
-    '../config/env': { FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080' }
+    '../config/env': { CLOUD_ENV_ID: 'prod-env-123', FUN_CARD_RENDERER_SERVICE: 'fun-card-renderer' }
   });
   let exporter;
   try {
@@ -96,6 +98,7 @@ function loadResultPage(wxApi, customDeps) {
   });
 
   const deps = Object.assign({
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/funTextProject': model,
     '../../utils/funCardRendererClient': client,
     '../../utils/imageExporter': exporter,
@@ -126,7 +129,7 @@ test('template-result renders 1080 stack, saves record locally and provides prev
   const mockRenderedCards = cardsForProject(project);
 
   const { wxApi, calls } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 200,
         data: {
@@ -167,6 +170,7 @@ test('template-result renders 1080 stack, saves record locally and provides prev
   assert.ok(records[0].taskSnapshot.cards.every(card => card.renderFingerprint === records[0].renderFingerprint));
 
   const recordPage = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));
@@ -741,7 +745,7 @@ test('saving sequentially guides the user through WeChat four-step flow and supp
   let failOnce = true;
   const savedList = [];
   const { wxApi } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 200,
         data: {

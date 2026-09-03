@@ -4,6 +4,7 @@ const funTextProject = require('../../utils/funTextProject');
 const funCardRendererClient = require('../../utils/funCardRendererClient');
 const imageExporter = require('../../utils/imageExporter');
 const painter = require('../../utils/scenePainter');
+const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 
 const LOCAL_RENDER_FALLBACK_CODES = {
   FUN_RENDERER_NOT_CONFIGURED: true,
@@ -109,6 +110,7 @@ function canonicalFunTextTaskId(task) {
 
 Page({
   data: {
+    funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY === true,
     project: null,
     task: null,
     renderedCards: [],
@@ -122,6 +124,7 @@ Page({
   },
 
   onLoad: function () {
+    if (!this.ensureEnabled()) return;
     const that = this;
     const eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
@@ -144,10 +147,20 @@ Page({
   },
 
   isCurrentRenderGeneration: function (generation) {
-    return this._renderGeneration === generation;
+    return ENABLE_FUN_TEXT_STACK_ENTRY === true && this._renderGeneration === generation;
+  },
+
+  ensureEnabled: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY === true) return true;
+    this.nextRenderGeneration();
+    this.setData({ project: null, task: null, renderedCards: [], rendering: false,
+      renderFailed: true, renderErrorMessage: '趣味字画暂不可用', saving: false,
+      saveCursor: 0, showGuide: false, currentIndex: 0 });
+    return false;
   },
 
   initProject: async function (project, existingCards, taskSnapshot) {
+    if (!this.ensureEnabled()) return;
     const generation = this.nextRenderGeneration();
     if (!project || !project.selectedCandidateId) return;
 
@@ -352,6 +365,7 @@ Page({
   },
 
   onRetryRender: function () {
+    if (!this.ensureEnabled()) return;
     if (this.data.project && !this.data.rendering) {
       this.initProject(this.data.project);
     }
@@ -366,6 +380,7 @@ Page({
 
   // 1. 先滑着看看（进入深色微信牌堆全屏预演）
   onPreviewStack: function () {
+    if (!this.ensureEnabled()) return;
     if (!this.data.project || !this.data.renderedCards.length) return;
     const groups = funTextProject.buildPreviewGroups(this.data.project, this.data.renderedCards);
     wx.navigateTo({
@@ -381,6 +396,7 @@ Page({
 
   // 2. 自己改改（回退到轻编辑页）
   onEditStack: function () {
+    if (!this.ensureEnabled()) return;
     if (!this.data.project) return;
     const project = this.data.project;
     wx.navigateTo({
@@ -393,6 +409,7 @@ Page({
 
   // 3. 按顺序保存（支持断点续存）
   onSaveStack: async function () {
+    if (!this.ensureEnabled()) return;
     if (this.data.saving || !this.data.renderedCards.length) return;
     this.setData({ saving: true });
 

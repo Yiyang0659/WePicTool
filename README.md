@@ -2,7 +2,7 @@
 
 WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换装是当前功能分支的旗舰玩法，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线；源码与自动化已覆盖穿搭「选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送」主链路，并在功能分支集成分层云换装的本地编辑和四叠预览底座。
 
-当前证据边界：趣味字画阶段一与 P2.2 实验只有代码和自动化结果；Docker 镜像、CloudBase 部署、线上端点、微信开发者工具、iOS、Android 和真实微信聊天均未验证，功能也尚未合并或发布。
+当前证据边界：趣味字画阶段一与 P2.2 实验只有代码和自动化结果；Docker 镜像、CloudBase 部署/公网关闭开关、线上端点、微信开发者工具、iOS、Android 和真实微信聊天均未验证，功能也尚未合并或发布。生产仍为 **NOT READY**，代码头部检查和发布配置声明不能替代平台访问边界核验。
 
 小程序 UI 采用底部三 Tab 架构（首页 / 记录 / 我的），结果页与预览页采用沉浸式微信聊天窗口风格，让用户提前预演多图合并发送后的真实叠图折叠效果。
 
@@ -51,7 +51,10 @@ npm test
 # 2. 小程序上线前预检（检查 AppID、JSON、WXML 闭合、文件完整性）
 npm run check:miniprogram
 
-# 2.1 发布严格预检（本地 localhost/占位配置会按预期非零退出）
+# 2.1 启用趣味字画的发布预检（仍需独立核验云端配置/公网关闭）
+FUN_CARD_RENDERER_ACCESS_MODE=call-container-only npm run check:miniprogram:release
+
+# 2.2 静态回滚包：先把 ENABLE_FUN_TEXT_STACK_ENTRY 改为 false
 npm run check:miniprogram:release
 
 # 3. 语法检查小程序核心 JS / 工具文件
@@ -163,7 +166,7 @@ WePicTool/
 3. 在微信开发者工具中开通云开发环境，获取 **环境 ID**。
 4. 在 `miniprogram/config/env.js` 中填入 `CLOUD_ENV_ID`。
 5. 分别右键 `miniprogram/cloudfunctions/` 下的 `processOutfit` 和 `contentGuard`，选择“上传并部署：云端安装依赖”。
-6. 需要联调趣味字画时，按 [`docs/deployment/fun-card-renderer.md`](docs/deployment/fun-card-renderer.md) 部署云托管服务：生产 POST 只通过 `wx.cloud.callContainer` 和 `X-WX-SERVICE` 调用，关闭服务公网入口；HTTPS HTTP 网关只公开字体精确路径。配置 `FUN_CARD_RENDERER_SERVICE`、字体域名 `FUN_CARD_RENDERER_URL` 和入口 flag，客户端不得传 OpenID 或任何秘密。
+6. 需要联调趣味字画时，按 [`docs/deployment/fun-card-renderer.md`](docs/deployment/fun-card-renderer.md) 部署：小程序 POST 始终只通过 `wx.cloud.callContainer`，服务端/发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only`。上线硬前提是在服务设置关闭公网并保存核验证据，HTTP 网关仅公开字体精确路径；context/OpenID 头部不是独立公网鉴权。配置服务名、HTTPS 字体地址和 flag，客户端不得传 OpenID/context 或秘密。flag=false 时只保留首页静态示例，关闭直链输入、候选/编辑、记录重开/再次生成及结果恢复/渲染/保存；静态包不需 renderer URL/服务/access mode，其他玩法不受影响。
 7. 如评估后决定验证 P2.2，再单独部署 `planFunTextStory` 并配置服务端模型 API key；当前尚未完成这一步，也未确认它属于发布范围。
 8. 运行 `npm run check:miniprogram:release` 后再进入微信开发者工具、iOS、Android 与真实聊天验收。当前分支的页面、渲染、保存和记录链路只有代码/自动化证据，不代表线上或真机已通过。
 

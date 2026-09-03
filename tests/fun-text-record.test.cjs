@@ -96,6 +96,7 @@ test('record page categorizes funtext tasks and routes to template-result', () =
 
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));
@@ -138,6 +139,7 @@ test('record page sends only the top-level project for a legacy record without f
   };
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));
@@ -175,6 +177,7 @@ test('record page falls back to one funTextProject event when task and top-level
   };
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));
@@ -210,6 +213,7 @@ test('record page falls back to one funTextProject event when task snapshot is n
   };
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));
@@ -238,6 +242,7 @@ test('record page shows upgrade prompt on legacy bigtext records and offers recr
 
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));
@@ -265,6 +270,7 @@ test('record page reopens layered-dressup with its P1 editor route', () => {
   };
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));
@@ -285,6 +291,7 @@ test('record page preserves unsupported records and does not navigate them', () 
   const storage = { wepictool_records: [unsupported] };
   const { wxApi, calls } = recordingWx(storage);
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/record/record.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': require('../miniprogram/utils/task.js'),
     '../../utils/funTextProject': model
   }, wxApi));

@@ -88,7 +88,7 @@ Page({
     // 趣味字画真实示例（开发中）：可滑五张，滑到末张展示 CTA
     funTextDemoSlides: FUN_TEXT_DEMO_SLIDES,
     funTextDemoIndex: 0,
-    funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY !== false,
+    funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY === true,
     // 玩法模板（即将上线）：数据驱动渲染，点击统一走 onComingSoon
     comingModules: [
       { key: 'film', name: '胶片相册', emoji: '🎞️', desc: '把生活照做成统一画册' },
@@ -116,7 +116,7 @@ Page({
 
   // 趣味字画内置示例：固定已审核文案，不调用云函数，直接带入候选页
   onTryFunTextDemo: function () {
-    if (!this.data.funTextEntryEnabled) {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
       wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
       return;
     }

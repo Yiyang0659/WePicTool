@@ -524,7 +524,7 @@ test('oversized HTTP JSON returns INVALID_REQUEST without resetting the connecti
   assert.deepEqual(response.body, { ok: false, code: 'INVALID_REQUEST' });
 });
 
-test('production HTTP routes reject POST requests without a CloudBase caller identity', async (t) => {
+test('production HTTP routes require both CloudBase context and caller identity', async (t) => {
   let handled = false;
   const httpServer = server.createHttpServer({
     renderStackHandler: async () => {
@@ -538,9 +538,10 @@ test('production HTTP routes reject POST requests without a CloudBase caller ide
   t.after(() => httpServer.close());
   const baseUrl = 'http://127.0.0.1:' + httpServer.address().port;
 
-  for (const openid of [undefined, '', '   ']) {
+  for (const [openid, context] of [[undefined, 'context'], ['', 'context'], ['   ', 'context'], ['openid', undefined], ['openid', '   ']]) {
     const headers = { 'content-type': 'application/json' };
     if (openid !== undefined) headers['x-wx-openid'] = openid;
+    if (context !== undefined) headers['x-cloudbase-context'] = context;
     const response = await request(baseUrl, '/render-stack', {
       method: 'POST',
       headers,
@@ -564,7 +565,7 @@ test('production HTTP routes rate-limit each non-empty CloudBase caller identity
   const baseUrl = 'http://127.0.0.1:' + httpServer.address().port;
   const postAs = (openid) => request(baseUrl, '/render-stack', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-wx-openid': openid },
+    headers: { 'content-type': 'application/json', 'x-wx-openid': openid, 'x-cloudbase-context': 'platform-context' },
     body: '{}'
   });
 
@@ -587,6 +588,22 @@ test('default caller limiter permits 30 requests per minute and resets at the ne
 
   currentTime += 60000;
   assert.equal(allowCaller('openid-default-limit'), true);
+});
+
+test('caller limiter bounds distinct callers and frees expired capacity without resetting active quotas', () => {
+  let now = 0;
+  const allow = server.createCallerRateLimiter({ maxCallers: 2, maxRequests: 1, windowMs: 100, now: () => now });
+  assert.equal(allow('old'), true);
+  now = 50;
+  assert.equal(allow('active'), true);
+  assert.equal(allow('overflow'), false);
+  now = 100;
+  assert.equal(allow('new'), true);
+  assert.equal(allow('active'), false);
+  assert.equal(allow('overflow'), false);
+  now = 200;
+  assert.equal(allow('later'), true);
+  assert.equal(allow('another'), true);
 });
 
 test('explicit development HTTP mode permits local POST requests without CloudBase headers', async (t) => {

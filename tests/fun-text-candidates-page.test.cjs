@@ -50,13 +50,15 @@ function recordingWx(overrides) {
     showModal(options) {
       calls.modals.push(options);
     },
-    request(options) {
+    callContainer(options) {
       calls.requests.push(options);
       if (typeof options.success === 'function') {
         options.success({ statusCode: 200, data: { ok: true } });
       }
     }
   }, overrides || {});
+  wxApi.cloud = { callContainer: wxApi.callContainer };
+  delete wxApi.callContainer;
   return { wxApi, calls };
 }
 
@@ -113,7 +115,7 @@ test('renderer client uses CloudBase callContainer with the configured service i
   assert.equal(Object.prototype.hasOwnProperty.call(calls[0].header, 'x-wx-openid'), false);
 });
 
-test('renderer client permits wx.request only for an explicit loopback development URL', async () => {
+test('renderer client never sends POST through wx.request even for a loopback URL', async () => {
   const client = loadMiniProgramModule('miniprogram/utils/funCardRendererClient.js', {
     '../config/env': { CLOUD_ENV_ID: '', FUN_CARD_RENDERER_SERVICE: '', FUN_CARD_RENDERER_URL: '' }
   });
@@ -139,16 +141,13 @@ test('renderer client permits wx.request only for an explicit loopback developme
     }
   };
 
-  assert.equal((await client.requestRenderStack(wxApi, payload, {
-    baseUrl: 'http://127.0.0.1:8080'
-  })).ok, true);
-  assert.equal(requestCalls.length, 1);
-
-  await assert.rejects(
-    () => client.requestRenderStack(wxApi, payload, { baseUrl: 'https://public-renderer.example.com' }),
-    (error) => error.code === 'FUN_RENDERER_NOT_CONFIGURED'
-  );
-  assert.equal(requestCalls.length, 1);
+  for (const baseUrl of ['http://127.0.0.1:8080', 'https://public-renderer.example.com']) {
+    await assert.rejects(
+      () => client.requestRenderStack(wxApi, payload, { baseUrl }),
+      (error) => error.code === 'FUN_RENDERER_NOT_CONFIGURED'
+    );
+  }
+  assert.equal(requestCalls.length, 0);
 });
 
 test('renderer client rejects when renderer URL is not configured', async () => {
@@ -195,7 +194,7 @@ test('requestPreviewStack sends POST request and validates complete matching res
   }));
 
   const { wxApi, calls } = recordingWx({
-    request(options) {
+    callContainer(options) {
       calls.requests.push(options);
       options.success({
         statusCode: 200,
@@ -212,7 +211,7 @@ test('requestPreviewStack sends POST request and validates complete matching res
   assert.equal(res.ok, true);
   assert.equal(res.projectId, previewPayload.projectId);
   assert.equal(res.candidates.length, 3);
-  assert.equal(calls.requests[0].url, 'http://127.0.0.1:8080/preview-stack');
+  assert.equal(calls.requests[0].path, '/preview-stack');
   assert.equal(calls.requests[0].method, 'POST');
 });
 
@@ -223,7 +222,7 @@ test('requestPreviewStack rejects partial, mismatched or corrupt responses', asy
 
   // Mismatched projectId
   const { wxApi: badProjWx } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 200,
         data: { ok: true, projectId: 'wrong_id', candidates: [] }
@@ -237,7 +236,7 @@ test('requestPreviewStack rejects partial, mismatched or corrupt responses', asy
 
   // Missing candidate in response (only 2 returned)
   const { wxApi: partialWx } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 200,
         data: {
@@ -261,7 +260,7 @@ test('requestPreviewStack rejects partial, mismatched or corrupt responses', asy
 
   // Unsafe content code 403
   const { wxApi: unsafeWx } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 403,
         data: { ok: false, code: 'CONTENT_UNSAFE' }
@@ -287,7 +286,7 @@ test('requestRenderStack sends POST request and validates complete response', as
   }));
 
   const { wxApi, calls } = recordingWx({
-    request(options) {
+    callContainer(options) {
       calls.requests.push(options);
       options.success({
         statusCode: 200,
@@ -306,7 +305,7 @@ test('requestRenderStack sends POST request and validates complete response', as
   assert.equal(res.projectId, renderPayload.projectId);
   assert.equal(res.candidateId, renderPayload.candidateId);
   assert.equal(res.cards.length, mockCards.length);
-  assert.equal(calls.requests[0].url, 'http://127.0.0.1:8080/render-stack');
+  assert.equal(calls.requests[0].path, '/render-stack');
 });
 
 test('renderer client trims supported card URLs before returning preview and render responses', async () => {
@@ -323,7 +322,7 @@ test('renderer client trims supported card URLs before returning preview and ren
     }))
   }));
   const { wxApi: previewWx } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 200,
         data: { ok: true, projectId: previewPayload.projectId, candidates: previewCandidates }
@@ -338,7 +337,7 @@ test('renderer client trims supported card URLs before returning preview and ren
   const selected = model.selectCandidate(project, project.candidates[0].candidateId);
   const renderPayload = model.buildRenderPayload(selected);
   const { wxApi: renderWx } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 200,
         data: {
@@ -367,7 +366,7 @@ test('renderer client rejects blank and unsupported card URL schemes in preview 
 
   for (const badUrl of rejectedUrls) {
     const { wxApi } = recordingWx({
-      request(options) {
+      callContainer(options) {
         options.success({
           statusCode: 200,
           data: {
@@ -395,7 +394,7 @@ test('renderer client rejects blank and unsupported card URL schemes in preview 
   const selected = model.selectCandidate(project, project.candidates[0].candidateId);
   const renderPayload = model.buildRenderPayload(selected);
   const { wxApi: renderWx } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.success({
         statusCode: 200,
         data: {
@@ -431,7 +430,7 @@ test('renderer client normalizes non-safety server failures and keeps only expli
 
   for (const item of cases) {
     const { wxApi } = recordingWx({
-      request(options) {
+      callContainer(options) {
         options.success({ statusCode: item.statusCode, data: item.data });
       }
     });
@@ -448,12 +447,12 @@ test('renderer client normalizes non-safety server failures and keeps only expli
 
 function loadCandidatesPage(wxApi, customDeps) {
   const client = loadMiniProgramModule('miniprogram/utils/funCardRendererClient.js', {
-    '../config/env': { FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080' }
+    '../config/env': { CLOUD_ENV_ID: 'prod-env-123', FUN_CARD_RENDERER_SERVICE: 'fun-card-renderer' }
   });
   const deps = Object.assign({
     '../../utils/funTextProject': model,
     '../../utils/funCardRendererClient': client,
-    '../../config/env': { FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080' }
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true, FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080' }
   }, customDeps || {});
 
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text-candidates/fun-text-candidates.js', deps, wxApi));
@@ -562,7 +561,7 @@ test('onCanvasError triggers server preview fallback batch request only once and
   let requestCount = 0;
 
   const { wxApi } = recordingWx({
-    request(options) {
+    callContainer(options) {
       requestCount += 1;
       options.success({
         statusCode: 200,
@@ -605,7 +604,7 @@ test('automatic canvas errors request a server preview only once after a success
   const previewPayload = model.buildPreviewPayload(project);
   let requestCount = 0;
   const { wxApi } = recordingWx({
-    request(options) {
+    callContainer(options) {
       requestCount += 1;
       options.success({
         statusCode: 200,
@@ -637,7 +636,7 @@ test('automatic canvas errors request a server preview only once after a success
 test('server preview failure sets retry state without losing project data', async () => {
   const project = createSampleProject();
   const { wxApi } = recordingWx({
-    request(options) {
+    callContainer(options) {
       options.fail({ errMsg: 'request:fail network error' });
     }
   });
@@ -657,7 +656,7 @@ test('explicit preview retry clears a failed automatic fallback latch and retrie
   const previewPayload = model.buildPreviewPayload(project);
   let requestCount = 0;
   const { wxApi } = recordingWx({
-    request(options) {
+    callContainer(options) {
       requestCount += 1;
       if (requestCount === 1) {
         options.fail({ errMsg: 'request:fail network error' });

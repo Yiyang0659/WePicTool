@@ -19,18 +19,11 @@ function configuredValue(options, optionKey, envKey) {
   return env && typeof env[envKey] === 'string' ? env[envKey].trim() : '';
 }
 
-function isLoopbackDevelopmentUrl(value) {
-  return /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d{1,5})?$/.test(value.replace(/\/+$/, ''));
-}
-
 function requestRenderer(wxApi, path, payload, options) {
   var opts = options || {};
-  var baseUrl = configuredValue(opts, 'baseUrl', 'FUN_CARD_RENDERER_URL').replace(/\/+$/, '');
   var serviceName = configuredValue(opts, 'serviceName', 'FUN_CARD_RENDERER_SERVICE');
   var cloudEnvId = configuredValue(opts, 'cloudEnvId', 'CLOUD_ENV_ID');
-  var useLocalRequest = isLoopbackDevelopmentUrl(baseUrl);
-
-  if (!useLocalRequest && (!serviceName || !cloudEnvId)) {
+  if (!serviceName || !cloudEnvId) {
     return Promise.reject(makeError('手写预览服务尚未配置', 'FUN_RENDERER_NOT_CONFIGURED'));
   }
 
@@ -64,16 +57,6 @@ function requestRenderer(wxApi, path, payload, options) {
         reject(makeError(msg, 'NETWORK_ERROR'));
       }
     };
-
-    if (useLocalRequest) {
-      if (typeof targetWx.request !== 'function') {
-        reject(makeError('微信本地请求 API 不可用', 'WX_API_UNAVAILABLE'));
-        return;
-      }
-      requestOptions.url = baseUrl + path;
-      targetWx.request(requestOptions);
-      return;
-    }
 
     if (!targetWx.cloud || typeof targetWx.cloud.callContainer !== 'function') {
       reject(makeError('微信云托管调用 API 不可用', 'WX_API_UNAVAILABLE'));

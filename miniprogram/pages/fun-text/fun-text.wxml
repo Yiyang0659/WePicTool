@@ -1,5 +1,7 @@
 <!--pages/fun-text/fun-text.wxml-->
 <view class="fun-text-page">
+  <view wx:if="{{!funTextEntryEnabled}}">趣味字画暂不可用</view>
+  <block wx:if="{{funTextEntryEnabled}}">
   <view class="fun-text-head">
     <view class="fun-text-title-wrap">
       <view class="fun-text-title">趣味字画</view>
@@ -47,4 +49,5 @@
 
   <!-- 内置示例入口 -->
   <view class="fun-text-demo-link" bindtap="onTryDemo">没有想好？先滑一叠示例 →</view>
+  </block>
 </view>

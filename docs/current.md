@@ -13,14 +13,14 @@ P2.2 AI 智能故事规划器是阶段一计划之外的实验代码：分支内
 ## 分支状态
 
 - `main`：包含穿搭叠图主链路、既有内容安全能力和项目治理检查器；README 同步检查已启用。
-- `codex/fun-text-stack-phase1`：包含 P1、趣味字画 P2.1 阶段一以及计划外 P2.2 实验代码。生产 renderer POST 只允许 `wx.cloud.callContainer`，服务端要求平台注入的 `x-wx-openid` 并做每身份 30 次/分钟的实例内限流；本地离线 renderer 只在显式 development 模式开放。当前 `FUN_CARD_RENDERER_URL` 仍是 `http://127.0.0.1:8080`，所以严格发布预检按设计非零退出。
+- `codex/fun-text-stack-phase1`：包含 P1、趣味字画 P2.1 阶段一以及计划外 P2.2 实验代码。小程序 renderer POST 始终只走 `wx.cloud.callContainer`；服务端检查 `x-cloudbase-context` + `x-wx-openid`，按身份限制每实例 30 次/分钟并清理过期身份（最多 10000 个活跃身份）。头部检查不构成独立公网鉴权；非模拟启动及启用入口的发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only`，但仍必须独立验证平台公网关闭。离线模拟仅接受精确的 development + DEV_MODE=1。入口 flag=false 已关闭输入、候选/编辑、记录恢复、结果渲染/保存，静态回滚包不要求 renderer URL/服务/access mode。当前 flag=true、URL 为 HTTP loopback，且本地未设置 access mode，严格发布预检按设计退出 1。
 - `codex/layered-dressup-mvp`：保留分层云换装 MVP 的来源提交；实现已集成至当前功能分支，但尚未完成微信开发者工具、iOS、Android、真实聊天验收或主线合并。
 - `codex/bigtext-handwrite`：保留旧大字滑卡、授权字体、马克笔渲染和贴纸技术实验；产品方向已由趣味字画替代，不再计划整体合并。
 
 ## 阻塞项
 
 - 个人主体小程序的 AI/深度合成相关审核范围尚未确定；在决定企业主体或不含相关能力的发布版本前，P2.2 不能进入确认发布范围。
-- `fun-card-renderer` 尚未完成 Docker/Linux 原生依赖构建、CloudBase 服务与权限配置、私密 POST/公开字体入口配置、48 小时生命周期规则及线上端点冒烟。
+- `fun-card-renderer` 生产 **NOT READY**：尚未完成 Docker/Linux 构建、CloudBase 服务/权限、服务公网关闭开关及所有域名/网关 POST 不可达核验、公开字体、48 小时生命周期和线上冒烟。环境变量声明与 HTTP 头部不能替代部署手册的公网开关证据清单。
 - 共享底座、分层云换装和趣味字画尚未完成微信开发者工具、iOS、Android 与真实微信聊天验收，也尚未合并到 `main`。
 
 ## 下一步

@@ -2,6 +2,7 @@
 // 趣味字画轻编辑页：只提供改当前卡文字、换整叠风格、缩略图调整顺序三个聚焦动作。
 const funTextProject = require('../../utils/funTextProject');
 const stylePacks = require('../../config/stylePacks');
+const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 
 const STYLE_PACK_NAMES = {
   'pink-note-v1': '粉色便签',
@@ -62,6 +63,7 @@ Page({
   },
 
   onLoad: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     const that = this;
     const eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
@@ -74,6 +76,7 @@ Page({
   },
 
   initProject: function (project) {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     if (!project) return;
     const selectedCandidateId = project.selectedCandidateId || (project.candidates[0] && project.candidates[0].candidateId);
     let selectedCandidate = project.candidates.find(function (c) {
@@ -309,6 +312,7 @@ Page({
 
   // 4. 确认编辑并进入结果页
   onConfirmEdits: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     if (!this.data.project) return;
     const project = this.data.project;
     wx.navigateTo({

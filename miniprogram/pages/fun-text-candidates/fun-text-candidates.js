@@ -1,6 +1,7 @@
 // pages/fun-text-candidates/fun-text-candidates.js
 // 趣味字画三套候选页：纵向展示三套独立可滑牌堆，支持用这套、自己改改、再来三套与服务端低清降级。
 const funTextProject = require('../../utils/funTextProject');
+const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 const funCardRendererClient = require('../../utils/funCardRendererClient');
 
 Page({
@@ -13,6 +14,7 @@ Page({
   },
 
   onLoad: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     const that = this;
     const eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
@@ -25,6 +27,7 @@ Page({
   },
 
   initProject: function (project) {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     if (!project) return;
     this._previewFallback = {
       projectId: project.projectId,
@@ -68,6 +71,7 @@ Page({
   },
 
   onUseCandidate: function (event) {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     const dataset = event.currentTarget.dataset || {};
     const candidateId = dataset.candidateId || (this.data.candidates[dataset.index] && this.data.candidates[dataset.index].candidateId);
     if (!candidateId || !this.data.project) return;
@@ -86,6 +90,7 @@ Page({
   },
 
   onEditCandidate: function (event) {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     const dataset = event.currentTarget.dataset || {};
     const candidateId = dataset.candidateId || (this.data.candidates[dataset.index] && this.data.candidates[dataset.index].candidateId);
     if (!candidateId || !this.data.project) return;
@@ -104,6 +109,7 @@ Page({
   },
 
   onRegenerate: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     if (this.data.regenerating || !this.data.project) return;
     this.setData({ regenerating: true });
     try {
@@ -116,6 +122,7 @@ Page({
   },
 
   onCanvasError: async function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     if (!this.data.project) {
       return;
     }

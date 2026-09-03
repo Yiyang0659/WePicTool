@@ -6,16 +6,19 @@ function clean(value) {
 
 function resolveRuntimeMode(environment) {
   const env = environment || {};
-  const nodeEnv = clean(env.NODE_ENV);
+  const nodeEnv = env.NODE_ENV;
   const cloudEnvId = clean(env.CLOUDBASE_ENV_ID);
   const explicitDevMode = env.FUN_CARD_RENDERER_DEV_MODE === '1';
 
-  if (explicitDevMode && nodeEnv === 'production') {
-    throw new Error('FUN_CARD_RENDERER_DEV_MODE is forbidden when NODE_ENV=production');
+  if (explicitDevMode && nodeEnv !== 'development') {
+    throw new Error('FUN_CARD_RENDERER_DEV_MODE=1 requires exactly NODE_ENV=development');
   }
   if (explicitDevMode) return { devMode: true, cloudEnvId: '' };
   if (!cloudEnvId) {
-    throw new Error('CLOUDBASE_ENV_ID is required unless explicit non-production FUN_CARD_RENDERER_DEV_MODE=1 is set');
+    throw new Error('CLOUDBASE_ENV_ID is required unless NODE_ENV=development and FUN_CARD_RENDERER_DEV_MODE=1');
+  }
+  if (env.FUN_CARD_RENDERER_ACCESS_MODE !== 'call-container-only') {
+    throw new Error('FUN_CARD_RENDERER_ACCESS_MODE=call-container-only is required; verify CloudBase public access is disabled before production use');
   }
   return { devMode: false, cloudEnvId };
 }

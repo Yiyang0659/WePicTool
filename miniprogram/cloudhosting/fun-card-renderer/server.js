@@ -13,6 +13,7 @@ const DEFAULT_FONT_PATH = path.join(__dirname, 'fonts', 'LXGWMarkerGothic-Regula
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const DEFAULT_RATE_LIMIT = 30;
 const DEFAULT_RATE_WINDOW_MS = 60 * 1000;
+const DEFAULT_MAX_CALLERS = 10000;
 
 function failure(statusCode, code) {
   return { statusCode, body: { ok: false, code } };
@@ -162,12 +163,21 @@ function createCallerRateLimiter(options) {
     ? config.windowMs
     : DEFAULT_RATE_WINDOW_MS;
   const now = typeof config.now === 'function' ? config.now : Date.now;
+  const maxCallers = Number.isInteger(config.maxCallers) && config.maxCallers > 0
+    ? config.maxCallers
+    : DEFAULT_MAX_CALLERS;
   const callers = new Map();
 
   return function allowCaller(callerId) {
     const currentTime = now();
+    // Entries are inserted in window-start order; active calls never move them.
+    for (const [id, entry] of callers) {
+      if (currentTime - entry.startedAt < windowMs) break;
+      callers.delete(id);
+    }
     const existing = callers.get(callerId);
-    if (!existing || currentTime - existing.startedAt >= windowMs) {
+    if (!existing) {
+      if (callers.size >= maxCallers) return false;
       callers.set(callerId, { startedAt: currentTime, count: 1 });
       return true;
     }
@@ -243,7 +253,10 @@ function createHttpServer(options) {
     if (request.method === 'POST' && handlers[url.pathname]) {
       if (!devMode) {
         const callerId = normalizeCallerId(request.headers['x-wx-openid']);
-        if (!callerId) {
+        const cloudContext = request.headers['x-cloudbase-context'];
+        // Presence checks only: headers are NOT public-endpoint authentication.
+        // Deployment must disable public service access and expose only the font gateway path.
+        if (!callerId || typeof cloudContext !== 'string' || !cloudContext.trim()) {
           writeJson(response, 403, { ok: false, code: 'CALLER_UNAUTHORIZED' });
           return;
         }

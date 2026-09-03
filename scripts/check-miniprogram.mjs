@@ -53,6 +53,15 @@ function isPlaceholder(value) {
   return /(?:xxx|placeholder|replace[-_ ]?me|your[-_]|example\.(?:com|test))/i.test(value);
 }
 
+function isLoopbackHostname(hostname) {
+  const host = hostname.toLowerCase().replace(/\.$/, '');
+  // WHATWG URL normalizes IPv4 shorthand/numeric forms and compressed IPv6.
+  return host === 'localhost' || host.endsWith('.localhost')
+    || /^127\./.test(host) || host === '0.0.0.0'
+    || host === '[::1]' || host === '[::]'
+    || /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]+\]$/.test(host);
+}
+
 if (!exists('miniprogram/app.json')) {
   errors.push('缺少 miniprogram/app.json');
 }
@@ -137,30 +146,38 @@ if (exists('miniprogram/config/env.js')) {
     errors.push('miniprogram/config/env.js 的 ENABLE_FUN_TEXT_STACK_ENTRY 必须声明为 true 或 false 布尔字面量。');
   }
 
-  if (rendererService === null) {
-    errors.push('miniprogram/config/env.js 缺少 FUN_CARD_RENDERER_SERVICE 配置声明。');
-  } else if (!rendererService) {
-    issue('FUN_CARD_RENDERER_SERVICE 为空或未填写；生产 POST 无法通过 callContainer 路由。', true);
-  } else if (isPlaceholder(rendererService)) {
-    issue('FUN_CARD_RENDERER_SERVICE 仍是占位值；必须填写真实云托管服务名。', true);
-  }
+  if (funTextEntryEnabled !== false) {
+    if (process.env.FUN_CARD_RENDERER_ACCESS_MODE !== 'call-container-only') {
+      issue('FUN_CARD_RENDERER_ACCESS_MODE 必须为 call-container-only；发布前还必须独立验证服务公网访问已关闭。', true);
+    }
+    if (rendererService === null) {
+      errors.push('miniprogram/config/env.js 缺少 FUN_CARD_RENDERER_SERVICE 配置声明。');
+    } else if (!rendererService) {
+      issue('FUN_CARD_RENDERER_SERVICE 为空或未填写；生产 POST 无法通过 callContainer 路由。', true);
+    } else if (isPlaceholder(rendererService)) {
+      issue('FUN_CARD_RENDERER_SERVICE 仍是占位值；必须填写真实云托管服务名。', true);
+    }
 
-  if (rendererUrl === null) {
-    errors.push('miniprogram/config/env.js 缺少 FUN_CARD_RENDERER_URL 配置声明。');
-  } else if (!rendererUrl) {
-    issue('FUN_CARD_RENDERER_URL 为空或未填写；授权字体公网地址尚未配置。', true);
-  } else {
-    if (/^http:\/\//i.test(rendererUrl)) {
-      issue('FUN_CARD_RENDERER_URL 使用 HTTP；仅本地开发可用，发布必须使用 HTTPS。', true);
-    }
-    if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/i.test(rendererUrl)) {
-      issue('FUN_CARD_RENDERER_URL 指向 localhost/loopback；该地址仅供显式本地开发。', true);
-    }
-    if (isPlaceholder(rendererUrl)) {
-      issue('FUN_CARD_RENDERER_URL 仍是占位 URL；必须替换为真实 HTTPS 字体域名。', true);
-    }
-    if (!/^https?:\/\//i.test(rendererUrl)) {
-      issue('FUN_CARD_RENDERER_URL 不是有效 HTTP(S) URL。', true);
+    if (rendererUrl === null) {
+      errors.push('miniprogram/config/env.js 缺少 FUN_CARD_RENDERER_URL 配置声明。');
+    } else if (!rendererUrl) {
+      issue('FUN_CARD_RENDERER_URL 为空或未填写；授权字体公网地址尚未配置。', true);
+    } else {
+      if (/^http:\/\//i.test(rendererUrl)) {
+        issue('FUN_CARD_RENDERER_URL 使用 HTTP；仅本地开发可用，发布必须使用 HTTPS。', true);
+      }
+      if (isPlaceholder(rendererUrl)) {
+        issue('FUN_CARD_RENDERER_URL 仍是占位 URL；必须替换为真实 HTTPS 字体域名。', true);
+      }
+      try {
+        const parsedUrl = new URL(rendererUrl);
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('unsupported protocol');
+        if (isLoopbackHostname(parsedUrl.hostname)) {
+          issue('FUN_CARD_RENDERER_URL 指向 localhost/loopback；不能用于发布。', true);
+        }
+      } catch (error) {
+        issue('FUN_CARD_RENDERER_URL 不是有效 HTTP(S) URL。', true);
+      }
     }
   }
 } else {

@@ -588,7 +588,7 @@ cloud://cloud1-d0g1blfsde474b168/
 - 图片违规或审核服务异常时，云函数返回 `CONTENT_UNSAFE` 或 `SAFETY_UNAVAILABLE`，前端停留在当前页并显示非技术性提示；违规任务的 `cloud://` 源图片会尽力删除，删除失败仅记录日志且不影响拦截。
 - 意见反馈文本由独立 `contentGuard` 云函数调用 `security.msgSecCheck`；仅 `ok === true` 时才允许写入本地 `wepictool_feedbacks`，违规或安全服务异常均不保存。
 - `processOutfit/config.json` 必须声明 `security.imgSecCheck`，`contentGuard/config.json` 必须声明 `security.msgSecCheck`；客户端不得保存 AppSecret，也不得绕过云函数直连安全接口。
-- 趣味字画用户输入先走 `contentGuard`；`fun-card-renderer` 在绘制/上传前再次聚合审核 `sourceText` 与全部可见文字。生产 POST 只经 `wx.cloud.callContainer`，服务端要求平台注入的 `x-wx-openid`，客户端不得传 OpenID/AppSecret/SecretKey。审核缺失、异常或未知响应均不得渲染。
+- 趣味字画用户输入先走 `contentGuard`；`fun-card-renderer` 在绘制/上传前再次聚合审核 `sourceText` 与全部可见文字。小程序 POST 始终只经 `wx.cloud.callContainer`，服务端要求非空 `x-cloudbase-context` + `x-wx-openid`，客户端不得传身份/context/秘密。头部不是独立公网鉴权：生产部署必须关闭并验证服务公网访问、限制字体网关精确路径；非模拟运行及启用入口的发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only` 声明，但声明不能证明平台配置。审核缺失、异常或未知响应均不得渲染。flag=false 同时关闭输入/候选/编辑、记录恢复和结果渲染/保存，静态回滚包免 renderer 配置；部署边界未验证前保持 NOT READY。
 - P2.2 的模型新增文字必须在场景合成前复查；但该云函数目前只是计划外实验代码，未完成发布范围确认、线上权限/模型配置或真机验证，不能据此声明生产门禁已验收。
 
 ### 12.4 翻页动画云托管 ffmpeg 备注

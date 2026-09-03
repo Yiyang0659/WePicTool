@@ -1,6 +1,7 @@
 // pages/record/record.js
 const { normalizeTaskGroups, buildSendability, createMockTask } = require('../../utils/task');
 const funTextProject = require('../../utils/funTextProject');
+const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 
 const RECORDS_KEY = 'wepictool_records';
 const MAX_RECORDS = 20;
@@ -217,6 +218,12 @@ Page({
       return;
     }
 
+    if ((record.recordType === 'funtext' || record.recordType === 'bigtext')
+        && ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
+      wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+      return;
+    }
+
     if (record.recordType === 'funtext') {
       const project = record.projectSnapshot;
       const fingerprint = projectFingerprint(project);
@@ -294,6 +301,10 @@ Page({
     if (!record) return;
 
     if (record.recordType === 'funtext' || record.recordType === 'bigtext') {
+      if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
+        wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+        return;
+      }
       wx.navigateTo({ url: '/pages/fun-text/fun-text' });
       return;
     }

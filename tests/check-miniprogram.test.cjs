@@ -27,7 +27,7 @@ function makeFixture(t) {
 function writeEnv(fixtureRoot, values) {
   const config = Object.assign({
     CLOUD_ENV_ID: 'prod-env-123',
-    ENABLE_FUN_TEXT_STACK_ENTRY: false,
+    ENABLE_FUN_TEXT_STACK_ENTRY: true,
     FUN_CARD_RENDERER_SERVICE: 'fun-card-renderer',
     FUN_CARD_RENDERER_URL: 'https://renderer.wepictool.cn'
   }, values || {});
@@ -47,6 +47,7 @@ function writeEnv(fixtureRoot, values) {
 function runCheck(fixtureRoot, ...args) {
   return spawnSync(process.execPath, [checkScript, '--root', fixtureRoot].concat(args), {
     cwd: root,
+    env: Object.assign({}, process.env, { FUN_CARD_RENDERER_ACCESS_MODE: 'call-container-only' }),
     encoding: 'utf8'
   });
 }
@@ -166,6 +167,42 @@ test('release preflight accepts complete production-shaped configuration', (t) =
 
   assert.equal(result.status, 0, combinedOutput(result));
   assert.match(result.stdout, /发布预检通过/);
+});
+
+test('release preflight requires the private renderer production environment declaration', (t) => {
+  const fixtureRoot = makeFixture(t);
+  writeEnv(fixtureRoot);
+  for (const mode of ['', 'public']) {
+    const result = spawnSync(process.execPath, [checkScript, '--root', fixtureRoot, '--release'], {
+      cwd: root, encoding: 'utf8', env: Object.assign({}, process.env, { FUN_CARD_RENDERER_ACCESS_MODE: mode })
+    });
+    assert.equal(result.status, 1);
+    assert.match(combinedOutput(result), /FUN_CARD_RENDERER_ACCESS_MODE/);
+  }
+});
+
+test('static-only release passes with no renderer URL, service or access declaration', (t) => {
+  const fixtureRoot = makeFixture(t);
+  writeEnv(fixtureRoot, { ENABLE_FUN_TEXT_STACK_ENTRY: false, FUN_CARD_RENDERER_URL: '', FUN_CARD_RENDERER_SERVICE: '' });
+  const envPath = path.join(fixtureRoot, 'miniprogram/config/env.js');
+  fs.writeFileSync(envPath, fs.readFileSync(envPath, 'utf8')
+    .split('\n').filter(line => !line.startsWith('const FUN_CARD_RENDERER_')).join('\n')
+    .replace(/module.exports = .*;/, 'module.exports = { CLOUD_ENV_ID, ENABLE_FUN_TEXT_STACK_ENTRY };'));
+  const result = spawnSync(process.execPath, [checkScript, '--root', fixtureRoot, '--release'], {
+    cwd: root, encoding: 'utf8', env: Object.assign({}, process.env, { FUN_CARD_RENDERER_ACCESS_MODE: '' })
+  });
+  assert.equal(result.status, 0, combinedOutput(result));
+  assert.match(result.stdout, /发布预检通过/);
+});
+
+test('release preflight rejects IPv6 and normalized IPv4 loopback font hosts', (t) => {
+  const fixtureRoot = makeFixture(t);
+  for (const host of ['[::1]', '[0:0:0:0:0:0:0:1]', '[::ffff:127.0.0.1]', '127.0.0.2', '127.1', '2130706433', 'localhost.', 'demo.localhost']) {
+    writeEnv(fixtureRoot, { FUN_CARD_RENDERER_URL: `https://${host}:8080` });
+    const result = runCheck(fixtureRoot, '--release');
+    assert.equal(result.status, 1, host);
+    assert.match(combinedOutput(result), /loopback/);
+  }
 });
 
 test('release preflight rejects a non-boolean fun text emergency flag', (t) => {

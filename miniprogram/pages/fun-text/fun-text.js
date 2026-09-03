@@ -4,6 +4,7 @@
 const contentGuardClient = require('../../utils/contentGuardClient');
 const creativePlannerClient = require('../../utils/creativePlannerClient');
 const funTextProject = require('../../utils/funTextProject');
+const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 
 const EXPRESSION_OPTIONS = [
   { key: 'random-fun', label: '随机好玩', desc: '自动挑三种结构' },
@@ -18,6 +19,7 @@ const MAX_CHAR_COUNT = 40;
 
 Page({
   data: {
+    funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY === true,
     inputText: '',
     charCount: 0,
     expressionOptions: EXPRESSION_OPTIONS,
@@ -40,6 +42,7 @@ Page({
   },
 
   onGenerate: async function () {
+    if (!this.ensureEnabled()) return;
     if (this.data.generating) return;
 
     const sourceText = (this.data.inputText || '').trim();
@@ -88,6 +91,7 @@ Page({
 
   // 内置示例：固定、已审核文案，不调用云函数，直接带入候选页
   onTryDemo: function () {
+    if (!this.ensureEnabled()) return;
     const project = funTextProject.createFunTextProject({
       sourceText: DEMO_SOURCE_TEXT,
       expressionKey: DEMO_EXPRESSION_KEY,
@@ -97,11 +101,18 @@ Page({
   },
 
   navigateToCandidates: function (project) {
+    if (!this.ensureEnabled()) return;
     wx.navigateTo({
       url: '/pages/fun-text-candidates/fun-text-candidates',
       success: function (navRes) {
         navRes.eventChannel.emit('funTextProject', { project: project });
       }
     });
+  },
+
+  ensureEnabled: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY === true) return true;
+    wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+    return false;
   }
 });

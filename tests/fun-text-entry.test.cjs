@@ -49,6 +49,7 @@ function recordingWx(overrides) {
 
 function loadFunTextPage(wxApi) {
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text/fun-text.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/contentGuardClient': client,
     '../../utils/creativePlannerClient': plannerClient,
     '../../utils/funTextProject': model

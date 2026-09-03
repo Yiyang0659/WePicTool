@@ -13,7 +13,7 @@ const serviceRoot = path.join(
   'fun-card-renderer'
 );
 
-test('runtime enables offline simulation only for explicit non-production development', () => {
+test('runtime enables offline simulation only for exact explicit development', () => {
   const runtime = require(path.join(serviceRoot, 'runtimeConfig.js'));
 
   assert.deepEqual(runtime.resolveRuntimeMode({
@@ -25,15 +25,32 @@ test('runtime enables offline simulation only for explicit non-production develo
     {},
     { NODE_ENV: 'development' },
     { NODE_ENV: 'test', FUN_CARD_RENDERER_DEV_MODE: 'true' },
+    { FUN_CARD_RENDERER_DEV_MODE: '1' },
+    { NODE_ENV: 'staging', FUN_CARD_RENDERER_DEV_MODE: '1' },
+    { NODE_ENV: ' development ', FUN_CARD_RENDERER_DEV_MODE: '1' },
     { NODE_ENV: 'production', FUN_CARD_RENDERER_DEV_MODE: '1' }
   ]) {
-    assert.throws(() => runtime.resolveRuntimeMode(env), /CLOUDBASE_ENV_ID|production/i);
+    assert.throws(() => runtime.resolveRuntimeMode(env), /CLOUDBASE_ENV_ID|development|production/i);
   }
 
   assert.deepEqual(runtime.resolveRuntimeMode({
     NODE_ENV: 'production',
+    FUN_CARD_RENDERER_ACCESS_MODE: 'call-container-only',
     CLOUDBASE_ENV_ID: 'prod-env-123'
   }), { devMode: false, cloudEnvId: 'prod-env-123' });
+});
+
+test('production entry refuses missing or non-private access mode before listening', () => {
+  for (const mode of [undefined, '', 'public', 'call-container-only ']) {
+    const env = { PATH: process.env.PATH, NODE_ENV: 'production', PORT: '0', CLOUDBASE_ENV_ID: 'prod-env-123' };
+    if (mode !== undefined) env.FUN_CARD_RENDERER_ACCESS_MODE = mode;
+    const result = spawnSync(process.execPath, ['index.js'], {
+      cwd: serviceRoot, env, encoding: 'utf8', timeout: 1500
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /FUN_CARD_RENDERER_ACCESS_MODE/);
+    assert.doesNotMatch(result.stdout, /listening/);
+  }
 });
 
 test('production runtime refuses to start without audit and storage capabilities', () => {
