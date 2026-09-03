@@ -58,7 +58,7 @@ test('rejects an asset pack with a group below the WeChat stack threshold', () =
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: FAIL because `miniprogram/config/playRegistry.js` does not exist.
 
 - [ ] **Step 3: Implement the registry**
@@ -69,7 +69,7 @@ Define the four ordered groups, one available play, and `funny-paper-doll-v1`. T
 
 - [ ] **Step 4: Run the focused tests and verify GREEN**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: all registry tests PASS.
 
 - [ ] **Step 5: Commit the registry**
@@ -135,7 +135,7 @@ test('moving an item changes the first card used by preview', () => {
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: FAIL because `layeredDressup.js` is missing.
 
 - [ ] **Step 3: Implement immutable project operations**
@@ -160,7 +160,7 @@ All editing functions return a fresh project and group arrays. Normalize user it
 
 - [ ] **Step 4: Run focused tests and verify GREEN**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: all registry and project tests PASS.
 
 - [ ] **Step 5: Commit the model**
@@ -188,7 +188,7 @@ For every URL in the registered pack, resolve it under `miniprogram/`, assert th
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: FAIL listing the missing `head1.png`, `head2.png`, and `head3.png`.
 
 - [ ] **Step 3: Create the head assets**
@@ -197,7 +197,7 @@ Generate three original, flat, abstract paper-doll heads on a plain off-white sq
 
 - [ ] **Step 4: Run tests and verify GREEN**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: the pack integrity and dimension tests PASS.
 
 - [ ] **Step 5: Commit the assets**
@@ -229,7 +229,7 @@ Assert that `app.json` declares `pages/dressup/dressup`; all four page files exi
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: FAIL because the page and route do not exist.
 
 - [ ] **Step 3: Implement page state and initialization**
@@ -263,7 +263,7 @@ Use a white page, purple/indigo flagship accents, four stacked group cards, hori
 
 - [ ] **Step 7: Run focused and structural checks**
 
-Run: `node --test tests/layered-dressup.test.cjs && npm run check:syntax && npm run check:miniprogram`  
+Run: `node --test tests/layered-dressup.test.cjs && npm run check:syntax && npm run check:miniprogram`
 Expected: all commands PASS.
 
 - [ ] **Step 8: Commit the editor page**
@@ -292,7 +292,7 @@ Assert the homepage markup contains the two flagship actions, a visible “四�
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `node --test tests/layered-dressup.test.cjs`  
+Run: `node --test tests/layered-dressup.test.cjs`
 Expected: FAIL because the new flagship entry is missing.
 
 - [ ] **Step 3: Implement homepage behavior and layout**
@@ -301,7 +301,7 @@ Replace the current hero wording with “分层云换装”，add「直接试玩
 
 - [ ] **Step 4: Run focused and syntax checks**
 
-Run: `node --test tests/layered-dressup.test.cjs && npm run check:syntax`  
+Run: `node --test tests/layered-dressup.test.cjs && npm run check:syntax`
 Expected: PASS.
 
 - [ ] **Step 5: Commit the homepage**
