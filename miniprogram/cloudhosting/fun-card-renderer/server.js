@@ -11,6 +11,8 @@ const {
 
 const DEFAULT_FONT_PATH = path.join(__dirname, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const DEFAULT_RATE_LIMIT = 30;
+const DEFAULT_RATE_WINDOW_MS = 60 * 1000;
 
 function failure(statusCode, code) {
   return { statusCode, body: { ok: false, code } };
@@ -145,6 +147,36 @@ function writeJson(response, statusCode, body) {
   response.end(JSON.stringify(body));
 }
 
+function normalizeCallerId(value) {
+  if (typeof value !== 'string') return '';
+  const callerId = value.trim();
+  return callerId && callerId.length <= 128 ? callerId : '';
+}
+
+function createCallerRateLimiter(options) {
+  const config = options || {};
+  const maxRequests = Number.isInteger(config.maxRequests) && config.maxRequests > 0
+    ? config.maxRequests
+    : DEFAULT_RATE_LIMIT;
+  const windowMs = Number.isInteger(config.windowMs) && config.windowMs > 0
+    ? config.windowMs
+    : DEFAULT_RATE_WINDOW_MS;
+  const now = typeof config.now === 'function' ? config.now : Date.now;
+  const callers = new Map();
+
+  return function allowCaller(callerId) {
+    const currentTime = now();
+    const existing = callers.get(callerId);
+    if (!existing || currentTime - existing.startedAt >= windowMs) {
+      callers.set(callerId, { startedAt: currentTime, count: 1 });
+      return true;
+    }
+    if (existing.count >= maxRequests) return false;
+    existing.count += 1;
+    return true;
+  };
+}
+
 function readJson(request) {
   return new Promise((resolve, reject) => {
     let raw = '';
@@ -178,6 +210,10 @@ function readJson(request) {
 function createHttpServer(options) {
   const config = options || {};
   const fontPath = config.fontPath || DEFAULT_FONT_PATH;
+  const devMode = config.devMode === true;
+  const rateLimiter = typeof config.rateLimiter === 'function'
+    ? config.rateLimiter
+    : createCallerRateLimiter();
   return http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://localhost');
     if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/font/LXGWMarkerGothic-Regular.ttf') {
@@ -205,6 +241,17 @@ function createHttpServer(options) {
       '/preview-stack': config.previewStackHandler
     };
     if (request.method === 'POST' && handlers[url.pathname]) {
+      if (!devMode) {
+        const callerId = normalizeCallerId(request.headers['x-wx-openid']);
+        if (!callerId) {
+          writeJson(response, 403, { ok: false, code: 'CALLER_UNAUTHORIZED' });
+          return;
+        }
+        if (!rateLimiter(callerId)) {
+          writeJson(response, 429, { ok: false, code: 'RATE_LIMITED' });
+          return;
+        }
+      }
       let input;
       try {
         input = await readJson(request);
@@ -222,6 +269,7 @@ function createHttpServer(options) {
 
 module.exports = {
   assessSecurityResponse,
+  createCallerRateLimiter,
   createContentChecker,
   createRenderStackHandler,
   createPreviewStackHandler,

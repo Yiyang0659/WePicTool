@@ -1,6 +1,8 @@
 # WePicTool 微信小程序
 
-WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换装是当前功能分支的旗舰玩法，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线，已跑通穿搭"选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送"主链路，并在功能分支集成分层云换装的本地编辑和四叠预览底座。
+WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换装是当前功能分支的旗舰玩法，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线；源码与自动化已覆盖穿搭「选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送」主链路，并在功能分支集成分层云换装的本地编辑和四叠预览底座。
+
+当前证据边界：趣味字画阶段一与 P2.2 实验只有代码和自动化结果；Docker 镜像、CloudBase 部署、线上端点、微信开发者工具、iOS、Android 和真实微信聊天均未验证，功能也尚未合并或发布。
 
 小程序 UI 采用底部三 Tab 架构（首页 / 记录 / 我的），结果页与预览页采用沉浸式微信聊天窗口风格，让用户提前预演多图合并发送后的真实叠图折叠效果。
 
@@ -14,9 +16,10 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换�
 
 - **首页选图与压缩**：支持选择 1–9 张衣物/鞋子图片，上传前自动进行等比压缩（最长边不超过 1600px）。
 - **分层云换装（功能分支）**：支持内置纸娃娃素材直接试玩或按部位上传，按头像/发型、上衣、下装、鞋子四组独立排序、预览和保存；真机验收尚未完成。
-- **趣味字画输入与三套候选（功能分支）**：首页展示五张真实示例牌堆；输入页提供一句话与组合表达标签，文案经 `contentGuard` 审核后进入三套独立可滑候选页，支持「用这套」、「自己改改」与「再来三套」；Canvas 失败时自动调用云托管 `/preview-stack` 降级为服务端低清图，不使用系统字体回退。
+- **趣味字画输入与三套候选（功能分支代码）**：首页展示五张包内静态示例牌堆；输入页提供一句话与组合表达标签，文案经 `contentGuard` 审核后进入三套独立可滑候选页，支持「用这套」、「自己改改」与「再来三套」；Canvas 失败时调用云托管 `/preview-stack` 降级为服务端低清图，不使用系统字体回退。入口可由 `ENABLE_FUN_TEXT_STACK_ENTRY` 紧急关闭，同时保留首页静态示例。
 - **趣味字画轻编辑与高清结果（功能分支）**：轻编辑页聚焦提供「改文字」、「换整叠风格」与「调整顺序」；通用结果页（`pages/template-result`）自动调用云托管输出 1080 高清 PNG、写入本地历史任务、支持深色微信牌堆全屏预演（`pages/preview`）与顺序断点续存，保存完成提供明确的微信四步发送指引。
 - **趣味字画本地记录与旧记录兼容（功能分支）**：记录页支持「趣味字画」分类展示与任务重开，历史大字滑卡记录展示友好升级引导与重新制作入口；提供完整的云托管部署指南（`docs/deployment/fun-card-renderer.md`）与自动化配置预检。
+- **P2.2 AI 故事规划器（计划外实验代码）**：分支含 `planFunTextStory`、结构化候选校验/单次修复、客户端规则降级与本地模拟测试；它不在已确认的阶段一计划交付范围内，发布范围尚未确认，云函数部署、模型 API key、线上域名和真机链路仍待办。
 - **本地/云端双模式**：未配置云环境时自动启用本地 Mock 预览模式；配置后走云存储与云函数链路。
 - **内容安全防御门**：集成 `contentGuard` 云函数与微信安全接口，对文本与图片进行合规安全审查。
 - **AI 智能分类与抠图**：`processOutfit` 云函数接入阿里云 DashScope，使用 `qwen-vl-plus` 进行品类识别（上衣/下装/鞋子/其他），使用 `qwen-image-edit-plus` 进行主体抠图。
@@ -47,6 +50,9 @@ npm test
 
 # 2. 小程序上线前预检（检查 AppID、JSON、WXML 闭合、文件完整性）
 npm run check:miniprogram
+
+# 2.1 发布严格预检（本地 localhost/占位配置会按预期非零退出）
+npm run check:miniprogram:release
 
 # 3. 语法检查小程序核心 JS / 工具文件
 npm run check:syntax
@@ -83,7 +89,7 @@ WePicTool/
 │   ├── assets/                       # 静态资源
 │   │   └── tabbar/                   # 底部 Tab 图标（首页/记录/我的 各 2 态）
 │   ├── config/
-│   │   ├── env.js                    # CloudBase 环境 ID 与服务地址配置
+│   │   ├── env.js                    # CloudBase 环境、renderer 服务/字体地址与入口开关
 │   │   └── playRegistry.js           # 玩法与内置素材包注册表
 │   ├── pages/                        # 页面视图层
 │   │   ├── index/                    # 首页 Tab：选图入口 (wx.chooseMedia)、分层云换装与趣味字画示例
@@ -98,9 +104,10 @@ WePicTool/
 │   │   └── profile/                  # 我的 Tab：相册权限、缓存清理、反馈与隐私说明
 │   ├── cloudfunctions/               # 微信云开发云函数
 │   │   ├── processOutfit/            # 穿搭 AI 分类 (qwen-vl-plus) 与抠图 (qwen-image-edit-plus)
-│   │   └── contentGuard/             # 内容安全审查云函数 (msgSecCheck)
+│   │   ├── contentGuard/             # 内容安全审查云函数 (msgSecCheck)
+│   │   └── planFunTextStory/         # P2.2 实验：AI 结构化故事规划与二次审核
 │   ├── cloudhosting/
-│   │   └── fun-card-renderer/         # Node 20 趣味字画预览/高清 PNG、字体与二次审核服务
+│   │   └── fun-card-renderer/         # Node 20/bookworm-slim + node:http 渲染、字体与二次审核服务
 │   └── utils/                        # 前端核心工具库
 │       ├── task.js                   # 任务模型、Mock 数据、叠图能力 (buildSendability) 判定
 │       ├── layeredDressup.js          # 分层云换装项目模型与编辑规则
@@ -156,8 +163,9 @@ WePicTool/
 3. 在微信开发者工具中开通云开发环境，获取 **环境 ID**。
 4. 在 `miniprogram/config/env.js` 中填入 `CLOUD_ENV_ID`。
 5. 分别右键 `miniprogram/cloudfunctions/` 下的 `processOutfit` 和 `contentGuard`，选择“上传并部署：云端安装依赖”。
-6. 需要联调趣味字画时，从 `miniprogram/cloudhosting/fun-card-renderer/` 的 Dockerfile 部署 Node 20 云托管服务，授予内容安全与云存储权限，并把 HTTPS 服务地址写入 `miniprogram/config/env.js` 的 `FUN_CARD_RENDERER_URL`；服务未部署时不要填写占位地址。
-7. 重新编译小程序，选择图片后即可体验真实云存储上传、AI 分类抠图与安全审核链路；趣味字画阶段一已完成首页真实示例、输入页、三套可滑候选页、轻编辑页、高清结果/保存/预演、本地历史记录重开及旧记录兼容提示的完整闭环，待部署与双端真机验收。
+6. 需要联调趣味字画时，按 [`docs/deployment/fun-card-renderer.md`](docs/deployment/fun-card-renderer.md) 部署云托管服务：生产 POST 只通过 `wx.cloud.callContainer` 和 `X-WX-SERVICE` 调用，关闭服务公网入口；HTTPS HTTP 网关只公开字体精确路径。配置 `FUN_CARD_RENDERER_SERVICE`、字体域名 `FUN_CARD_RENDERER_URL` 和入口 flag，客户端不得传 OpenID 或任何秘密。
+7. 如评估后决定验证 P2.2，再单独部署 `planFunTextStory` 并配置服务端模型 API key；当前尚未完成这一步，也未确认它属于发布范围。
+8. 运行 `npm run check:miniprogram:release` 后再进入微信开发者工具、iOS、Android 与真实聊天验收。当前分支的页面、渲染、保存和记录链路只有代码/自动化证据，不代表线上或真机已通过。
 
 ---
 

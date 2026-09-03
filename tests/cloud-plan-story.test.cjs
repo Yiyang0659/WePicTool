@@ -11,7 +11,7 @@ const cloudPlanServicePath = path.join(__dirname, '..', 'miniprogram/cloudfuncti
 
 test('planFunTextStory returns valid candidates when LLM outputs compliant JSON', async () => {
   const planStory = require(cloudPlanServicePath);
-  
+
   const mockCandidates = [
     {
       candidateId: 'candidate_a',
@@ -71,7 +71,7 @@ test('planFunTextStory returns valid candidates when LLM outputs compliant JSON'
 
 test('planFunTextStory triggers repair when first output is malformed', async () => {
   const planStory = require(cloudPlanServicePath);
-  
+
   let callCount = 0;
   const mockCallLlm = async (messages) => {
     callCount += 1;
@@ -139,7 +139,7 @@ test('planFunTextStory triggers repair when first output is malformed', async ()
 
 test('planFunTextStory returns fallback recommendation on unrecoverable error or unsafe content', async () => {
   const planStory = require(cloudPlanServicePath);
-  
+
   const mockCallLlm = async () => {
     throw new Error('LLM connection timeout');
   };

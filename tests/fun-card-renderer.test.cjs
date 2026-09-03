@@ -460,6 +460,7 @@ test('real PNG rendering rejects a text layer without an explicit registered eff
 test('HTTP routes expose both handlers and the licensed font with CORS headers', async (t) => {
   const fontPath = path.join(serviceRoot, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
   const httpServer = server.createHttpServer({
+    devMode: true,
     renderStackHandler: async () => ({ statusCode: 200, body: { ok: true, route: 'render' } }),
     previewStackHandler: async () => ({ statusCode: 200, body: { ok: true, route: 'preview' } }),
     fontPath
@@ -497,6 +498,7 @@ test('HTTP routes expose both handlers and the licensed font with CORS headers',
 
 test('oversized HTTP JSON returns INVALID_REQUEST without resetting the connection', async (t) => {
   const httpServer = server.createHttpServer({
+    devMode: true,
     renderStackHandler: async () => ({ statusCode: 200, body: { ok: true } }),
     previewStackHandler: async () => ({ statusCode: 200, body: { ok: true } })
   });
@@ -520,4 +522,88 @@ test('oversized HTTP JSON returns INVALID_REQUEST without resetting the connecti
 
   assert.equal(response.status, 400);
   assert.deepEqual(response.body, { ok: false, code: 'INVALID_REQUEST' });
+});
+
+test('production HTTP routes reject POST requests without a CloudBase caller identity', async (t) => {
+  let handled = false;
+  const httpServer = server.createHttpServer({
+    renderStackHandler: async () => {
+      handled = true;
+      return { statusCode: 200, body: { ok: true } };
+    },
+    previewStackHandler: async () => ({ statusCode: 200, body: { ok: true } })
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  t.after(() => httpServer.close());
+  const baseUrl = 'http://127.0.0.1:' + httpServer.address().port;
+
+  for (const openid of [undefined, '', '   ']) {
+    const headers = { 'content-type': 'application/json' };
+    if (openid !== undefined) headers['x-wx-openid'] = openid;
+    const response = await request(baseUrl, '/render-stack', {
+      method: 'POST',
+      headers,
+      body: '{}'
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(response.body, { ok: false, code: 'CALLER_UNAUTHORIZED' });
+  }
+  assert.equal(handled, false);
+});
+
+test('production HTTP routes rate-limit each non-empty CloudBase caller identity', async (t) => {
+  const httpServer = server.createHttpServer({
+    renderStackHandler: async () => ({ statusCode: 200, body: { ok: true } }),
+    previewStackHandler: async () => ({ statusCode: 200, body: { ok: true } }),
+    rateLimiter: server.createCallerRateLimiter({ maxRequests: 2, windowMs: 60000, now: () => 1000 })
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  t.after(() => httpServer.close());
+  const baseUrl = 'http://127.0.0.1:' + httpServer.address().port;
+  const postAs = (openid) => request(baseUrl, '/render-stack', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-wx-openid': openid },
+    body: '{}'
+  });
+
+  assert.equal((await postAs('openid-a')).status, 200);
+  assert.equal((await postAs('openid-a')).status, 200);
+  const limited = await postAs('openid-a');
+  assert.equal(limited.status, 429);
+  assert.deepEqual(limited.body, { ok: false, code: 'RATE_LIMITED' });
+  assert.equal((await postAs('openid-b')).status, 200);
+});
+
+test('default caller limiter permits 30 requests per minute and resets at the next window', () => {
+  let currentTime = 1000;
+  const allowCaller = server.createCallerRateLimiter({ now: () => currentTime });
+
+  for (let index = 0; index < 30; index += 1) {
+    assert.equal(allowCaller('openid-default-limit'), true);
+  }
+  assert.equal(allowCaller('openid-default-limit'), false);
+
+  currentTime += 60000;
+  assert.equal(allowCaller('openid-default-limit'), true);
+});
+
+test('explicit development HTTP mode permits local POST requests without CloudBase headers', async (t) => {
+  const httpServer = server.createHttpServer({
+    devMode: true,
+    renderStackHandler: async () => ({ statusCode: 200, body: { ok: true } }),
+    previewStackHandler: async () => ({ statusCode: 200, body: { ok: true } })
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  t.after(() => httpServer.close());
+  const response = await request(
+    'http://127.0.0.1:' + httpServer.address().port,
+    '/render-stack',
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { ok: true });
 });

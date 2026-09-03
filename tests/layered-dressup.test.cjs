@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const vm = require('node:vm');
 
 function loadMiniProgramModule(relativePath, dependencies = {}) {
@@ -255,18 +256,20 @@ test('declares a complete layered dressup page and its editing actions', () => {
 });
 
 test('syntax checks include the layered dressup page and both shared modules', () => {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-  const command = packageJson.scripts['check:syntax'];
+  const root = path.join(__dirname, '..');
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts/check-syntax.mjs'), '--root', root], {
+    cwd: root,
+    encoding: 'utf8'
+  });
 
-  assert.match(command, /miniprogram\/config\/playRegistry\.js/);
-  assert.match(command, /miniprogram\/utils\/layeredDressup\.js/);
-  assert.match(command, /miniprogram\/pages\/dressup\/dressup\.js/);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
 
 test('homepage flagship actions navigate to demo and upload dressup modes', () => {
   const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
   const urls = [];
   const page = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/task': taskUtils,
     '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
   }, {

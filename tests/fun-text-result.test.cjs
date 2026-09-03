@@ -79,7 +79,7 @@ function recordingWx(overrides) {
 
 function loadResultPage(wxApi, customDeps) {
   const client = loadMiniProgramModule('miniprogram/utils/funCardRendererClient.js', {
-    '../config/env': { FUN_CARD_RENDERER_URL: 'https://renderer.test' }
+    '../config/env': { FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080' }
   });
   let exporter;
   try {

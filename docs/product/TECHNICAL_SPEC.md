@@ -1,8 +1,8 @@
 # WePicTool 技术方案设计
 
-**版本：** v2.2
-**日期：** 2026-08-31
-**状态：** 覆盖阶段一到阶段三已有接口与实现；第 12 节包含统一叠图管线及趣味字画的待实现技术契约
+**版本：** v2.3
+**日期：** 2026-09-03
+**状态：** 记录当前代码契约。趣味字画 P2.1 已完成分支代码/自动化，P2.2 仅为计划外实验；Docker、云部署、线上端点、开发者工具、iOS/Android 与真实聊天均未验证。
 
 ---
 
@@ -12,6 +12,8 @@
 |------|------|------|
 | 前端 | 原生微信小程序 | 无需框架，直接调用微信原生 API |
 | 后端 | CloudBase 云函数 | `processOutfit` 处理图片审核与 AI 链路，`contentGuard` 审核用户反馈文本 |
+| 趣味字画渲染 | CloudBase 云托管，Node 20 bookworm-slim + `node:http` | 授权字体、低清预览、1080 PNG 与二次文字审核；尚未部署验证 |
+| 故事规划实验 | `planFunTextStory` 云函数 | P2.2 计划外实验代码；发布范围、部署和模型 API key 未确认 |
 | 云存储 | CloudBase 云存储 | 原图临时文件、结果图临时文件 |
 | AI 分类 | DashScope qwen-vl-plus | 多模态模型识别穿搭部件 |
 | AI 抠图 | DashScope `qwen-image-edit-plus`（默认，可由环境变量覆盖） | 去除背景替换为纯白 |
@@ -33,7 +35,7 @@
 }
 ```
 
-环境变量：`DASHSCOPE_API_KEY`（阿里云 DashScope API 密钥）
+环境变量：穿搭链路使用 `DASHSCOPE_API_KEY`。P2.2 实验另读取服务端 `LLM_API_KEY`（可回退 `DASHSCOPE_API_KEY`）、`LLM_BASE_URL` 和 `LLM_MODEL`；这些值不得进入小程序包，线上尚未配置验证。
 
 ---
 
@@ -117,16 +119,19 @@ flowchart LR
 
 | 目录 | 职责 |
 | --- | --- |
-| `miniprogram/pages/index/` | 首页 Tab：选图、压缩、上传、创建任务 |
+| `miniprogram/pages/index/` | 首页 Tab：选图、压缩、上传、创建任务；包含可由 flag 关闭入口的趣味字画包内静态示例 |
 | `miniprogram/pages/record/` | 记录 Tab：本地历史任务列表、查看、再次生成 |
 | `miniprogram/pages/profile/` | 我的 Tab：相册权限、反馈、分享、缓存清理 |
 | `miniprogram/pages/result/` | 结果页（非 Tab）：白色聊天风格，分组展示、保存、改分类、发送引导 |
 | `miniprogram/pages/preview/` | 微信预览页（非 Tab）：白色微信聊天风格，比例安全的堆叠卡片、展开/收起、滑动切换 |
+| `miniprogram/pages/fun-text*/`、`template-result/` | 趣味字画输入、三候选、聚焦编辑与高清结果页 |
 | `miniprogram/app.json` | 全局页面路由与底部 Tab（首页 / 记录 / 我的）配置 |
-| `miniprogram/config/env.js` | CloudBase 环境 ID 和本地预览开关 |
+| `miniprogram/config/env.js` | CloudBase 环境 ID、renderer 服务名/字体地址、本地预览与趣味字画入口开关 |
 | `miniprogram/utils/task.js` | 任务规则、mock 分组、发送能力判断、图片尺寸计算 |
 | `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 AI 分类 + 阶段三抠图 |
 | `miniprogram/cloudfunctions/contentGuard/` | 云函数：使用微信内容安全接口审核用户反馈文本 |
+| `miniprogram/cloudfunctions/planFunTextStory/` | P2.2 实验云函数：结构化故事规划、单次修复和候选文字复核；未部署 |
+| `miniprogram/cloudhosting/fun-card-renderer/` | 独立 Node 20 渲染器：字体、360 预览、1080 成品、审核与云存储；未部署 |
 
 ---
 
@@ -524,7 +529,7 @@ cloud://cloud1-d0g1blfsde474b168/
 | 后端合成 | 放弃 | 已验证 CloudBase 错误码 145，不可行 |
 | 抠图 | DashScope `qwen-image-edit-plus`（默认） | 已接入，去除背景替换为纯白；部署环境变量可覆盖 |
 | 分类 | DashScope qwen-vl-plus | 已接入，支持置信度输出 |
-| 存储 | 临时存储 24-72 小时 | 无账号体系下更安全 |
+| 存储 | 穿搭上传/抠图沿用 24–72 小时产品策略；趣味字画 `funtext/` 固定为 2 天（48 小时目标） | 无账号体系下更安全；renderer 回滚失败由生命周期和残留扫描补偿 |
 | 任务模式 | 同步云函数调用 | 当前阶段处理量可控，60s 超时足够 |
 | 导出 | 先下载到本地临时路径 | 微信保存/分享依赖本地路径 |
 | 分享 | 保存 + 发送引导 | 小程序无法直接发送图片到微信聊天 |
@@ -538,31 +543,30 @@ cloud://cloud1-d0g1blfsde474b168/
 | 弱网/无网络 | 未专门处理 | 前端检测网络状态，无网时提前提示 |
 | 云函数冷启动慢 | 用户可能等待较久 | 添加加载进度提示 |
 | 大图片上传慢 | 无进度提示 | 分片上传或进度回调 |
-| 图片清理策略 | 云存储文件无自动过期 | 配置 CloudBase 过期规则（24-72 小时） |
+| 趣味字画渲染图清理 | 代码回滚为 best-effort，云端规则尚未配置验证 | 对 `funtext/` 固定配置 2 天（48 小时目标）过期，并监控/补偿超期残留 |
 | 前端 Canvas 大图内存 | 待验证 | 监控 iOS/Android 内存占用，必要时降级 |
 
 ---
 
 ## 12. 叠图玩法管线技术规格
 
-> 2026-07-18 定位升级新增。本节定义统一叠图管线的技术契约，玩法实现口径见 `PLAYBOOK.md` 第 3、4 章。以下能力除已标注"已有"的组件外均为待实现。
+> 2026-07-18 定位升级新增，2026-09-03 按分支事实校准。本节定义统一叠图管线的技术契约，玩法实现口径见 `PLAYBOOK.md` 第 3、4 章。P2.1 对应代码与自动化已存在，但外部部署/设备证据仍缺失；P2.2 是未纳入阶段一计划的实验代码。
 
 ### 12.1 玩法模板注册表
 
 每个玩法是一个注册项，新玩法 = 新增注册项并接入管线既有组件：
 
 ```js
-// miniprogram/utils/playTemplates.js（待新增）
+// miniprogram/config/playRegistry.js（当前版本 1 注册项）
 {
   id: 'fun-text-stack',        // 玩法唯一 ID，同时作为埋点 moduleId
-  name: '趣味字画',
-  inputType: 'text',           // text | images | template-params | mixed
-  planner: 'hybrid',           // 规则策略 + AI 结构化规划
-  composeFn: 'composeScenes',  // 把故事计划合成为可编辑场景
-  cardCountRule: '按叙事策略生成 3–8 张卡',
-  minCards: 3,                 // ≥3 张硬约束（微信合并展示触发下限）
-  fallbackStrategy: 'ruleStoryTemplates', // AI 失败时使用规则故事模板
-  trackDimension: { moduleId: 'fun-text-stack', strategyId: null }
+  version: 1,
+  title: '趣味字画',
+  status: 'available',         // 仅代码注册状态，不等于已发布
+  inputType: 'text',
+  renderer: 'fun-card-scene',
+  preview: 'single-stack',
+  exporter: 'ordered-sequence'
 }
 ```
 
@@ -570,11 +574,11 @@ cloud://cloud1-d0g1blfsde474b168/
 
 | 管线段 | 职责 | 对应代码 / 复用情况 |
 | --- | --- | --- |
-| 1. 输入器 | 选图 / 文字 / 模板参数 | 各玩法页面新增；图片输入复用 `pages/index` 的 `wx.chooseMedia` + 压缩链路 |
-| 2. 卡片生成器 | 把玩法计划转为可编辑场景并批量渲染 | 图片玩法复用 `miniprogram/utils/cardComposer.js`；趣味字画新增策略选择、候选校验、`sceneComposer` 和小程序/云托管双渲染适配器，详细契约见对应功能设计 |
-| 3. 叠图预览 | 微信聊天效果预览 | 复用 `pages/preview`（白色微信聊天风格：比例安全堆叠卡片、展开/收起、滑动切换），通过 `eventChannel` 传入图组数据 |
-| 4. 编号保存 | 文件名 01、02…… 控制发送顺序 | 复用 `pages/result` 的 `saveImagesSequentially(urls, successTitle)`，需抽为通用组件并叠加文件名编号 |
-| 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 在现有发送引导（`pages/result` 保存完成后的引导）基础上改版为通用浮层组件 |
+| 1. 输入器 | 选图 / 文字 / 模板参数 | 图片输入复用 `pages/index`；趣味字画使用 `pages/fun-text`，入口可由 `ENABLE_FUN_TEXT_STACK_ENTRY` 关闭 |
+| 2. 卡片生成器 | 把玩法计划转为可编辑场景并批量渲染 | 图片玩法复用 `cardComposer.js`；趣味字画已有规则策略、候选校验、`sceneComposer` 和小程序/云托管双渲染适配器。P2.2 AI 调度仅为实验 |
+| 3. 叠图预览 | 微信聊天效果预览 | `pages/preview` 已接收趣味字画单叠与既有图片分组；真实微信表现未验证 |
+| 4. 编号保存 | 文件名 01、02…… 控制发送顺序 | 共享 `utils/imageExporter.js` 已实现 cloud/HTTP/本地解析与顺序断点续存 |
+| 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 结果页已提供四步文案；真实聊天未验证 |
 | 6. 回流引导卡 | 末卡"用 WePicTool 做同款"，可开关 | 新增回流卡生成器（Canvas 模板），开关状态本地存储，埋点单独统计 |
 
 ### 12.3 用户生成内容安全门禁
@@ -584,7 +588,8 @@ cloud://cloud1-d0g1blfsde474b168/
 - 图片违规或审核服务异常时，云函数返回 `CONTENT_UNSAFE` 或 `SAFETY_UNAVAILABLE`，前端停留在当前页并显示非技术性提示；违规任务的 `cloud://` 源图片会尽力删除，删除失败仅记录日志且不影响拦截。
 - 意见反馈文本由独立 `contentGuard` 云函数调用 `security.msgSecCheck`；仅 `ok === true` 时才允许写入本地 `wepictool_feedbacks`，违规或安全服务异常均不保存。
 - `processOutfit/config.json` 必须声明 `security.imgSecCheck`，`contentGuard/config.json` 必须声明 `security.msgSecCheck`；客户端不得保存 AppSecret，也不得绕过云函数直连安全接口。
-- 后续新增的趣味字画、剧情反转和盲盒自定义文本同样必须先走 `contentGuard`；模型为趣味字画新增的文字在场景合成前也必须复查，检测不通过不得渲染、落盘或生成卡片。
+- 趣味字画用户输入先走 `contentGuard`；`fun-card-renderer` 在绘制/上传前再次聚合审核 `sourceText` 与全部可见文字。生产 POST 只经 `wx.cloud.callContainer`，服务端要求平台注入的 `x-wx-openid`，客户端不得传 OpenID/AppSecret/SecretKey。审核缺失、异常或未知响应均不得渲染。
+- P2.2 的模型新增文字必须在场景合成前复查；但该云函数目前只是计划外实验代码，未完成发布范围确认、线上权限/模型配置或真机验证，不能据此声明生产门禁已验收。
 
 ### 12.4 翻页动画云托管 ffmpeg 备注
 

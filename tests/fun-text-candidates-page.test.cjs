@@ -64,6 +64,93 @@ function recordingWx(overrides) {
 // 1. funCardRendererClient Tests
 // ---------------------------------------------------------------------------
 
+test('renderer client uses CloudBase callContainer with the configured service in production', async () => {
+  const client = loadMiniProgramModule('miniprogram/utils/funCardRendererClient.js', {
+    '../config/env': {
+      CLOUD_ENV_ID: 'prod-env-123',
+      FUN_CARD_RENDERER_SERVICE: 'fun-card-renderer',
+      FUN_CARD_RENDERER_URL: 'https://renderer.example.com'
+    }
+  });
+  const project = createSampleProject();
+  const payload = model.buildPreviewPayload(project);
+  const calls = [];
+  const wxApi = {
+    request() {
+      throw new Error('production must not use wx.request');
+    },
+    cloud: {
+      callContainer(options) {
+        calls.push(options);
+        options.success({
+          statusCode: 200,
+          data: {
+            ok: true,
+            projectId: payload.projectId,
+            candidates: payload.candidates.map((candidate) => ({
+              candidateId: candidate.candidateId,
+              stylePackId: candidate.stylePackId,
+              cards: candidate.scenes.map((scene) => ({
+                sceneId: scene.sceneId,
+                order: scene.order,
+                url: `cloud://prod/preview/${scene.sceneId}.png`
+              }))
+            }))
+          }
+        });
+      }
+    }
+  };
+
+  const result = await client.requestPreviewStack(wxApi, payload);
+
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, '/preview-stack');
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(calls[0].config.env, 'prod-env-123');
+  assert.equal(calls[0].header['X-WX-SERVICE'], 'fun-card-renderer');
+  assert.equal(Object.prototype.hasOwnProperty.call(calls[0].header, 'x-wx-openid'), false);
+});
+
+test('renderer client permits wx.request only for an explicit loopback development URL', async () => {
+  const client = loadMiniProgramModule('miniprogram/utils/funCardRendererClient.js', {
+    '../config/env': { CLOUD_ENV_ID: '', FUN_CARD_RENDERER_SERVICE: '', FUN_CARD_RENDERER_URL: '' }
+  });
+  const project = model.selectCandidate(createSampleProject(), createSampleProject().candidates[0].candidateId);
+  const payload = model.buildRenderPayload(project);
+  const requestCalls = [];
+  const wxApi = {
+    request(options) {
+      requestCalls.push(options);
+      options.success({
+        statusCode: 200,
+        data: {
+          ok: true,
+          projectId: payload.projectId,
+          candidateId: payload.candidateId,
+          cards: payload.scenes.map((scene) => ({
+            sceneId: scene.sceneId,
+            order: scene.order,
+            url: `http://127.0.0.1:8080/cards/${scene.sceneId}.png`
+          }))
+        }
+      });
+    }
+  };
+
+  assert.equal((await client.requestRenderStack(wxApi, payload, {
+    baseUrl: 'http://127.0.0.1:8080'
+  })).ok, true);
+  assert.equal(requestCalls.length, 1);
+
+  await assert.rejects(
+    () => client.requestRenderStack(wxApi, payload, { baseUrl: 'https://public-renderer.example.com' }),
+    (error) => error.code === 'FUN_RENDERER_NOT_CONFIGURED'
+  );
+  assert.equal(requestCalls.length, 1);
+});
+
 test('renderer client rejects when renderer URL is not configured', async () => {
   let client;
   try {
@@ -79,7 +166,7 @@ test('renderer client rejects when renderer URL is not configured', async () => 
   const previewPayload = model.buildPreviewPayload(project);
 
   await assert.rejects(
-    () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: '' }),
+    () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: '', serviceName: '' }),
     (err) => err.code === 'FUN_RENDERER_NOT_CONFIGURED' || /尚未配置/.test(err.message)
   );
 
@@ -87,7 +174,7 @@ test('renderer client rejects when renderer URL is not configured', async () => 
   const renderPayload = model.buildRenderPayload(selected);
 
   await assert.rejects(
-    () => client.requestRenderStack(wxApi, renderPayload, { baseUrl: '' }),
+    () => client.requestRenderStack(wxApi, renderPayload, { baseUrl: '', serviceName: '' }),
     (err) => err.code === 'FUN_RENDERER_NOT_CONFIGURED' || /尚未配置/.test(err.message)
   );
 });
@@ -121,11 +208,11 @@ test('requestPreviewStack sends POST request and validates complete matching res
     }
   });
 
-  const res = await client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'https://renderer.test' });
+  const res = await client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'http://127.0.0.1:8080' });
   assert.equal(res.ok, true);
   assert.equal(res.projectId, previewPayload.projectId);
   assert.equal(res.candidates.length, 3);
-  assert.equal(calls.requests[0].url, 'https://renderer.test/preview-stack');
+  assert.equal(calls.requests[0].url, 'http://127.0.0.1:8080/preview-stack');
   assert.equal(calls.requests[0].method, 'POST');
 });
 
@@ -144,7 +231,7 @@ test('requestPreviewStack rejects partial, mismatched or corrupt responses', asy
     }
   });
   await assert.rejects(
-    () => client.requestPreviewStack(badProjWx, previewPayload, { baseUrl: 'https://renderer.test' }),
+    () => client.requestPreviewStack(badProjWx, previewPayload, { baseUrl: 'http://127.0.0.1:8080' }),
     (err) => err.code === 'INVALID_RENDER_RESPONSE'
   );
 
@@ -168,7 +255,7 @@ test('requestPreviewStack rejects partial, mismatched or corrupt responses', asy
     }
   });
   await assert.rejects(
-    () => client.requestPreviewStack(partialWx, previewPayload, { baseUrl: 'https://renderer.test' }),
+    () => client.requestPreviewStack(partialWx, previewPayload, { baseUrl: 'http://127.0.0.1:8080' }),
     (err) => err.code === 'INVALID_RENDER_RESPONSE'
   );
 
@@ -182,7 +269,7 @@ test('requestPreviewStack rejects partial, mismatched or corrupt responses', asy
     }
   });
   await assert.rejects(
-    () => client.requestPreviewStack(unsafeWx, previewPayload, { baseUrl: 'https://renderer.test' }),
+    () => client.requestPreviewStack(unsafeWx, previewPayload, { baseUrl: 'http://127.0.0.1:8080' }),
     (err) => err.code === 'CONTENT_UNSAFE'
   );
 });
@@ -214,12 +301,12 @@ test('requestRenderStack sends POST request and validates complete response', as
     }
   });
 
-  const res = await client.requestRenderStack(wxApi, renderPayload, { baseUrl: 'https://renderer.test' });
+  const res = await client.requestRenderStack(wxApi, renderPayload, { baseUrl: 'http://127.0.0.1:8080' });
   assert.equal(res.ok, true);
   assert.equal(res.projectId, renderPayload.projectId);
   assert.equal(res.candidateId, renderPayload.candidateId);
   assert.equal(res.cards.length, mockCards.length);
-  assert.equal(calls.requests[0].url, 'https://renderer.test/render-stack');
+  assert.equal(calls.requests[0].url, 'http://127.0.0.1:8080/render-stack');
 });
 
 test('renderer client trims supported card URLs before returning preview and render responses', async () => {
@@ -244,7 +331,7 @@ test('renderer client trims supported card URLs before returning preview and ren
     }
   });
 
-  const preview = await client.requestPreviewStack(previewWx, previewPayload, { baseUrl: 'https://renderer.test' });
+  const preview = await client.requestPreviewStack(previewWx, previewPayload, { baseUrl: 'http://127.0.0.1:8080' });
   assert.equal(preview.candidates[0].cards[0].url, 'http://127.0.0.1:8080/preview.png');
   assert.match(preview.candidates[0].cards[1].url, /^cloud:\/\//);
 
@@ -268,7 +355,7 @@ test('renderer client trims supported card URLs before returning preview and ren
     }
   });
 
-  const render = await client.requestRenderStack(renderWx, renderPayload, { baseUrl: 'https://renderer.test' });
+  const render = await client.requestRenderStack(renderWx, renderPayload, { baseUrl: 'http://127.0.0.1:8080' });
   assert.equal(render.cards[0].url, `https://cdn.example/final/${renderPayload.scenes[0].sceneId}.png`);
 });
 
@@ -300,7 +387,7 @@ test('renderer client rejects blank and unsupported card URL schemes in preview 
       }
     });
     await assert.rejects(
-      () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'https://renderer.test' }),
+      () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'http://127.0.0.1:8080' }),
       (err) => err.code === 'INVALID_RENDER_RESPONSE'
     );
   }
@@ -325,7 +412,7 @@ test('renderer client rejects blank and unsupported card URL schemes in preview 
     }
   });
   await assert.rejects(
-    () => client.requestRenderStack(renderWx, renderPayload, { baseUrl: 'https://renderer.test' }),
+    () => client.requestRenderStack(renderWx, renderPayload, { baseUrl: 'http://127.0.0.1:8080' }),
     (err) => err.code === 'INVALID_RENDER_RESPONSE'
   );
 });
@@ -349,7 +436,7 @@ test('renderer client normalizes non-safety server failures and keeps only expli
       }
     });
     await assert.rejects(
-      () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'https://renderer.test' }),
+      () => client.requestPreviewStack(wxApi, previewPayload, { baseUrl: 'http://127.0.0.1:8080' }),
       (err) => err.code === item.expected
     );
   }
@@ -361,12 +448,12 @@ test('renderer client normalizes non-safety server failures and keeps only expli
 
 function loadCandidatesPage(wxApi, customDeps) {
   const client = loadMiniProgramModule('miniprogram/utils/funCardRendererClient.js', {
-    '../config/env': { FUN_CARD_RENDERER_URL: 'https://renderer.test' }
+    '../config/env': { FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080' }
   });
   const deps = Object.assign({
     '../../utils/funTextProject': model,
     '../../utils/funCardRendererClient': client,
-    '../../config/env': { FUN_CARD_RENDERER_URL: 'https://renderer.test' }
+    '../../config/env': { FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080' }
   }, customDeps || {});
 
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text-candidates/fun-text-candidates.js', deps, wxApi));

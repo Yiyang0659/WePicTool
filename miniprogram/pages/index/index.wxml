@@ -70,7 +70,7 @@
         <view class="fun-text-demo-indicator">{{funTextDemoIndex + 1}} / {{funTextDemoSlides.length}}</view>
         <view
           class="fun-text-demo-cta"
-          wx:if="{{funTextDemoIndex >= funTextDemoSlides.length - 1}}"
+          wx:if="{{funTextEntryEnabled && funTextDemoIndex >= funTextDemoSlides.length - 1}}"
           bindtap="onTryFunTextDemo"
         >把你的话也变成一叠 →</view>
         <view class="fun-text-demo-hint" wx:else>左右滑动，看看这叠怎么演</view>

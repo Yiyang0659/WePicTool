@@ -55,8 +55,9 @@ function loadFunTextPage(wxApi) {
   }, wxApi));
 }
 
-function loadIndexPage(wxApi) {
+function loadIndexPage(wxApi, envConfig) {
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': envConfig || { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/funTextProject': model,
     '../../utils/task': taskModule
   }, wxApi));
@@ -206,4 +207,16 @@ test('swiping the demo to the last card reveals the CTA and tapping it enters ca
   assert.equal(project.sourceText, '我今天想见你');
   assert.equal(project.brief.expressionKey, 'funny-reversal');
   assert.equal(project.candidates.length, 3);
+});
+
+test('release feature flag keeps the static demo visible but closes its interactive entry', () => {
+  const { wxApi, calls } = recordingWx({});
+  const page = loadIndexPage(wxApi, { ENABLE_FUN_TEXT_STACK_ENTRY: false });
+
+  assert.equal(page.data.funTextDemoSlides.length, 5);
+  assert.equal(page.data.funTextEntryEnabled, false);
+  page.onTryFunTextDemo();
+
+  assert.deepEqual(calls.navigations, []);
+  assert.match(calls.toasts[0].title, /暂不可用/);
 });

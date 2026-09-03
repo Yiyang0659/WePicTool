@@ -15,9 +15,9 @@ test('buildStoryPrompt generates system prompt and user prompt with exact strate
     cardRange: { min: 3, preferred: 5, max: 8 }
   };
   const selectedStrategies = ['hard_turn', 'suspense_reveal', 'fake_checklist'];
-  
+
   const promptData = storyPrompt.buildStoryPrompt(brief, selectedStrategies);
-  
+
   assert.ok(promptData);
   assert.equal(typeof promptData.systemPrompt, 'string');
   assert.equal(typeof promptData.userPrompt, 'string');
