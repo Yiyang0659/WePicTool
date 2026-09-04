@@ -84,13 +84,15 @@ function loadResultPage(wxApi, customDeps) {
     '../config/env': { CLOUD_ENV_ID: 'prod-env-123', FUN_CARD_RENDERER_SERVICE: 'fun-card-renderer' }
   });
   let exporter;
+  let manifest;
   try {
-    const manifest = loadMiniProgramModule('miniprogram/utils/stackExportManifest.js');
+    manifest = loadMiniProgramModule('miniprogram/utils/stackExportManifest.js');
     exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js', {
       './stackExportManifest': manifest
     });
   } catch (e) {
     exporter = {};
+    manifest = {};
   }
 
   const assetRegistry = loadMiniProgramModule('miniprogram/config/assetRegistry.js');
@@ -100,15 +102,27 @@ function loadResultPage(wxApi, customDeps) {
     '../config/stylePacks': stylePacks
   });
 
+  const defaultSequenceComposer = {
+    async materializeManifest(wxArg, canvas, inputManifest) {
+      const output = JSON.parse(JSON.stringify(inputManifest));
+      output.stacks.forEach((stack) => stack.cards.forEach((card) => { card.exportUrl = card.sourceUrl; }));
+      return output;
+    }
+  };
   const deps = Object.assign({
     '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/funTextProject': model,
     '../../utils/funCardRendererClient': client,
     '../../utils/imageExporter': exporter,
+    '../../utils/stackExportManifest': manifest,
+    '../../utils/sequenceBadgeComposer': defaultSequenceComposer,
     '../../utils/scenePainter': painter
   }, customDeps || {});
 
-  return instantiatePage(loadMiniProgramPage('miniprogram/pages/template-result/template-result.js', deps, wxApi));
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/template-result/template-result.js', deps, wxApi));
+  page._sequenceCanvas = { id: 'test-sequence-canvas' };
+  page._sequenceReady = true;
+  return page;
 }
 
 function codedError(code, message) {
@@ -182,14 +196,14 @@ test('template-result renders 1080 stack, saves record locally and provides prev
   assert.equal(recordPage.data.records[0].recordType, 'funtext');
 
   // Tap "先滑着看看" (onPreviewStack)
-  page.onPreviewStack();
-  assert.deepEqual(calls.navigations, ['/pages/preview/preview']);
+  await page.onPreviewStack();
+  assert.equal(calls.navigations.join(','), '/pages/preview/preview');
   assert.equal(calls.emitted.length, 1);
   assert.equal(calls.emitted[0].name, 'acceptTaskData');
   const previewData = calls.emitted[0].payload;
   assert.equal(previewData.ratio, '1:1');
-  assert.equal(previewData.groups[0].name, '趣味字画');
-  assert.equal(previewData.groups[0].cards.length, mockRenderedCards.length);
+  assert.equal(previewData.manifest.playId, 'fun-text-stack');
+  assert.equal(previewData.manifest.stacks[0].cards.length, mockRenderedCards.length);
 
   // Tap "自己改改" (onEditStack)
   page.onEditStack();
@@ -540,7 +554,7 @@ test('template-result ignores an older failure when the same project retry alrea
   firstRequest.reject(codedError('CONTENT_UNSAFE', 'stale failure'));
   await firstInit;
 
-  assert.equal(page.data.renderFailed, false);
+  assert.equal(page.data.renderFailed, false, page.data.renderErrorMessage);
   assert.equal(page.data.task.taskId, project.projectId);
   assert.equal(calls.storage.wepictool_records.length, 1);
   assert.match(page.data.renderedCards[0].url, /retry-success/);
@@ -737,6 +751,81 @@ test('template-result uses local Canvas only for explicit renderer connection er
   }
 });
 
+test('template-result falls back locally for an invalid cloud response only with loopback renderer config', async () => {
+  const project = createSampleProject();
+  let exported = 0;
+  const canvasNode = {
+    getContext() {
+      return { clearRect() {} };
+    }
+  };
+  const { wxApi, calls } = recordingWx({
+    createSelectorQuery() {
+      return {
+        select() { return this; },
+        fields() { return this; },
+        exec(callback) { callback([{ node: canvasNode }]); }
+      };
+    },
+    canvasToTempFilePath(options) {
+      exported += 1;
+      options.success({ tempFilePath: `wxfile://loopback-${exported}.png` });
+    }
+  });
+  const page = loadResultPage(wxApi, {
+    '../../config/env': {
+      ENABLE_FUN_TEXT_STACK_ENTRY: true,
+      FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080'
+    },
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.reject(codedError('INVALID_RENDER_RESPONSE', '服务端渲染响应异常'));
+      }
+    },
+    '../../utils/scenePainter': { paintScene() {} }
+  });
+
+  await page.initProject(project);
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(page.data.renderFailed, false);
+  assert.equal(page.data.renderedCards.length, project.candidates[0].editedScenes.length);
+  assert.equal((calls.storage.wepic_history_tasks || []).length, 1);
+});
+
+test('template-result keeps invalid renderer responses fail-closed with an HTTPS production config', async () => {
+  const project = createSampleProject();
+  let canvasQueries = 0;
+  const { wxApi, calls } = recordingWx({
+    createSelectorQuery() {
+      canvasQueries += 1;
+      return {
+        select() { return this; },
+        fields() { return this; },
+        exec(callback) { callback([]); }
+      };
+    }
+  });
+  const page = loadResultPage(wxApi, {
+    '../../config/env': {
+      ENABLE_FUN_TEXT_STACK_ENTRY: true,
+      FUN_CARD_RENDERER_URL: 'https://renderer.example.com'
+    },
+    '../../utils/funCardRendererClient': {
+      requestRenderStack() {
+        return Promise.reject(codedError('INVALID_RENDER_RESPONSE', '服务端渲染响应异常'));
+      }
+    }
+  });
+
+  await page.initProject(project);
+
+  assert.equal(canvasQueries, 0);
+  assert.equal(page.data.renderFailed, true);
+  assert.equal(page.data.task, null);
+  assert.equal(calls.storage.wepic_history_tasks, undefined);
+});
+
 test('saving sequentially guides the user through WeChat four-step flow and supports resume on error', async () => {
   const project = createSampleProject();
   const mockRenderedCards = project.candidates[0].editedScenes.map((s) => ({
@@ -801,4 +890,133 @@ test('template-result page template contains WeChat four-step guide and no direc
 
   // Prohibit fake direct send claims
   assert.doesNotMatch(combined, /(一键发送到微信|直接发给好友|自动合并发送)/);
+});
+
+test('funtext result materializes one identity-matched stack with visible sequence urls', async () => {
+  const project = createSampleProject();
+  const rendered = cardsForProject(project, 'cloud://test/rendered');
+  const materialized = [];
+  const { wxApi } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/sequenceBadgeComposer': {
+      async materializeManifest(wxArg, canvas, manifest) {
+        materialized.push({ canvas, manifest });
+        const output = JSON.parse(JSON.stringify(manifest));
+        output.stacks[0].cards.forEach((card) => { card.exportUrl = `/numbered/${card.sequenceLabel}.png`; });
+        return output;
+      }
+    }
+  });
+  page._sequenceCanvas = { id: 'funtext-sequence' };
+  page._sequenceReady = true;
+  page.setData({ project, renderedCards: rendered, rendering: false, renderFailed: false });
+
+  const manifest = await page.prepareExportManifest();
+
+  assert.equal(materialized[0].canvas.id, 'funtext-sequence');
+  assert.equal(manifest.stacks.length, 1);
+  assert.equal(
+    manifest.stacks[0].cards.map((card) => card.sequenceLabel).join(','),
+    rendered.map((card, index) => String(index + 1).padStart(2, '0')).join(',')
+  );
+  assert.equal(manifest.stacks[0].cards[0].cardId, rendered[0].sceneId);
+  assert.equal(page.data.renderedCards[0].exportUrl, '/numbered/01.png');
+});
+
+test('funtext preview and resumable save reuse the same numbered manifest', async () => {
+  const project = createSampleProject();
+  const rendered = cardsForProject(project, 'cloud://test/rendered');
+  const saveCalls = [];
+  let attempt = 0;
+  const { wxApi, calls } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/sequenceBadgeComposer': {
+      async materializeManifest(wxArg, canvas, manifest) {
+        const output = JSON.parse(JSON.stringify(manifest));
+        output.stacks[0].cards.forEach((card) => { card.exportUrl = `/numbered/${card.sequenceLabel}.png`; });
+        return output;
+      }
+    },
+    '../../utils/imageExporter': {
+      async saveExportManifest(wxArg, manifest, options) {
+        saveCalls.push({ manifest, options });
+        attempt += 1;
+        if (attempt === 1) {
+          const error = new Error('save failed');
+          Object.assign(error, { code: 'SAVE_FAILED', nextIndex: 2, stackTitle: '趣味字画', sequenceLabel: '03' });
+          throw error;
+        }
+        return { ok: true, savedCount: 2 };
+      }
+    }
+  });
+  page._sequenceCanvas = {};
+  page._sequenceReady = true;
+  page.setData({ project, renderedCards: rendered, rendering: false, renderFailed: false });
+  await page.prepareExportManifest();
+
+  await page.onPreviewStack();
+  await page.onSaveStack();
+  assert.equal(page.data.saveCursor, 2);
+  assert.equal(page.data.saveNextSequenceLabel, '03');
+  await page.onSaveStack();
+
+  assert.equal(calls.emitted[0].payload.manifest.stacks[0].cards[2].exportUrl, '/numbered/03.png');
+  assert.equal(saveCalls[0].manifest.stacks[0].cards[2].exportUrl, '/numbered/03.png');
+  assert.equal(saveCalls[1].options.startIndex, 2);
+  assert.equal(page.data.saveCursor, 0);
+});
+
+test('funtext rejects mismatched rendered identities before badge composition', async () => {
+  const project = createSampleProject();
+  const rendered = cardsForProject(project, 'cloud://test/rendered');
+  rendered[0].sceneId = 'wrong-scene';
+  let materializeCount = 0;
+  const { wxApi } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/sequenceBadgeComposer': {
+      async materializeManifest() { materializeCount += 1; return {}; }
+    }
+  });
+  page._sequenceCanvas = {};
+  page._sequenceReady = true;
+  page.setData({ project, renderedCards: rendered, rendering: false, renderFailed: false });
+
+  await assert.rejects(page.prepareExportManifest(), /不匹配/);
+  assert.equal(materializeCount, 0);
+  assert.equal(page.data.exportManifest, null);
+});
+
+test('funtext badge failure does not create a successful history record or delete an older one', async () => {
+  const project = createSampleProject();
+  const rendered = cardsForProject(project, 'cloud://test/rendered');
+  const { wxApi, calls } = recordingWx();
+  const existing = { recordId: 'older-outfit', type: 'outfit', projectId: project.projectId };
+  calls.storage.wepictool_records = [existing];
+  const page = loadResultPage(wxApi, {
+    '../../utils/sequenceBadgeComposer': {
+      async materializeManifest() {
+        const error = new Error('badge failed');
+        error.code = 'BADGE_COMPOSE_FAILED';
+        throw error;
+      }
+    }
+  });
+  const generation = page.nextRenderGeneration();
+
+  await page.applyRenderSuccess(project, rendered, generation);
+
+  assert.equal(calls.storage.wepic_history_tasks, undefined);
+  assert.equal(calls.storage.wepictool_records.length, 1);
+  assert.equal(calls.storage.wepictool_records[0], existing);
+  assert.equal(page.data.renderFailed, false);
+  assert.match(page.data.exportError, /顺序图生成失败/);
+});
+
+test('template-result declares a second canvas and shows the failed sequence on resume', () => {
+  const wxml = readMiniProgramFile('miniprogram/pages/template-result/template-result.wxml');
+  assert.match(wxml, /id="funTextExporterCanvas"/);
+  assert.match(wxml, /id="funTextSequenceBadgeCanvas"/);
+  assert.match(wxml, /从.*saveNextSequenceLabel.*继续保存/);
+  assert.match(wxml, /item\.exportUrl \|\| item\.url/);
 });

@@ -22,6 +22,8 @@ function fixture(pageName) {
       async requestPreviewStack() { effects.push('preview'); throw new Error('disabled'); }
     },
     '../../utils/imageExporter': { async saveImagesSequentially() { effects.push('save'); } },
+    '../../utils/stackExportManifest': { buildFunTextManifest() { effects.push('manifest'); return {}; } },
+    '../../utils/sequenceBadgeComposer': { async materializeManifest() { effects.push('badge'); return {}; } },
     '../../utils/scenePainter': { paintScene() { effects.push('paint'); } }
   }, {
     navigateTo() { effects.push('navigate'); },

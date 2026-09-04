@@ -340,7 +340,7 @@ git commit -m "feat: export numbered layered dressup stacks"
 - Reuses the page's existing hidden exporter Canvas only if it is idle; otherwise adds a dedicated sequence Canvas so local emergency rendering and badge composition cannot overlap。
 - Record cache continues storing original rendered cards and render fingerprint; numbered export cache is reconstructed from project/rendered cards and is not trusted across incompatible versions。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 覆盖：
 
@@ -353,17 +353,17 @@ git commit -m "feat: export numbered layered dressup stacks"
 - 保存失败按钮显示“从 03 继续保存”而不是只显示剩余张数；
 - 旧记录重开会重建编号图，错误版本不重建。
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```bash
 node --test tests/fun-text-result.test.cjs tests/fun-text-emergency.test.cjs
 ```
 
-- [ ] **Step 3: 实现适配与缓存边界**
+- [x] **Step 3: 实现适配与缓存边界**
 
 确保角标属于导出层，不写入 scene JSON 或远端 render fingerprint。物化失败不写本地历史成功记录；已经存在的合法原始渲染记录不得被删除。
 
-- [ ] **Step 4: 回归**
+- [x] **Step 4: 回归**
 
 ```bash
 node --test tests/fun-text-result.test.cjs tests/fun-text-emergency.test.cjs tests/fun-text-record.test.cjs tests/image-exporter.test.cjs
@@ -371,7 +371,7 @@ npm run check:miniprogram
 npm run check:syntax
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add miniprogram/pages/template-result tests/fun-text-result.test.cjs tests/fun-text-emergency.test.cjs docs/iterations/2026-09-04.md

@@ -23,7 +23,7 @@
       <view class="stage-step-tag">{{currentIndex + 1}} / {{renderedCards.length}}</view>
       <swiper class="result-swiper" current="{{currentIndex}}" bindchange="onSwiperChange">
         <swiper-item wx:for="{{renderedCards}}" wx:key="sceneId" class="result-swiper-item">
-          <image class="rendered-card-img" src="{{item.url}}" mode="aspectFit" />
+          <image class="rendered-card-img" src="{{item.exportUrl || item.url}}" mode="aspectFit" />
         </swiper-item>
       </swiper>
     </view>
@@ -32,8 +32,8 @@
     <view class="result-actions">
       <button class="btn-preview-dark" bindtap="onPreviewStack">先滑着看看</button>
       <button class="btn-edit-again" bindtap="onEditStack">自己改改</button>
-      <button class="btn-save-stack" bindtap="onSaveStack" loading="{{saving}}">
-        {{saveCursor > 0 ? ('继续保存（剩余 ' + (renderedCards.length - saveCursor) + ' 张）') : '按顺序保存'}}
+      <button class="btn-save-stack" bindtap="onSaveStack" loading="{{saving || exportPreparing}}">
+        {{saveCursor > 0 ? ('从 ' + saveNextSequenceLabel + ' 继续保存') : (exportPreparing ? '正在添加顺序号…' : '按顺序保存')}}
       </button>
     </view>
   </view>
@@ -84,4 +84,6 @@
 
   <!-- 本地高清渲染隐藏画布 -->
   <canvas id="funTextExporterCanvas" type="2d" style="position: fixed; left: -9999px; top: -9999px; width: 1080px; height: 1080px;"></canvas>
+  <!-- 独立顺序角标画布，避免与本地应急渲染并发污染 -->
+  <canvas id="funTextSequenceBadgeCanvas" type="2d" style="position: fixed; left: -9999px; top: -9999px; width: 1px; height: 1px;"></canvas>
 </view>
