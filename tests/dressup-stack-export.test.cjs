@@ -150,6 +150,27 @@ test('dressup unload prevents an older materialization from writing back', async
   assert.equal(page.data.exportManifest, null);
 });
 
+test('dressup ignores an older save success after the project changes', async () => {
+  let finishSave;
+  const pendingSave = new Promise((resolve) => { finishSave = resolve; });
+  const { page, calls, project } = setup({ save: () => pendingSave });
+  const firstManifest = await page.prepareExportManifest();
+
+  const saving = page.onSaveGroup({ currentTarget: { dataset: { group: 'head' } } });
+  await Promise.resolve();
+  assert.equal(calls.saves.length, 1);
+
+  const moved = dressup.moveItem(project, 'head', 0, 1);
+  page.refreshProject(moved, false);
+  finishSave({ ok: true, savedCount: 3 });
+  await saving;
+
+  assert.equal(page.data.showGuide, false);
+  assert.notEqual(page.data.exportManifest.fingerprint, firstManifest.fingerprint);
+  assert.equal(page.data.saveCursor, 0);
+  assert.equal(page.data.saveSessionFingerprint, '');
+});
+
 test('dressup page declares a dedicated sequence canvas and materialized thumbnail source', () => {
   const wxml = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/dressup/dressup.wxml'), 'utf8');
   assert.match(wxml, /id="sequenceBadgeCanvas"/);

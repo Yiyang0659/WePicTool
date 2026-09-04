@@ -189,6 +189,27 @@ test('outfit export deduplicates preparation and ignores an invalidated generati
   assert.equal(page.data.exportFingerprint, '');
 });
 
+test('outfit ignores an older save success after the export state changes', async () => {
+  let finishSave;
+  const pendingSave = new Promise((resolve) => { finishSave = resolve; });
+  const { page, calls } = setup({ saveManifest: () => pendingSave });
+  await page.prepareExportManifest();
+
+  const saving = page.onSaveGroupByKey({ currentTarget: { dataset: { group: 'tops' } } });
+  await Promise.resolve();
+  assert.equal(calls.saveManifest.length, 1);
+
+  page.invalidateExportState();
+  finishSave({ ok: true, savedCount: 3 });
+  await saving;
+
+  assert.equal(page.data.showSendGuide, false);
+  assert.equal(page.data.exportManifest, null);
+  assert.equal(page.data.saveCursor, 0);
+  assert.equal(page.data.saveSessionFingerprint, '');
+  assert.equal(calls.toasts.length, 0);
+});
+
 test('outfit result uses separate canvases and removes the CSS badge after materialization', () => {
   const wxml = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/result/result.wxml'), 'utf8');
   assert.match(wxml, /id="cardComposer"/);

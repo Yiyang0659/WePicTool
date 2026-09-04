@@ -901,6 +901,7 @@ Page({
     if (this._savePromise) return this._savePromise;
     const selectionKey = Array.isArray(stackIds) ? stackIds.join(',') : 'all';
     const run = this.prepareExportManifest().then(function (manifest) {
+      const saveGeneration = that._exportGeneration;
       const hasExportable = manifest.stacks.some(function (stack) {
         return stack.canExport && (!stackIds || stackIds.indexOf(stack.stackId) !== -1);
       });
@@ -921,6 +922,7 @@ Page({
         }
       }).then(function (result) {
         wx.hideLoading();
+        if (that._exportGeneration !== saveGeneration) return result;
         that._saveSelectionKey = '';
         that.setData({ saveCursor: 0, saveSessionFingerprint: '', exportError: '' });
         if (showGuide) that.setData({ showSendGuide: true });
@@ -928,6 +930,7 @@ Page({
         return result;
       }).catch(function (error) {
         wx.hideLoading();
+        if (that._exportGeneration !== saveGeneration) return null;
         that.setData({
           saveCursor: Math.max(0, Number(error && error.nextIndex) || 0),
           saveSessionFingerprint: manifest.fingerprint,

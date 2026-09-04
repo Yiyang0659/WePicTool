@@ -602,6 +602,7 @@ Page({
     if (!this.data.renderedCards.length) return;
     const that = this;
     const run = this.prepareExportManifest().then(function (manifest) {
+      const saveGeneration = that._exportGeneration;
       const startIndex = that.data.saveSessionFingerprint === manifest.fingerprint ? that.data.saveCursor : 0;
       that.setData({ saving: true, saveCursor: startIndex, saveSessionFingerprint: manifest.fingerprint });
       return imageExporter.saveExportManifest(wx, manifest, {
@@ -612,6 +613,7 @@ Page({
         }
       }).then(function (result) {
         wx.hideLoading();
+        if (that._exportGeneration !== saveGeneration) return result;
         that.setData({
           saving: false,
           saveCursor: 0,
@@ -623,6 +625,7 @@ Page({
         return result;
       }).catch(function (error) {
         wx.hideLoading();
+        if (that._exportGeneration !== saveGeneration) return null;
         const nextCursor = error && typeof error.nextIndex === 'number' ? error.nextIndex : startIndex;
         const stack = manifest.stacks[0];
         const nextCard = stack && stack.cards[nextCursor];

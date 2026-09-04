@@ -967,6 +967,43 @@ test('funtext preview and resumable save reuse the same numbered manifest', asyn
   assert.equal(page.data.saveCursor, 0);
 });
 
+test('funtext ignores an older save failure after a newer project starts', async () => {
+  const project = createSampleProject();
+  const rendered = cardsForProject(project, 'cloud://test/rendered');
+  const pendingSave = deferred();
+  const { wxApi, calls } = recordingWx();
+  const page = loadResultPage(wxApi, {
+    '../../utils/imageExporter': {
+      saveExportManifest() {
+        return pendingSave.promise;
+      }
+    }
+  });
+  page.setData({ project, renderedCards: rendered, rendering: false, renderFailed: false });
+  await page.prepareExportManifest();
+
+  const saving = page.onSaveStack();
+  await Promise.resolve();
+  const newerProject = createSampleProject();
+  page.nextRenderGeneration();
+  page.invalidateExportState();
+  page.setData({ project: newerProject });
+  const staleError = codedError('SAVE_FAILED', 'old save failed');
+  staleError.nextIndex = 2;
+  staleError.sequenceLabel = '03';
+  pendingSave.reject(staleError);
+  await saving;
+
+  assert.equal(page.data.showGuide, false);
+  assert.equal(page.data.exportManifest, null);
+  assert.equal(page.data.saveCursor, 0);
+  assert.equal(page.data.saveNextSequenceLabel, '');
+  assert.equal(page.data.saveSessionFingerprint, '');
+  assert.equal(page.data.exportError, '');
+  assert.equal(calls.toasts.length, 0);
+  assert.equal(calls.modals.length, 0);
+});
+
 test('funtext rejects mismatched rendered identities before badge composition', async () => {
   const project = createSampleProject();
   const rendered = cardsForProject(project, 'cloud://test/rendered');

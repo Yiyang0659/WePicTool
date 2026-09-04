@@ -415,6 +415,7 @@ Page({
     if (this._savePromise) return this._savePromise;
     var selectionKey = Array.isArray(stackIds) ? stackIds.join(',') : 'all';
     var run = this.prepareExportManifest().then(function (manifest) {
+      var saveGeneration = that._exportGeneration;
       var canResume = that.data.saveSessionFingerprint === manifest.fingerprint && that._saveSelectionKey === selectionKey;
       var startIndex = canResume ? that.data.saveCursor : 0;
       that._saveSelectionKey = selectionKey;
@@ -428,6 +429,7 @@ Page({
         }
       }).then(function (result) {
         wx.hideLoading();
+        if (that._exportGeneration !== saveGeneration) return result;
         that._saveSelectionKey = '';
         that.setData({
           saving: false,
@@ -440,6 +442,7 @@ Page({
         return result;
       }).catch(function (error) {
         wx.hideLoading();
+        if (that._exportGeneration !== saveGeneration) return null;
         that.setData({
           saving: false,
           saveCursor: Math.max(0, Number(error && error.nextIndex) || 0),
