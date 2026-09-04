@@ -115,7 +115,7 @@ git commit -m "feat: define stack export manifests"
 - Produces `materializeCard(wxApi, canvas, card, options)`。
 - Produces `materializeManifest(wxApi, canvas, manifest, options)`，返回新对象，不修改输入。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 使用 recording canvas/context 和假的 `getImageInfo`、`canvasToTempFilePath`，覆盖：
 
@@ -130,24 +130,24 @@ git commit -m "feat: define stack export manifests"
 - 输入 manifest 保持不变，输出只填充匹配卡片的 `exportUrl`/宽高；
 - generation token 失效时不返回陈旧结果。
 
-- [ ] **Step 2: 运行测试并确认 RED**
+- [x] **Step 2: 运行测试并确认 RED**
 
 ```bash
 node --test tests/sequence-badge-composer.test.cjs
 ```
 
-- [ ] **Step 3: 实现最小合成器**
+- [x] **Step 3: 实现最小合成器**
 
 采用单个可复用 Canvas 串行绘制，不创建并行图片节点。图片短边决定边距、胶囊高和字号，并施加固定上下限。使用 `roundRect` 时提供路径降级，避免低版本 Canvas 无方法时报错。每次绘制前重置 transform、alpha、shadow 和 canvas 尺寸，禁止上一张状态泄漏。
 
-- [ ] **Step 4: 聚焦与回归**
+- [x] **Step 4: 聚焦与回归**
 
 ```bash
 node --test tests/sequence-badge-composer.test.cjs tests/image-exporter.test.cjs tests/fun-card-canvas.test.cjs
 npm run check:syntax
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add miniprogram/utils/sequenceBadgeComposer.js tests/sequence-badge-composer.test.cjs docs/iterations/2026-09-04.md
