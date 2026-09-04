@@ -306,7 +306,9 @@ test('upload entry ignores a saved demo-only draft', () => {
   const definition = loadMiniProgramPage('miniprogram/pages/dressup/dressup.js', {
     '../../config/playRegistry': registry,
     '../../utils/layeredDressup': dressup,
-    '../../utils/imageExporter': require('../miniprogram/utils/imageExporter.js')
+    '../../utils/imageExporter': require('../miniprogram/utils/imageExporter.js'),
+    '../../utils/stackExportManifest': require('../miniprogram/utils/stackExportManifest.js'),
+    '../../utils/sequenceBadgeComposer': require('../miniprogram/utils/sequenceBadgeComposer.js')
   }, {
     getStorageSync() { return demoDraft; }
   });
@@ -345,7 +347,9 @@ test('saving a built-in dressup asset copies it into USER_DATA_PATH before album
   const definition = loadMiniProgramPage('miniprogram/pages/dressup/dressup.js', {
     '../../config/playRegistry': registry,
     '../../utils/layeredDressup': dressup,
-    '../../utils/imageExporter': require('../miniprogram/utils/imageExporter.js')
+    '../../utils/imageExporter': require('../miniprogram/utils/imageExporter.js'),
+    '../../utils/stackExportManifest': require('../miniprogram/utils/stackExportManifest.js'),
+    '../../utils/sequenceBadgeComposer': require('../miniprogram/utils/sequenceBadgeComposer.js')
   }, wxApi);
   const page = instantiatePage(definition);
 

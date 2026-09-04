@@ -1,6 +1,8 @@
 const registry = require('../../config/playRegistry');
 const dressup = require('../../utils/layeredDressup');
 const imageExporter = require('../../utils/imageExporter');
+const stackExportManifest = require('../../utils/stackExportManifest');
+const sequenceBadgeComposer = require('../../utils/sequenceBadgeComposer');
 
 const DRAFT_KEY = 'wepictool_layered_dressup_draft_v1';
 const DEFAULT_PACK_ID = 'funny-paper-doll-v1';
@@ -26,10 +28,24 @@ Page({
     canExport: false,
     saving: false,
     showGuide: false,
-    guideTitle: '保存完成'
+    guideTitle: '保存完成',
+    exportPreparing: false,
+    exportManifest: null,
+    exportFingerprint: '',
+    saveCursor: 0,
+    saveSessionFingerprint: '',
+    exportError: ''
   },
 
+  _sequenceCanvas: null,
+  _sequenceReady: false,
+  _exportGeneration: 0,
+  _exportPreparePromise: null,
+  _savePromise: null,
+  _saveSelectionKey: '',
+
   onLoad: function (options) {
+    this.initSequenceCanvas();
     var mode = options && options.mode === 'demo' ? 'demo' : 'upload';
     var project = null;
 
@@ -60,12 +76,70 @@ Page({
     this.refreshProject(project, false);
   },
 
+  onReady: function () {
+    if (!this._sequenceReady) this.initSequenceCanvas();
+  },
+
+  onUnload: function () {
+    this._exportGeneration += 1;
+    this._exportPreparePromise = null;
+    this._savePromise = null;
+  },
+
+  initSequenceCanvas: function (retryCount) {
+    var that = this;
+    var attempt = retryCount || 0;
+    if (typeof wx.createSelectorQuery !== 'function') {
+      this.setData({ exportError: '顺序图生成器未就绪，请稍后重试' });
+      return;
+    }
+    var query = wx.createSelectorQuery();
+    query.select('#sequenceBadgeCanvas').fields({ node: true, size: true }).exec(function (res) {
+      if (!res || !res[0] || !res[0].node) {
+        if (attempt < 2) setTimeout(function () { that.initSequenceCanvas(attempt + 1); }, 300);
+        else that.setData({ exportError: '顺序图生成器未就绪，请稍后重试' });
+        return;
+      }
+      that._sequenceCanvas = res[0].node;
+      that._sequenceReady = true;
+      if (that.data.project) that.prepareExportManifest().catch(function () {});
+    });
+  },
+
+  invalidateExportState: function () {
+    this._exportGeneration += 1;
+    this._exportPreparePromise = null;
+    this._savePromise = null;
+    this._saveSelectionKey = '';
+    var groupList = (this.data.groupList || []).map(function (group) {
+      return Object.assign({}, group, {
+        items: (group.items || []).map(function (item) {
+          var next = Object.assign({}, item);
+          delete next.exportUrl;
+          return next;
+        })
+      });
+    });
+    this.setData({
+      groupList: groupList,
+      exportPreparing: false,
+      exportManifest: null,
+      exportFingerprint: '',
+      saveCursor: 0,
+      saveSessionFingerprint: '',
+      exportError: '',
+      saving: false
+    });
+  },
+
   refreshProject: function (project, persist) {
+    this.invalidateExportState();
     var sendability = dressup.buildSendability(project);
     var groupList = registry.GROUP_DEFINITIONS.map(function (definition) {
       var items = (project.groups[definition.key] || []).map(function (item, index, all) {
         return Object.assign({}, item, {
           displayUrl: getItemUrl(item),
+          exportUrl: '',
           isFirst: index === 0,
           canLeft: index > 0,
           canRight: index < all.length - 1,
@@ -97,6 +171,7 @@ Page({
     };
     var pack = registry.getAssetPack(project.templateId || DEFAULT_PACK_ID);
 
+    var that = this;
     this.setData({
       project: project,
       groupList: groupList,
@@ -104,9 +179,85 @@ Page({
       packTitle: pack ? pack.title : '抽象搞怪',
       validGroupCount: sendability.validGroupCount,
       canExport: sendability.canExport
+    }, function () {
+      if (that._sequenceReady) that.prepareExportManifest().catch(function () {});
     });
 
     if (persist !== false) this.persistDraft(project);
+  },
+
+  applyMaterializedManifest: function (manifest) {
+    var byStack = {};
+    manifest.stacks.forEach(function (stack) { byStack[stack.stackId] = stack; });
+    var groupList = this.data.groupList.map(function (group) {
+      var stack = byStack[group.key];
+      return Object.assign({}, group, {
+        items: group.items.map(function (item, index) {
+          return Object.assign({}, item, {
+            exportUrl: stack && stack.cards[index] ? stack.cards[index].exportUrl : ''
+          });
+        })
+      });
+    });
+    this.setData({
+      groupList: groupList,
+      exportPreparing: false,
+      exportManifest: manifest,
+      exportFingerprint: manifest.fingerprint,
+      exportError: ''
+    });
+  },
+
+  prepareExportManifest: function () {
+    var that = this;
+    if (!this.data.project) return Promise.reject(Object.assign(new Error('换装项目尚未加载'), { code: 'PROJECT_NOT_READY' }));
+    if (!this._sequenceReady || !this._sequenceCanvas) {
+      return Promise.reject(Object.assign(new Error('顺序图生成器未就绪'), { code: 'SEQUENCE_CANVAS_UNAVAILABLE' }));
+    }
+    var sourceManifest;
+    try {
+      sourceManifest = stackExportManifest.buildDressupManifest(this.data.project, registry.GROUP_DEFINITIONS);
+    } catch (error) {
+      this.setData({ exportError: (error && error.message) || '顺序图准备失败' });
+      return Promise.reject(error);
+    }
+    if (this.data.exportManifest && this.data.exportFingerprint === sourceManifest.fingerprint) {
+      return Promise.resolve(this.data.exportManifest);
+    }
+    if (this._exportPreparePromise) return this._exportPreparePromise;
+    var generation = ++this._exportGeneration;
+    this.setData({ exportPreparing: true, exportError: '' });
+    var materializing = sequenceBadgeComposer.materializeManifest(wx, this._sequenceCanvas, sourceManifest, {
+      isCurrent: function () { return that._exportGeneration === generation; }
+    }).then(function (manifest) {
+      if (that._exportGeneration !== generation) {
+        throw Object.assign(new Error('顺序图任务已过期'), { code: 'STALE_EXPORT_GENERATION' });
+      }
+      that.applyMaterializedManifest(manifest);
+      return manifest;
+    }).catch(function (error) {
+      if (error && error.code === 'STALE_EXPORT_GENERATION') throw error;
+      var detail = error && error.sequenceLabel ? '（' + (error.stackTitle || '当前组') + ' ' + error.sequenceLabel + '）' : '';
+      that.setData({ exportPreparing: false, exportError: '顺序图生成失败' + detail + '，请重试' });
+      throw error;
+    });
+    var tracked;
+    tracked = materializing.then(function (manifest) {
+      if (that._exportPreparePromise === tracked) that._exportPreparePromise = null;
+      return manifest;
+    }, function (error) {
+      if (that._exportPreparePromise === tracked) that._exportPreparePromise = null;
+      throw error;
+    });
+    this._exportPreparePromise = tracked;
+    return tracked;
+  },
+
+  showExportError: function (error) {
+    var title = error && error.code === 'SEQUENCE_CANVAS_UNAVAILABLE'
+      ? '顺序图生成器未就绪，请稍后重试'
+      : '顺序图生成失败，请重试';
+    wx.showToast({ title: title, icon: 'none', duration: 2200 });
   },
 
   persistDraft: function (project) {
@@ -202,58 +353,144 @@ Page({
   onPreviewItem: function (event) {
     var groupKey = event.currentTarget.dataset.group;
     var current = event.currentTarget.dataset.url;
-    var items = this.data.project.groups[groupKey] || [];
-    var urls = items.map(getItemUrl).filter(Boolean);
+    var group = this.data.groupList.find(function (entry) { return entry.key === groupKey; });
+    var items = group ? group.items : [];
+    var urls = items.map(function (item) { return item.exportUrl || item.displayUrl; }).filter(Boolean);
     if (urls.length > 0) wx.previewImage({ current: current || urls[0], urls: urls });
   },
 
   onPreview: function () {
-    var groups = dressup.buildPreviewGroups(this.data.project);
-    if (groups.length === 0) {
+    var legacyGroups = dressup.buildPreviewGroups(this.data.project);
+    if (legacyGroups.length === 0) {
       wx.showToast({ title: '先给任意部位添加素材', icon: 'none' });
-      return;
+      return Promise.resolve(null);
     }
+    var that = this;
     var project = this.data.project;
-    wx.navigateTo({
-      url: '/pages/preview/preview',
-      success: function (res) {
-        res.eventChannel.emit('acceptTaskData', {
-          groups: groups,
-          ratio: project.ratio || '4:5'
-        });
-      }
+    return this.prepareExportManifest().then(function (manifest) {
+      wx.navigateTo({
+        url: '/pages/preview/preview',
+        success: function (res) {
+          res.eventChannel.emit('acceptTaskData', {
+            manifest: manifest,
+            selectedStackIds: manifest.stacks.filter(function (stack) { return stack.cards.length > 0; }).map(function (stack) { return stack.stackId; }),
+            groups: legacyGroups,
+            ratio: project.ratio || '4:5'
+          });
+        }
+      });
+      return manifest;
+    }).catch(function (error) {
+      if (!error || error.code !== 'STALE_EXPORT_GENERATION') that.showExportError(error);
+      return null;
     });
   },
 
   onSaveGroup: function (event) {
-    if (this.data.saving) return;
+    if (this.data.saving) return this._savePromise || Promise.resolve(null);
     var groupKey = event.currentTarget.dataset.group;
     var status = dressup.buildSendability(this.data.project).groups[groupKey];
     if (!status || !status.canExport) {
       wx.showToast({ title: '这一组至少需要 3 张素材', icon: 'none' });
-      return;
+      return Promise.resolve(null);
     }
     var definition = registry.GROUP_DEFINITIONS.find(function (group) {
       return group.key === groupKey;
     });
-    this.saveItemsSequentially(this.data.project.groups[groupKey], '已保存' + definition.title + '组');
+    return this.saveManifestSelection([groupKey], '已保存' + definition.title + '组');
   },
 
   onSaveAll: function () {
-    if (this.data.saving) return;
+    if (this.data.saving) return this._savePromise || Promise.resolve(null);
     var project = this.data.project;
     var sendability = dressup.buildSendability(project);
     if (!sendability.canExport) {
       wx.showToast({ title: '至少补齐一个 3 张以上的部位组', icon: 'none' });
+      return Promise.resolve(null);
+    }
+    return this.saveManifestSelection(null, '有效部位组已全部保存');
+  },
+
+  saveManifestSelection: function (stackIds, successTitle) {
+    var that = this;
+    if (this._savePromise) return this._savePromise;
+    var selectionKey = Array.isArray(stackIds) ? stackIds.join(',') : 'all';
+    var run = this.prepareExportManifest().then(function (manifest) {
+      var canResume = that.data.saveSessionFingerprint === manifest.fingerprint && that._saveSelectionKey === selectionKey;
+      var startIndex = canResume ? that.data.saveCursor : 0;
+      that._saveSelectionKey = selectionKey;
+      that.setData({ saving: true, saveCursor: startIndex, saveSessionFingerprint: manifest.fingerprint });
+      return imageExporter.saveExportManifest(wx, manifest, {
+        stackIds: stackIds || undefined,
+        startIndex: startIndex,
+        expectedFingerprint: manifest.fingerprint,
+        onProgress: function (entry, current, total) {
+          wx.showLoading({ title: (entry.stackTitle || '当前组') + ' ' + entry.sequenceLabel + ' · ' + current + '/' + total, mask: true });
+        }
+      }).then(function (result) {
+        wx.hideLoading();
+        that._saveSelectionKey = '';
+        that.setData({
+          saving: false,
+          saveCursor: 0,
+          saveSessionFingerprint: '',
+          exportError: '',
+          showGuide: true,
+          guideTitle: successTitle + '（' + result.savedCount + ' 张）'
+        });
+        return result;
+      }).catch(function (error) {
+        wx.hideLoading();
+        that.setData({
+          saving: false,
+          saveCursor: Math.max(0, Number(error && error.nextIndex) || 0),
+          saveSessionFingerprint: manifest.fingerprint,
+          exportError: (error && error.message) || '保存失败'
+        });
+        that.handleManifestSaveError(error, stackIds, successTitle);
+        return null;
+      });
+    }).catch(function (error) {
+      that.setData({ saving: false });
+      that.showExportError(error);
+      return null;
+    });
+    var tracked;
+    tracked = run.then(function (result) {
+      if (that._savePromise === tracked) that._savePromise = null;
+      return result;
+    }, function (error) {
+      if (that._savePromise === tracked) that._savePromise = null;
+      throw error;
+    });
+    this._savePromise = tracked;
+    return tracked;
+  },
+
+  handleManifestSaveError: function (error, stackIds, successTitle) {
+    var that = this;
+    if (error && error.code === 'AUTH_DENIED') {
+      wx.showModal({
+        title: '需要相册权限',
+        content: '请在设置中允许保存到相册，然后从当前编号继续。',
+        confirmText: '去设置',
+        cancelText: '取消',
+        success: function (result) { if (result.confirm && wx.openSetting) wx.openSetting({}); }
+      });
       return;
     }
-    var items = [];
-    registry.GROUP_DEFINITIONS.forEach(function (definition) {
-      if (sendability.groups[definition.key].canExport) {
-        items = items.concat(project.groups[definition.key]);
+    var location = error && error.sequenceLabel
+      ? (error.stackTitle || '当前组') + ' 的 ' + error.sequenceLabel
+      : '当前图片';
+    wx.showModal({
+      title: '保存中断',
+      content: location + ' 保存失败；重试会从这张继续，不会重复前面的图片。',
+      confirmText: '继续保存',
+      cancelText: '稍后再说',
+      success: function (result) {
+        if (result.confirm) that.saveManifestSelection(stackIds, successTitle);
       }
     });
-    this.saveItemsSequentially(items, '有效部位组已全部保存');
   },
 
   saveItemsSequentially: async function (items, successTitle) {

@@ -165,7 +165,19 @@ page {
 
 .source-badge {
   right: 10rpx;
+  top: auto;
+  bottom: 10rpx;
   background: rgba(20, 20, 30, 0.62);
+}
+
+.sequence-badge-canvas {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .material-actions {

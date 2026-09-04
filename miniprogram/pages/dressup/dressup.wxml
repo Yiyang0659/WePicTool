@@ -30,7 +30,7 @@
       <view class="items-row">
         <view class="material" wx:for="{{g.items}}" wx:key="id" wx:for-item="it" wx:for-index="i">
           <view class="material-image-wrap">
-            <image class="material-image" src="{{it.displayUrl}}" mode="aspectFit" bindtap="onPreviewItem" data-group="{{g.key}}" data-url="{{it.displayUrl}}" />
+            <image class="material-image" src="{{it.exportUrl || it.displayUrl}}" mode="aspectFit" bindtap="onPreviewItem" data-group="{{g.key}}" data-url="{{it.exportUrl || it.displayUrl}}" />
             <text class="first-badge" wx:if="{{it.isFirst}}">首图</text>
             <text class="source-badge">{{it.sourceText}}</text>
           </view>
@@ -64,7 +64,7 @@
 
   <view class="bottom-bar">
     <view class="preview-button" bindtap="onPreview">微信预览</view>
-    <view class="save-button {{!canExport || saving ? 'disabled' : ''}}" bindtap="onSaveAll">{{saving ? '保存中…' : '保存可用部位组'}}</view>
+    <view class="save-button {{!canExport || saving || exportPreparing ? 'disabled' : ''}}" bindtap="onSaveAll">{{saving ? '保存中…' : (exportPreparing ? '加编号中…' : '保存可用部位组')}}</view>
   </view>
 
   <view class="guide-mask" wx:if="{{showGuide}}" bindtap="onCloseGuide">
@@ -78,4 +78,6 @@
       <view class="guide-secondary" bindtap="onCloseGuide">我知道了</view>
     </view>
   </view>
+
+  <canvas type="2d" id="sequenceBadgeCanvas" class="sequence-badge-canvas"></canvas>
 </view>

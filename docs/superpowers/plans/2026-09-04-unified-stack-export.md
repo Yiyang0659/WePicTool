@@ -283,7 +283,7 @@ git commit -m "feat: export numbered outfit stacks"
 - Adds an independent hidden `sequenceBadgeCanvas`。
 - Preview and save consume the same materialized manifest。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 覆盖：
 
@@ -296,17 +296,17 @@ git commit -m "feat: export numbered outfit stacks"
 - 预览收到的 URL 与保存调用完全相同；
 - 页面卸载或新项目加载后旧物化结果不能写回。
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```bash
 node --test tests/layered-dressup.test.cjs tests/stack-export-manifest.test.cjs
 ```
 
-- [ ] **Step 3: 实现页面适配**
+- [x] **Step 3: 实现页面适配**
 
 把当前 `saveItemsSequentially` 的 URL 推导迁移到 manifest/session；保留现有用户文案、草稿和 sendability 规则。`onPreview` 在物化完成前展示 loading，失败则停留当前页并允许重试。
 
-- [ ] **Step 4: 回归**
+- [x] **Step 4: 回归**
 
 ```bash
 node --test tests/layered-dressup.test.cjs tests/image-exporter.test.cjs tests/preview-layout.test.cjs
@@ -314,7 +314,7 @@ npm run check:miniprogram
 npm run check:syntax
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add miniprogram/pages/dressup tests/layered-dressup.test.cjs docs/iterations/2026-09-04.md
