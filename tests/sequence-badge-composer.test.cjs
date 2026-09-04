@@ -5,8 +5,10 @@ const { test } = require('node:test');
 const { loadMiniProgramModule, plain } = require('./helpers/miniprogram-loader.cjs');
 
 function loadModules() {
-  const exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js');
   const manifest = loadMiniProgramModule('miniprogram/utils/stackExportManifest.js');
+  const exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js', {
+    './stackExportManifest': manifest
+  });
   const composer = loadMiniProgramModule('miniprogram/utils/sequenceBadgeComposer.js', {
     './imageExporter': exporter,
     './stackExportManifest': manifest

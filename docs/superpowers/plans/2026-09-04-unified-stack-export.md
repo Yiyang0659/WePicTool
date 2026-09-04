@@ -171,7 +171,7 @@ git commit -m "feat: compose visible stack sequence badges"
 - `options` supports `stackIds`、`startIndex`、`expectedFingerprint`、`onProgress(entry, current, total)`。
 - Failure includes `code`、`nextIndex`、`savedCount`、`stackId`、`sequenceLabel`、`manifestFingerprint`、`cause`。
 
-- [ ] **Step 1: 扩展失败测试**
+- [x] **Step 1: 扩展失败测试**
 
 覆盖：
 
@@ -184,24 +184,24 @@ git commit -m "feat: compose visible stack sequence badges"
 - 重复点击的并发隔离由调用方 token 测试锁定；
 - 旧 URL 数组 API 行为不回归。
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```bash
 node --test tests/image-exporter.test.cjs
 ```
 
-- [ ] **Step 3: 实现 manifest 保存入口**
+- [x] **Step 3: 实现 manifest 保存入口**
 
 内部先验证 manifest 和 fingerprint，再构造只含 `exportUrl` 的扁平队列。不得在保存阶段重新下载 `sourceUrl` 或重新绘制角标；物化和保存职责保持分离。
 
-- [ ] **Step 4: 回归**
+- [x] **Step 4: 回归**
 
 ```bash
 node --test tests/image-exporter.test.cjs tests/fun-text-result.test.cjs tests/layered-dressup.test.cjs
 npm run check:syntax
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add miniprogram/utils/imageExporter.js tests/image-exporter.test.cjs docs/iterations/2026-09-04.md

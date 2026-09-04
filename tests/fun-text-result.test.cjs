@@ -85,7 +85,10 @@ function loadResultPage(wxApi, customDeps) {
   });
   let exporter;
   try {
-    exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js');
+    const manifest = loadMiniProgramModule('miniprogram/utils/stackExportManifest.js');
+    exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js', {
+      './stackExportManifest': manifest
+    });
   } catch (e) {
     exporter = {};
   }

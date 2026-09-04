@@ -5,10 +5,17 @@ const { test } = require('node:test');
 
 const { loadMiniProgramModule } = require('./helpers/miniprogram-loader.cjs');
 
+function loadExporter() {
+  const manifest = loadMiniProgramModule('miniprogram/utils/stackExportManifest.js');
+  return loadMiniProgramModule('miniprogram/utils/imageExporter.js', {
+    './stackExportManifest': manifest
+  });
+}
+
 test('resolveImagePath handles cloud, https and local paths', async () => {
   let exporter;
   try {
-    exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js');
+    exporter = loadExporter();
   } catch (err) {
     assert.match(err.message, /Cannot find module/);
     return;
@@ -44,7 +51,7 @@ test('resolveImagePath handles cloud, https and local paths', async () => {
 });
 
 test('resolveImagePath rejects a non-2xx HTTP download even when a temp path is returned', async () => {
-  const exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js');
+  const exporter = loadExporter();
   const wxApi = {
     downloadFile(options) {
       options.success({
@@ -77,7 +84,7 @@ function fakeWxThatFailsAt(failedIndex, saved) {
 }
 
 test('sequential exporter reports the failed cursor for resume', async () => {
-  const exporter = loadMiniProgramModule('miniprogram/utils/imageExporter.js');
+  const exporter = loadExporter();
   const saved = [];
   const wxApi = fakeWxThatFailsAt(1, saved);
 
@@ -95,4 +102,88 @@ test('sequential exporter reports the failed cursor for resume', async () => {
   assert.equal(result.ok, true);
   assert.equal(result.savedCount, 2);
   assert.deepEqual(resumeSaved, ['b.png', 'c.png']);
+});
+
+function materializedManifest(exporterModule) {
+  const manifestModule = loadMiniProgramModule('miniprogram/utils/stackExportManifest.js');
+  const manifest = manifestModule.buildDressupManifest({
+    projectId: 'layered_save', ratio: '4:5', groups: {
+      head: [1, 2, 3].map(index => ({ id: 'h' + index, url: '/h' + index + '.png' })),
+      tops: [1, 2, 3].map(index => ({ id: 't' + index, url: '/t' + index + '.png' })),
+      bottoms: [], shoes: []
+    }
+  }, [
+    { key: 'head', title: '头像' }, { key: 'tops', title: '上衣' },
+    { key: 'bottoms', title: '下装' }, { key: 'shoes', title: '鞋子' }
+  ]);
+  manifest.stacks.forEach(stack => stack.cards.forEach(card => {
+    card.exportUrl = 'wxfile://' + card.cardId + '-numbered.png';
+  }));
+  return manifest;
+}
+
+test('saveExportManifest saves materialized stacks in manifest order with rich progress', async () => {
+  const exporter = loadExporter();
+  const manifest = materializedManifest(exporter);
+  const saved = [];
+  const progress = [];
+  const result = await exporter.saveExportManifest(fakeWxThatFailsAt(-1, saved), manifest, {
+    stackIds: ['tops', 'head'],
+    expectedFingerprint: manifest.fingerprint,
+    onProgress(entry, current, total) {
+      progress.push([entry.stackId, entry.sequenceLabel, current, total]);
+    }
+  });
+  assert.deepEqual(saved, [
+    'wxfile://h1-numbered.png', 'wxfile://h2-numbered.png', 'wxfile://h3-numbered.png',
+    'wxfile://t1-numbered.png', 'wxfile://t2-numbered.png', 'wxfile://t3-numbered.png'
+  ]);
+  assert.deepEqual(progress[0], ['head', '01', 1, 6]);
+  assert.equal(result.savedCount, 6);
+  assert.equal(result.manifestFingerprint, manifest.fingerprint);
+});
+
+test('saveExportManifest rejects stale sessions and missing materialized urls before saving', async () => {
+  const exporter = loadExporter();
+  const manifest = materializedManifest(exporter);
+  let calls = 0;
+  const wxApi = { saveImageToPhotosAlbum() { calls += 1; } };
+  await assert.rejects(
+    () => exporter.saveExportManifest(wxApi, manifest, { expectedFingerprint: 'stale' }),
+    error => error.code === 'STALE_EXPORT_SESSION'
+  );
+  manifest.stacks[0].cards[1].exportUrl = '';
+  await assert.rejects(
+    () => exporter.saveExportManifest(wxApi, manifest, { expectedFingerprint: manifest.fingerprint }),
+    error => error.code === 'EXPORT_NOT_READY' && error.stackId === 'head' && error.sequenceLabel === '02'
+  );
+  assert.equal(calls, 0);
+});
+
+test('saveExportManifest reports stack sequence and resumes without duplicate saves', async () => {
+  const exporter = loadExporter();
+  const manifest = materializedManifest(exporter);
+  const firstSaved = [];
+  await assert.rejects(
+    () => exporter.saveExportManifest(fakeWxThatFailsAt(2, firstSaved), manifest, {
+      expectedFingerprint: manifest.fingerprint
+    }),
+    error => error.code === 'SAVE_FAILED'
+      && error.nextIndex === 2
+      && error.savedCount === 2
+      && error.stackId === 'head'
+      && error.sequenceLabel === '03'
+      && error.manifestFingerprint === manifest.fingerprint
+  );
+  assert.deepEqual(firstSaved, ['wxfile://h1-numbered.png', 'wxfile://h2-numbered.png']);
+
+  const resumed = [];
+  await exporter.saveExportManifest(fakeWxThatFailsAt(-1, resumed), manifest, {
+    startIndex: 2,
+    expectedFingerprint: manifest.fingerprint
+  });
+  assert.deepEqual(resumed, [
+    'wxfile://h3-numbered.png',
+    'wxfile://t1-numbered.png', 'wxfile://t2-numbered.png', 'wxfile://t3-numbered.png'
+  ]);
 });

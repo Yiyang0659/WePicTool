@@ -1,3 +1,5 @@
+var manifestUtils = require('./stackExportManifest');
+
 function makeError(message, code, extra) {
   var err = new Error(message);
   if (code) err.code = code;
@@ -117,7 +119,74 @@ async function saveImagesSequentially(wxApi, urls, options) {
   };
 }
 
+async function saveExportManifest(wxApi, manifest, options) {
+  var opts = options || {};
+  manifestUtils.validateManifest(manifest);
+  var expectedFingerprint = opts.expectedFingerprint || manifest.fingerprint;
+  if (!expectedFingerprint || expectedFingerprint !== manifest.fingerprint) {
+    throw makeError('导出内容已经变化，请重新准备顺序图', 'STALE_EXPORT_SESSION', {
+      manifestFingerprint: manifest.fingerprint || ''
+    });
+  }
+
+  var entries = manifestUtils.flattenManifest(manifest, opts.stackIds).filter(function (entry) {
+    return opts.allowNonStackable === true || entry.canExport;
+  });
+  if (!entries.length) {
+    throw makeError('没有可保存的叠图', 'NO_EXPORTABLE_CARDS', {
+      manifestFingerprint: manifest.fingerprint
+    });
+  }
+  for (var checkIndex = 0; checkIndex < entries.length; checkIndex++) {
+    if (!entries[checkIndex].exportUrl) {
+      throw makeError('顺序图尚未生成: ' + entries[checkIndex].sequenceLabel, 'EXPORT_NOT_READY', {
+        stackId: entries[checkIndex].stackId,
+        stackTitle: entries[checkIndex].stackTitle,
+        sequenceLabel: entries[checkIndex].sequenceLabel,
+        nextIndex: checkIndex,
+        savedCount: 0,
+        manifestFingerprint: manifest.fingerprint
+      });
+    }
+  }
+
+  var startIndex = Math.max(0, Number(opts.startIndex) || 0);
+  if (startIndex > entries.length) {
+    throw makeError('保存续存位置无效', 'INVALID_SAVE_CURSOR', {
+      nextIndex: 0,
+      manifestFingerprint: manifest.fingerprint
+    });
+  }
+  var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+  var savedCount = 0;
+  for (var index = startIndex; index < entries.length; index++) {
+    var entry = entries[index];
+    if (onProgress) onProgress(entry, index + 1, entries.length);
+    try {
+      await saveSingleImage(wxApi, entry.exportUrl);
+      savedCount += 1;
+    } catch (error) {
+      throw makeError((error && error.message) || '保存相册失败', (error && error.code) || 'SAVE_FAILED', {
+        nextIndex: index,
+        savedCount: savedCount,
+        stackId: entry.stackId,
+        stackTitle: entry.stackTitle,
+        sequenceLabel: entry.sequenceLabel,
+        manifestFingerprint: manifest.fingerprint,
+        cause: error
+      });
+    }
+  }
+  return {
+    ok: true,
+    savedCount: savedCount,
+    total: entries.length,
+    manifestFingerprint: manifest.fingerprint
+  };
+}
+
 module.exports = {
   resolveImagePath: resolveImagePath,
-  saveImagesSequentially: saveImagesSequentially
+  saveImagesSequentially: saveImagesSequentially,
+  saveExportManifest: saveExportManifest
 };
