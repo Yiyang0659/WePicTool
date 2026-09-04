@@ -1,6 +1,6 @@
 # WePicTool 微信小程序
 
-WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换装是当前功能分支的旗舰玩法，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线；源码与自动化已覆盖穿搭「选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送」主链路，并在功能分支集成分层云换装的本地编辑和四叠预览底座。
+WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换装是当前功能分支的旗舰玩法，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线；源码与自动化已覆盖穿搭「选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 图片内可见序号 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送」主链路，并在功能分支让穿搭、分层云换装和趣味字画共用同一顺序导出契约。
 
 当前证据边界：趣味字画阶段一与 P2.2 实验只有代码和自动化结果；Docker 镜像、CloudBase 部署/公网关闭开关、线上端点、微信开发者工具、iOS、Android 和真实微信聊天均未验证，功能也尚未合并或发布。生产仍为 **NOT READY**，代码头部检查和发布配置声明不能替代平台访问边界核验。
 
@@ -24,6 +24,7 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换�
 - **内容安全防御门**：集成 `contentGuard` 云函数与微信安全接口，对文本与图片进行合规安全审查。
 - **AI 智能分类与抠图**：`processOutfit` 云函数接入阿里云 DashScope，使用 `qwen-vl-plus` 进行品类识别（上衣/下装/鞋子/其他），使用 `qwen-image-edit-plus` 进行主体抠图。
 - **前端 Canvas 白底卡合成**：`utils/cardComposer.js` 提供 1:1 / 4:5 / 3:4 多比例合成、品类视觉重心锚点对齐、浅色衣物微阴影与描边兜底。
+- **统一可见序号导出（功能分支）**：`stackExportManifest.js`、`sequenceBadgeComposer.js` 与 `imageExporter.js` 为三种玩法生成独立叠、把 `01…N` 写入最终图片，并按同一 manifest 串行预览/保存、失败续存。微信 API 不能指定相册文件名或排序，用户仍需按图片角标确认 `01` 在第一位。
 - **微信聊天风结果页**（`pages/result`）：白色微信聊天气泡展示分组卡片，支持展开横滑缩略图、原图/白底图切换、改分类、大图预览。
 - **微信发送效果全屏预览**（`pages/preview`）：深色全屏聊天风格，50% 舞台比例等比适配，支持扑克牌 3D 堆叠手势滑卡切换与纵向展开。
 - **微信叠图发送能力判定**：`utils/task.js` 自动判定分组是否达到微信 $\ge 3$ 张叠图阈值，不足时提供降级提示。
@@ -114,7 +115,9 @@ WePicTool/
 │   └── utils/                        # 前端核心工具库
 │       ├── task.js                   # 任务模型、Mock 数据、叠图能力 (buildSendability) 判定
 │       ├── layeredDressup.js          # 分层云换装项目模型与编辑规则
-│       ├── imageExporter.js          # 共享图片解析与顺序下载/保存相册工具，支持断点续存
+│       ├── stackExportManifest.js    # 三玩法统一叠顺序、封面、版本与稳定指纹契约
+│       ├── sequenceBadgeComposer.js  # 独立 Canvas 写入 01…N 可见序号并物化最终导出图
+│       ├── imageExporter.js          # 按 manifest 串行保存相册，返回组/序号级断点游标
 │       ├── cardComposer.js           # 前端 Canvas 白底卡排版合成引擎 (1:1/4:5/3:4, 阴影描边)
 │       └── previewLayout.js          # 预览页 50% 宽度手势舞台比例计算
 ├── docs/                             # [项目大脑] 治理体系与知识库
