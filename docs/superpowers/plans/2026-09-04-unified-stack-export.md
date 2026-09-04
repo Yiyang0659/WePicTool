@@ -58,7 +58,7 @@ git diff --check
 - Produces `validateManifest(manifest)`、`flattenManifest(manifest, stackIds)`。
 - Produces `manifestFingerprint(manifestInput)`；fingerprint 不包含临时 `exportUrl`，但覆盖玩法/项目版本、叠顺序、卡片身份、源图、比例和 `badgeStyleVersion`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 覆盖：
 
@@ -71,7 +71,7 @@ git diff --check
 - 源图、比例、顺序或角标版本变化会改变 fingerprint，单纯填入 `exportUrl` 不改变 fingerprint；
 - `flattenManifest` 保持叠顺序和组内顺序。
 
-- [ ] **Step 2: 运行测试并确认 RED**
+- [x] **Step 2: 运行测试并确认 RED**
 
 ```bash
 node --test tests/stack-export-manifest.test.cjs
@@ -79,18 +79,18 @@ node --test tests/stack-export-manifest.test.cjs
 
 Expected: FAIL，因为模块不存在。
 
-- [ ] **Step 3: 实现纯函数和严格校验**
+- [x] **Step 3: 实现纯函数和严格校验**
 
 不得引用全局 `wx`、页面实例或当前时间；所有适配器返回可 JSON 序列化数据。卡片 URL 只接受 `cloud://`、`https://`、受控 development `http://`、`wxfile://`、包内 `/` 路径和 `USER_DATA_PATH` 形态。若现有项目缺少稳定 cardId，适配器只能从已有 `resultId`/`sceneId`/素材 id 建立，不得以数组序号伪造长期身份。
 
-- [ ] **Step 4: 聚焦与回归**
+- [x] **Step 4: 聚焦与回归**
 
 ```bash
 node --test tests/stack-export-manifest.test.cjs tests/layered-dressup.test.cjs tests/fun-text-project.test.cjs
 npm run check:syntax
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add miniprogram/utils/stackExportManifest.js tests/stack-export-manifest.test.cjs docs/iterations/2026-09-04.md
