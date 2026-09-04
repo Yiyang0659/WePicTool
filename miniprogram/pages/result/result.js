@@ -2,6 +2,8 @@
 const { normalizeTaskGroups, GROUP_META, createMockTask } = require('../../utils/task');
 const { composeCard, DEFAULT_OPTIONS } = require('../../utils/cardComposer');
 const imageExporter = require('../../utils/imageExporter');
+const stackExportManifest = require('../../utils/stackExportManifest');
+const sequenceBadgeComposer = require('../../utils/sequenceBadgeComposer');
 
 const CHANGE_CATEGORY_OPTIONS = [
   { key: 'tops', label: '上衣组' },
@@ -51,7 +53,8 @@ function decorateGroups(groups) {
     decorated[key] = (groups[key] || []).map((item, index) => Object.assign({}, item, {
       displayUrl: computeDisplayUrl(item),
       composeStatus: item.composeStatus || '',
-      numLabel: index < 9 ? `0${index + 1}` : `${index + 1}`
+      numLabel: index < 9 ? `0${index + 1}` : `${index + 1}`,
+      exportUrl: item.exportUrl || ''
     }));
   });
   return decorated;
@@ -95,7 +98,13 @@ Page({
     // 保存完成后的发送引导半屏浮层
     showSendGuide: false,
     // 跨组降级提示：所有有图的穿搭组均不足 3 张时展示
-    crossGroupHint: ''
+    crossGroupHint: '',
+    exportPreparing: false,
+    exportManifest: null,
+    exportFingerprint: '',
+    saveCursor: 0,
+    saveSessionFingerprint: '',
+    exportError: ''
   },
 
   _composerCanvas: null,
@@ -103,6 +112,12 @@ Page({
   _composeToken: 0,
   _composeChain: null,
   _pendingTask: null,
+  _sequenceCanvas: null,
+  _sequenceReady: false,
+  _exportGeneration: 0,
+  _exportPreparePromise: null,
+  _savePromise: null,
+  _saveSelectionKey: '',
 
   onLoad: function (options) {
     const that = this;
@@ -111,6 +126,7 @@ Page({
     }
 
     this.initComposerCanvas();
+    this.initSequenceCanvas();
 
     const eventChannel = this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
@@ -127,6 +143,16 @@ Page({
     if (!this._composerReady) {
       this.initComposerCanvas();
     }
+    if (!this._sequenceReady) {
+      this.initSequenceCanvas();
+    }
+  },
+
+  onUnload: function () {
+    this._composeToken += 1;
+    this._exportGeneration += 1;
+    this._exportPreparePromise = null;
+    this._savePromise = null;
   },
 
   initComposerCanvas: function (retryCount) {
@@ -153,6 +179,27 @@ Page({
     });
   },
 
+  initSequenceCanvas: function (retryCount) {
+    const that = this;
+    const attempt = retryCount || 0;
+    const query = wx.createSelectorQuery();
+    query.select('#sequenceBadgeCanvas').fields({ node: true, size: true }).exec((res) => {
+      if (!res || !res[0] || !res[0].node) {
+        if (attempt < 2) {
+          setTimeout(() => that.initSequenceCanvas(attempt + 1), 300);
+        } else {
+          that.setData({ exportError: '顺序图生成器未就绪，请稍后重试' });
+        }
+        return;
+      }
+      that._sequenceCanvas = res[0].node;
+      that._sequenceReady = true;
+      if (!that.data.composing && that.calculateTotalCount(that.data.groups) > 0) {
+        that.prepareExportManifest().catch(function () {});
+      }
+    });
+  },
+
   parseTaskResult: function (task) {
     const groups = decorateGroups(normalizeTaskGroups(task.groups || {}));
     const totalCount = this.calculateTotalCount(groups);
@@ -160,7 +207,9 @@ Page({
     // 初始合成比例：确认页随任务传入；历史记录等无 ratio 的场景回退到产品默认 4:5
     const ratio = this.isValidRatio(task && task.ratio) ? task.ratio : DEFAULT_RATIO;
 
+    this.invalidateExportState(groups);
     this.setData({
+      taskId: this.data.taskId || (task && task.taskId) || '',
       groups,
       totalCount,
       isEmpty,
@@ -213,6 +262,7 @@ Page({
         count,
         badgeText,
         badgeClass,
+        canExport: key !== 'others' && count >= 3,
         saveText: `保存 ${meta.title}（${count} 张）`
       });
     });
@@ -225,7 +275,7 @@ Page({
       const items = groups[GROUP_ORDER[i]] || [];
       if (items.length === 0) continue;
       return items.slice(0, 3)
-        .map(item => item.displayUrl || computeDisplayUrl(item))
+        .map(item => item.exportUrl || item.displayUrl || computeDisplayUrl(item))
         .filter(Boolean);
     }
     return [];
@@ -269,6 +319,137 @@ Page({
     this.setData({ composeProgress: next });
   },
 
+  clearExportUrls: function (groups) {
+    const cleaned = {};
+    Object.keys(groups || {}).forEach(function (key) {
+      cleaned[key] = (groups[key] || []).map(function (item) {
+        const next = Object.assign({}, item);
+        delete next.exportUrl;
+        return next;
+      });
+    });
+    return cleaned;
+  },
+
+  invalidateExportState: function (groups) {
+    this._exportGeneration += 1;
+    this._exportPreparePromise = null;
+    this._savePromise = null;
+    this._saveSelectionKey = '';
+    const cleanedGroups = this.clearExportUrls(groups || this.data.groups);
+    this.setData({
+      groups: cleanedGroups,
+      friendPreviewThumbs: this.buildFriendPreviewThumbs(cleanedGroups),
+      exportPreparing: false,
+      exportManifest: null,
+      exportFingerprint: '',
+      saveCursor: 0,
+      saveSessionFingerprint: '',
+      exportError: ''
+    });
+    return cleanedGroups;
+  },
+
+  buildOutfitExportManifest: function () {
+    const that = this;
+    const sourceGroups = {};
+    ['tops', 'bottoms', 'shoes'].forEach(function (groupKey) {
+      sourceGroups[groupKey] = (that.data.groups[groupKey] || []).map(function (item, index) {
+        return {
+          resultId: item.resultId || item.id || item.sourceImageId || (groupKey + '-' + (index + 1)),
+          url: that.getSaveUrl(item),
+          composedRatio: that.data.ratio
+        };
+      });
+    });
+    return stackExportManifest.buildOutfitManifest(this.data.taskId, sourceGroups, this.data.ratio);
+  },
+
+  applyMaterializedManifest: function (manifest) {
+    const groups = this.clearExportUrls(this.data.groups);
+    (manifest.stacks || []).forEach(function (stack) {
+      const items = groups[stack.stackId] || [];
+      stack.cards.forEach(function (card, index) {
+        if (items[index] && card.exportUrl) items[index].exportUrl = card.exportUrl;
+      });
+    });
+    this.setData({
+      groups: groups,
+      friendPreviewThumbs: this.buildFriendPreviewThumbs(groups),
+      exportPreparing: false,
+      exportManifest: manifest,
+      exportFingerprint: manifest.fingerprint,
+      exportError: ''
+    });
+  },
+
+  prepareExportManifest: function () {
+    const that = this;
+    if (this.data.composing) {
+      return Promise.reject(Object.assign(new Error('白底卡片仍在生成中'), { code: 'WHITE_CARD_COMPOSING' }));
+    }
+    if (!this._sequenceReady || !this._sequenceCanvas) {
+      return Promise.reject(Object.assign(new Error('顺序图生成器未就绪'), { code: 'SEQUENCE_CANVAS_UNAVAILABLE' }));
+    }
+    const failed = ['tops', 'bottoms', 'shoes'].some(function (key) {
+      return (that.data.groups[key] || []).some(function (item) {
+        return item.showMode !== 'original' && item.composeStatus === 'fail';
+      });
+    });
+    if (failed) {
+      const failure = Object.assign(new Error('部分白底卡片生成失败，请先重做'), { code: 'WHITE_CARD_COMPOSE_FAILED' });
+      this.setData({ exportError: failure.message });
+      return Promise.reject(failure);
+    }
+
+    let sourceManifest;
+    try {
+      sourceManifest = this.buildOutfitExportManifest();
+    } catch (error) {
+      this.setData({ exportError: (error && error.message) || '顺序图准备失败' });
+      return Promise.reject(error);
+    }
+    if (this.data.exportManifest && this.data.exportFingerprint === sourceManifest.fingerprint) {
+      return Promise.resolve(this.data.exportManifest);
+    }
+    if (this._exportPreparePromise) return this._exportPreparePromise;
+
+    const generation = ++this._exportGeneration;
+    this.setData({ exportPreparing: true, exportError: '' });
+    const promise = sequenceBadgeComposer.materializeManifest(wx, this._sequenceCanvas, sourceManifest, {
+      isCurrent: function () { return that._exportGeneration === generation; }
+    }).then(function (manifest) {
+      if (that._exportGeneration !== generation) {
+        throw Object.assign(new Error('顺序图任务已过期'), { code: 'STALE_EXPORT_GENERATION' });
+      }
+      that.applyMaterializedManifest(manifest);
+      return manifest;
+    }).catch(function (error) {
+      if (error && error.code === 'STALE_EXPORT_GENERATION') throw error;
+      const detail = error && error.sequenceLabel ? '（' + (error.stackTitle || '当前组') + ' ' + error.sequenceLabel + '）' : '';
+      that.setData({ exportPreparing: false, exportError: '顺序图生成失败' + detail + '，请重试' });
+      throw error;
+    });
+    let tracked;
+    tracked = promise.then(function (manifest) {
+      if (that._exportPreparePromise === tracked) that._exportPreparePromise = null;
+      return manifest;
+    }, function (error) {
+      if (that._exportPreparePromise === tracked) that._exportPreparePromise = null;
+      throw error;
+    });
+    this._exportPreparePromise = tracked;
+    return tracked;
+  },
+
+  showExportPrepareError: function (error) {
+    let title = '顺序图生成失败，请重试';
+    if (error && error.code === 'WHITE_CARD_COMPOSING') title = '白底卡片仍在生成中';
+    if (error && error.code === 'WHITE_CARD_COMPOSE_FAILED') title = '请先重做失败的白底卡片';
+    if (error && error.code === 'SEQUENCE_CANVAS_UNAVAILABLE') title = '顺序图生成器未就绪，请稍后重试';
+    wx.showToast({ title: title, icon: 'none', duration: 2200 });
+  },
+
   composeAllCards: function (groups) {
     if (!groups || !this._composerReady) return;
     const that = this;
@@ -287,6 +468,7 @@ Page({
 
     if (jobs.length === 0) {
       this.setData({ composing: false, composeProgress: null });
+      this.prepareExportManifest().catch(function () {});
       return;
     }
 
@@ -296,6 +478,7 @@ Page({
       if (that._composeToken !== token) return; // 已被更新的合成任务（如切换比例）取代
       if (cursor >= jobs.length) {
         that.setData({ composing: false, composeProgress: null });
+        that.prepareExportManifest().catch(function () {});
         return;
       }
       const job = jobs[cursor];
@@ -365,6 +548,7 @@ Page({
     const index = parseInt(e.currentTarget.dataset.index, 10);
     const item = (this.data.groups[groupKey] || [])[index];
     if (!item) return;
+    this.invalidateExportState();
 
     // 抠图失败且存在云端原图：先重走一次云端抠图，再重新合成
     const cloudSource = this.getCloudSource(item);
@@ -392,7 +576,10 @@ Page({
     }
     updateGroupItem(this, groupKey, index, { composeStatus: 'composing' });
     this._enqueueCompose(() => that.composeItem(groupKey, index, item, that.data.ratio))
-      .then((res) => that.applyComposeSuccess(groupKey, index, res))
+      .then((res) => {
+        that.applyComposeSuccess(groupKey, index, res);
+        that.prepareExportManifest().catch(function () {});
+      })
       .catch((err) => that.applyComposeFailure(groupKey, index, err));
   },
 
@@ -482,6 +669,7 @@ Page({
       return;
     }
 
+    this.invalidateExportState();
     this.setData({ ratio: selected.key, showRatioSheet: false }, () => {
       // 切换比例后整批重新合成（旧任务通过 token 自动作废）
       this.composeAllCards(this.data.groups);
@@ -496,10 +684,13 @@ Page({
     var current = item.showMode || 'composed';
     var next = current === 'composed' ? 'original' : 'composed';
     var merged = Object.assign({}, item, { showMode: next });
-    this.setData({
-      [`groups.${groupKey}[${index}].showMode`]: next,
-      [`groups.${groupKey}[${index}].displayUrl`]: computeDisplayUrl(merged)
+    const groups = this.clearExportUrls(this.data.groups);
+    groups[groupKey][index] = Object.assign({}, groups[groupKey][index], {
+      showMode: next,
+      displayUrl: computeDisplayUrl(merged)
     });
+    this.invalidateExportState(groups);
+    this.prepareExportManifest().catch(function () {});
   },
 
   onChangeCategory: function (e) {
@@ -563,7 +754,7 @@ Page({
       });
     });
 
-    const normalizedGroups = decorateGroups(normalizeTaskGroups(groups));
+    const normalizedGroups = this.invalidateExportState(decorateGroups(normalizeTaskGroups(groups)));
     const totalCount = this.calculateTotalCount(normalizedGroups);
     this.setData({
       groups: normalizedGroups,
@@ -586,8 +777,8 @@ Page({
     const groupKey = e.currentTarget.dataset.group;
     const index = parseInt(e.currentTarget.dataset.index, 10);
     const groupItems = this.data.groups[groupKey] || [];
-    const urls = groupItems.map(item => this.getDisplayUrl(item));
-    wx.previewImage({ urls, current: this.getDisplayUrl(groupItems[index]) });
+    const urls = groupItems.map(item => item.exportUrl || this.getDisplayUrl(item));
+    wx.previewImage({ urls, current: (groupItems[index] && groupItems[index].exportUrl) || this.getDisplayUrl(groupItems[index]) });
   },
 
   onBackHome: function () {
@@ -599,30 +790,29 @@ Page({
     wx.reLaunch({ url: '/pages/index/index' });
   },
 
-  // 跳转微信发送预览页（eventChannel 契约保持不变）
+  // 跳转微信发送预览页；同时发送新 manifest 与旧 task，供预览页渐进迁移。
   onWechatPreview: function () {
-    // 合成未完成时提示用户，避免预览页看到混合状态
-    var hasComposing = GROUP_ORDER.some(function (key) {
-      return (this.data.groups[key] || []).some(function (item) {
-        return item.composeStatus === 'composing';
-      });
-    }.bind(this));
-    if (hasComposing) {
-      wx.showToast({ title: '部分卡片仍在生成中', icon: 'none', duration: 2000 });
-    }
-
     const that = this;
-    wx.navigateTo({
-      url: '/pages/preview/preview?taskId=' + this.data.taskId,
-      success: function (navRes) {
-        navRes.eventChannel.emit('acceptTaskData', {
-          task: {
-            taskId: that.data.taskId,
-            groups: that.data.groups,
-            ratio: that.data.ratio
-          }
-        });
-      }
+    return this.prepareExportManifest().then(function (manifest) {
+      wx.navigateTo({
+        url: '/pages/preview/preview?taskId=' + that.data.taskId,
+        success: function (navRes) {
+          navRes.eventChannel.emit('acceptTaskData', {
+            manifest: manifest,
+            selectedStackIds: manifest.stacks.filter(function (stack) { return stack.cards.length > 0; }).map(function (stack) { return stack.stackId; }),
+            ratio: that.data.ratio,
+            task: {
+              taskId: that.data.taskId,
+              groups: that.data.groups,
+              ratio: that.data.ratio
+            }
+          });
+        }
+      });
+      return manifest;
+    }).catch(function (error) {
+      if (!error || error.code !== 'STALE_EXPORT_GENERATION') that.showExportPrepareError(error);
+      return null;
     });
   },
 
@@ -643,33 +833,40 @@ Page({
     const index = parseInt(e.currentTarget.dataset.index, 10);
     const item = (this.data.groups[groupKey] || [])[index];
     if (!item) return;
-    const url = this.getSaveUrl(item);
-    if (!url) {
-      wx.showToast({ title: '图片还在生成中，请稍候', icon: 'none' });
-      return;
+    if (groupKey === 'others') {
+      const legacyUrl = this.getSaveUrl(item);
+      if (!legacyUrl) {
+        wx.showToast({ title: '图片还在生成中，请稍候', icon: 'none' });
+        return Promise.resolve(null);
+      }
+      return this.saveImagesSequentially([legacyUrl], '已保存到相册');
     }
-    this.saveImagesSequentially([url], '已保存到相册');
+    const that = this;
+    return this.prepareExportManifest().then(function (manifest) {
+      const stack = manifest.stacks.find(function (entry) { return entry.stackId === groupKey; });
+      const card = stack && stack.cards[index];
+      if (!card || !card.exportUrl) throw Object.assign(new Error('顺序图尚未生成'), { code: 'EXPORT_NOT_READY' });
+      return that.saveImagesSequentially([card.exportUrl], '已保存到相册');
+    }).catch(function (error) {
+      that.showExportPrepareError(error);
+      return null;
+    });
   },
 
   // 底部「保存全部」：按分组顺序编号 01-N 依次保存
   onSaveAllImages: function () {
-    const allUrls = this.getAllImageUrls();
-    if (allUrls.length === 0) return;
-    if (this.data.composing) {
-      wx.showToast({ title: '白底卡片生成中，已生成的优先保存', icon: 'none' });
-    }
-    this.saveImagesSequentially(allUrls, '全部图片保存完成', true);
+    return this.saveNumberedSelection(null, '全部图片保存完成', true);
   },
 
   // 穿搭组整组保存（「其他素材」组不提供整组保存入口）
   onSaveGroupByKey: function (e) {
     const groupKey = e.currentTarget.dataset.group;
-    const urls = this.getGroupUrls(groupKey);
-    if (urls.length === 0) return;
-    if (this.data.composing) {
-      wx.showToast({ title: '白底卡片生成中，已生成的优先保存', icon: 'none' });
+    const count = (this.data.groups[groupKey] || []).length;
+    if (groupKey === 'others' || count < 3) {
+      wx.showToast({ title: count < 3 ? '不足 3 张，建议普通发送' : '其他素材不进入穿搭叠图', icon: 'none' });
+      return Promise.resolve(null);
     }
-    this.saveImagesSequentially(urls, `${GROUP_CARD_META[groupKey].title}保存完成`, true);
+    return this.saveNumberedSelection([groupKey], `${GROUP_CARD_META[groupKey].title}保存完成`, true);
   },
 
   getAllImageUrls: function () {
@@ -683,9 +880,9 @@ Page({
   },
 
   saveImagesSequentially: function (urls, successTitle, showGuide) {
-    if (!urls || urls.length === 0) return;
+    if (!urls || urls.length === 0) return Promise.resolve(null);
     const that = this;
-    imageExporter.saveImagesSequentially(wx, urls, {
+    return imageExporter.saveImagesSequentially(wx, urls, {
       onProgress: function (current, total) {
         wx.showLoading({ title: `正在保存 ${current}/${total} 张...`, mask: true });
       }
@@ -700,6 +897,91 @@ Page({
       wx.hideLoading();
       const remainUrls = urls.slice((err && err.nextIndex) || 0);
       that.handleSaveError({ type: 'save_fail', error: (err && err.cause) || err }, remainUrls);
+      return null;
+    });
+  },
+
+  saveNumberedSelection: function (stackIds, successTitle, showGuide) {
+    const that = this;
+    if (this._savePromise) return this._savePromise;
+    const selectionKey = Array.isArray(stackIds) ? stackIds.join(',') : 'all';
+    const run = this.prepareExportManifest().then(function (manifest) {
+      const hasExportable = manifest.stacks.some(function (stack) {
+        return stack.canExport && (!stackIds || stackIds.indexOf(stack.stackId) !== -1);
+      });
+      if (!hasExportable) {
+        wx.showToast({ title: '没有满 3 张的可保存叠图', icon: 'none' });
+        return null;
+      }
+      const canResume = that.data.saveSessionFingerprint === manifest.fingerprint && that._saveSelectionKey === selectionKey;
+      const startIndex = canResume ? that.data.saveCursor : 0;
+      that._saveSelectionKey = selectionKey;
+      that.setData({ saveSessionFingerprint: manifest.fingerprint, saveCursor: startIndex });
+      return imageExporter.saveExportManifest(wx, manifest, {
+        stackIds: stackIds || undefined,
+        startIndex: startIndex,
+        expectedFingerprint: manifest.fingerprint,
+        onProgress: function (entry, current, total) {
+          wx.showLoading({ title: (entry.stackTitle || '当前组') + ' ' + entry.sequenceLabel + ' · ' + current + '/' + total, mask: true });
+        }
+      }).then(function (result) {
+        wx.hideLoading();
+        that._saveSelectionKey = '';
+        that.setData({ saveCursor: 0, saveSessionFingerprint: '', exportError: '' });
+        if (showGuide) that.setData({ showSendGuide: true });
+        else wx.showToast({ title: successTitle || '保存完成', icon: 'success', duration: 2000 });
+        return result;
+      }).catch(function (error) {
+        wx.hideLoading();
+        that.setData({
+          saveCursor: Math.max(0, Number(error && error.nextIndex) || 0),
+          saveSessionFingerprint: manifest.fingerprint,
+          exportError: (error && error.message) || '保存失败'
+        });
+        that.handleManifestSaveError(error, stackIds, successTitle, showGuide);
+        return null;
+      });
+    }).catch(function (error) {
+      that.showExportPrepareError(error);
+      return null;
+    });
+    let tracked;
+    tracked = run.then(function (result) {
+      if (that._savePromise === tracked) that._savePromise = null;
+      return result;
+    }, function (error) {
+      if (that._savePromise === tracked) that._savePromise = null;
+      throw error;
+    });
+    this._savePromise = tracked;
+    return tracked;
+  },
+
+  handleManifestSaveError: function (error, stackIds, successTitle, showGuide) {
+    const that = this;
+    if (error && error.code === 'AUTH_DENIED') {
+      wx.showModal({
+        title: '需要相册授权',
+        content: '请在设置中开启“保存到相册”或“照片”权限，然后重试当前编号。',
+        confirmText: '前往设置',
+        cancelText: '取消',
+        success: function (result) {
+          if (result.confirm && wx.openSetting) wx.openSetting({});
+        }
+      });
+      return;
+    }
+    const location = error && error.sequenceLabel
+      ? (error.stackTitle || '当前组') + ' 的 ' + error.sequenceLabel
+      : '当前图片';
+    wx.showModal({
+      title: '保存中断',
+      content: location + ' 保存失败；重试会从这张继续，不会重复前面的图片。',
+      confirmText: '继续保存',
+      cancelText: '稍后再说',
+      success: function (result) {
+        if (result.confirm) that.saveNumberedSelection(stackIds, successTitle, showGuide);
+      }
     });
   },
 

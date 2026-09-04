@@ -498,6 +498,11 @@ page {
   opacity: 0.88;
 }
 
+.btn-grad-disabled {
+  background: #c9c9cf;
+  color: #f7f7f8;
+}
+
 /* 其他素材组说明文字 */
 .group-note {
   font-size: 22rpx;

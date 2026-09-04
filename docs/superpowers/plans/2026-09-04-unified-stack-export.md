@@ -227,7 +227,7 @@ git commit -m "feat: save materialized stack manifests"
 - Adds a dedicated hidden `sequenceBadgeCanvas`; it must not share the existing white-card composer canvas。
 - Produces page state `exportPreparing`、`exportManifest`、`exportFingerprint`、`saveCursor`、`saveSessionFingerprint`、`exportError`。
 
-- [ ] **Step 1: 写页面失败测试**
+- [x] **Step 1: 写页面失败测试**
 
 覆盖：
 
@@ -240,17 +240,17 @@ git commit -m "feat: save materialized stack manifests"
 - 内容仍在生成、角标失败或不足 3 张时不得误导为可叠图保存；
 - 快速连续点击只启动一次准备/保存任务，旧 generation 不覆盖新状态。
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```bash
 node --test tests/outfit-stack-export.test.cjs tests/task.test.cjs
 ```
 
-- [ ] **Step 3: 接入独立 Canvas 与共享模块**
+- [x] **Step 3: 接入独立 Canvas 与共享模块**
 
 在现有 compose queue 完成后异步准备 manifest。单图保存允许保存当前带组内序号的最终图；组和全部保存继续遵守发送门槛。错误文案必须区分白底卡生成失败、顺序图生成失败、相册授权失败和相册保存失败。
 
-- [ ] **Step 4: 回归**
+- [x] **Step 4: 回归**
 
 ```bash
 node --test tests/outfit-stack-export.test.cjs tests/task.test.cjs tests/preview-layout.test.cjs tests/image-exporter.test.cjs
@@ -258,7 +258,7 @@ npm run check:miniprogram
 npm run check:syntax
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add miniprogram/pages/result tests/outfit-stack-export.test.cjs tests/task.test.cjs docs/iterations/2026-09-04.md
