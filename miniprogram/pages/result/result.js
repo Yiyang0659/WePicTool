@@ -800,12 +800,7 @@ Page({
           navRes.eventChannel.emit('acceptTaskData', {
             manifest: manifest,
             selectedStackIds: manifest.stacks.filter(function (stack) { return stack.cards.length > 0; }).map(function (stack) { return stack.stackId; }),
-            ratio: that.data.ratio,
-            task: {
-              taskId: that.data.taskId,
-              groups: that.data.groups,
-              ratio: that.data.ratio
-            }
+            ratio: that.data.ratio
           });
         }
       });

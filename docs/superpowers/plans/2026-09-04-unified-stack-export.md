@@ -400,7 +400,7 @@ git commit -m "feat: export numbered fun text stacks"
 - Keeps legacy `{ task }` and `{ groups, ratio }` for one compatibility cycle, but converts them into internal named groups and never claims they are numbered final exports。
 - All new callers send materialized manifest only。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 覆盖：
 
@@ -412,17 +412,17 @@ git commit -m "feat: export numbered fun text stacks"
 - 文案不包含文件名保证、系统自动排序或一键直发承诺；
 - 预览页长按保存使用当前 manifest 的编号图。
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```bash
 node --test tests/preview-layout.test.cjs tests/stack-send-guide.test.cjs
 ```
 
-- [ ] **Step 3: 实现契约迁移与文案统一**
+- [x] **Step 3: 实现契约迁移与文案统一**
 
 保持既有滑动、展开/收起、稳定图片节点和长按行为；只替换输入归一化和保存数据源。技术规格必须删除“文件名控制顺序”的保证，记录 manifest 版本、角标层和兼容周期。
 
-- [ ] **Step 4: 回归**
+- [x] **Step 4: 回归**
 
 ```bash
 node --test tests/preview-layout.test.cjs tests/stack-send-guide.test.cjs tests/outfit-stack-export.test.cjs tests/layered-dressup.test.cjs tests/fun-text-result.test.cjs
@@ -430,7 +430,7 @@ npm run check:miniprogram
 npm run check:syntax
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add miniprogram/pages/preview miniprogram/pages/result/result.wxml miniprogram/pages/dressup/dressup.wxml miniprogram/pages/template-result/template-result.wxml tests/preview-layout.test.cjs tests/stack-send-guide.test.cjs docs/product/TECHNICAL_SPEC.md docs/iterations/2026-09-04.md

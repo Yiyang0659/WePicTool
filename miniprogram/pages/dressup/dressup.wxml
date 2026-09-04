@@ -70,10 +70,10 @@
   <view class="guide-mask" wx:if="{{showGuide}}" bindtap="onCloseGuide">
     <view class="guide-panel" catchtap="onGuidePanelTap">
       <view class="guide-title">{{guideTitle}} 🎉</view>
-      <view class="guide-step"><text class="guide-num">1</text><text>回到要发送的微信聊天</text></view>
-      <view class="guide-step"><text class="guide-num">2</text><text>每次只选择一个部位组的图片</text></view>
-      <view class="guide-step"><text class="guide-num">3</text><text>勾选「发送后合并展示」</text></view>
-      <view class="guide-step"><text class="guide-num">4</text><text>按头像、上衣、下装、鞋子的顺序发送</text></view>
+      <view class="guide-step"><text class="guide-num">1</text><text>每次只发送一叠，四个部位分开发</text></view>
+      <view class="guide-step"><text class="guide-num">2</text><text>打开微信相册，按图片角标 01…勾选</text></view>
+      <view class="guide-step"><text class="guide-num">3</text><text>发送前确认 01 在第一位</text></view>
+      <view class="guide-step"><text class="guide-num">4</text><text>勾选「发送后合并展示」再发送</text></view>
       <view class="guide-primary" bindtap="onGuidePreview">看看朋友视角</view>
       <view class="guide-secondary" bindtap="onCloseGuide">我知道了</view>
     </view>

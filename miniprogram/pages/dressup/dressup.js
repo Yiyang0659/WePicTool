@@ -374,7 +374,6 @@ Page({
           res.eventChannel.emit('acceptTaskData', {
             manifest: manifest,
             selectedStackIds: manifest.stacks.filter(function (stack) { return stack.cards.length > 0; }).map(function (stack) { return stack.stackId; }),
-            groups: legacyGroups,
             ratio: project.ratio || '4:5'
           });
         }

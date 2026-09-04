@@ -7,6 +7,7 @@ var GROUP_META = taskUtils.GROUP_META;
 var previewLayout = require('../../utils/previewLayout');
 var buildPreviewStage = previewLayout.buildPreviewStage;
 var orderCardsFromFront = previewLayout.orderCardsFromFront;
+var stackExportManifest = require('../../utils/stackExportManifest');
 
 var GROUP_ORDER = ['tops', 'bottoms', 'shoes', 'others'];
 var RATIO_CLASS = { '1:1': 'ar11', '4:5': 'ar45', '3:4': 'ar34' };
@@ -39,6 +40,9 @@ Page({
     groupList: [],
     totalCount: 0,
     isEmpty: false,
+    inputMode: '',
+    inputError: '',
+    manifestFingerprint: '',
     scrollLock: false,      // 判定为横向滑动后锁定聊天纵向滚动
     viewer: { show: false, url: '' }
   },
@@ -83,14 +87,16 @@ Page({
     Object.keys(timers).forEach(function (k) { clearTimeout(timers[k]); });
   },
 
-  // 输入兼容两种形态：
-  // 1) 现有调用方 result.js：{ task: { taskId, groups: { tops: [...] }, ratio } }
-  // 2) 契约 §12.6 直连形态：{ groups: [{ name, cards: [{ url, num }] }], ratio }
+  // 新调用方只传 materialized manifest；task/groups 保留一个兼容周期。
   _acceptInput: function (data) {
     if (!data) return;
+    if (data.manifest) {
+      this._acceptManifest(data.manifest, data.selectedStackIds, data.ratio);
+      return;
+    }
     if (Object.prototype.toString.call(data.groups) === '[object Array]') {
       if (data.ratio && RATIO_CLASS[data.ratio]) this.setData({ ratio: data.ratio });
-      this._renderGroups(this._normalizeContractGroups(data.groups), data.ratio || this.data.ratio);
+      this._renderGroups(this._normalizeContractGroups(data.groups), data.ratio || this.data.ratio, 'legacy');
       return;
     }
     if (data.task) {
@@ -110,7 +116,56 @@ Page({
           named.push({ name: (GROUP_META[key] || {}).title || key, cards: cards });
         }
       }
-      this._renderGroups(named, task.ratio || this.data.ratio);
+      this._renderGroups(named, task.ratio || this.data.ratio, 'legacy');
+    }
+  },
+
+  _acceptManifest: function (manifest, selectedStackIds, ratio) {
+    try {
+      stackExportManifest.validateManifest(manifest);
+      var selected = null;
+      if (Array.isArray(selectedStackIds) && selectedStackIds.length > 0) {
+        selected = {};
+        selectedStackIds.forEach(function (stackId) { selected[stackId] = true; });
+      }
+      var named = [];
+      for (var stackIndex = 0; stackIndex < manifest.stacks.length; stackIndex++) {
+        var stack = manifest.stacks[stackIndex];
+        if (selected && !selected[stack.stackId]) continue;
+        if (!stack.cards.length) continue;
+        var cards = [];
+        for (var cardIndex = 0; cardIndex < stack.cards.length; cardIndex++) {
+          var card = stack.cards[cardIndex];
+          if (!card.exportUrl) throw new Error('编号图尚未准备好：' + stack.title + ' ' + card.sequenceLabel);
+          cards.push({
+            url: card.exportUrl,
+            num: card.sequenceLabel,
+            sequenceLabel: card.sequenceLabel,
+            isCover: card.isCover,
+            ratio: card.ratio || manifest.ratio,
+            width: card.width,
+            height: card.height
+          });
+        }
+        named.push({ key: stack.stackId, stackId: stack.stackId, name: stack.title, cards: cards });
+      }
+      if (ratio && RATIO_CLASS[ratio]) this.setData({ ratio: ratio });
+      this.setData({ manifestFingerprint: manifest.fingerprint || '', inputError: '' });
+      this._renderGroups(named, ratio || manifest.ratio || this.data.ratio, 'manifest');
+    } catch (error) {
+      var message = (error && error.message) || '编号图预览数据无效';
+      this._gesture = null;
+      this._animating = {};
+      this.setData({
+        groupList: [],
+        totalCount: 0,
+        isEmpty: true,
+        inputMode: 'manifest',
+        inputError: message,
+        manifestFingerprint: '',
+        scrollLock: false
+      });
+      wx.showToast({ title: message, icon: 'none', duration: 2200 });
     }
   },
 
@@ -131,7 +186,7 @@ Page({
   },
 
   // 每组一份独立状态：固定节点 + 位置轮转 + 手势/展开/收起标记
-  _renderGroups: function (namedGroups, fallbackRatio) {
+  _renderGroups: function (namedGroups, fallbackRatio, inputMode) {
     var list = [];
     var total = 0;
     for (var i = 0; i < namedGroups.length; i++) {
@@ -142,7 +197,8 @@ Page({
         var stage = buildPreviewStage(g.cards[j], fallbackRatio || this.data.ratio || '4:5', this._windowWidth);
         cards.push({
           url: g.cards[j].url,
-          num: ('0' + (cards.length + 1)).slice(-2),
+          num: g.cards[j].num || g.cards[j].sequenceLabel || ('0' + (cards.length + 1)).slice(-2),
+          isCover: g.cards[j].isCover === true,
           err: false,
           ratio: stage.ratio,
           cardStyle: stage.cardStyle,
@@ -169,7 +225,8 @@ Page({
       var rest = this._buildRest(cards);
 
       list.push({
-        key: 'group_' + i,
+        key: g.key || 'group_' + i,
+        stackId: g.stackId || '',
         name: g.name || '',
         n: cards.length,
         cards: cards,
@@ -191,6 +248,8 @@ Page({
       groupList: list,
       totalCount: total,
       isEmpty: total === 0,
+      inputMode: inputMode || 'legacy',
+      inputError: '',
       scrollLock: false
     });
   },

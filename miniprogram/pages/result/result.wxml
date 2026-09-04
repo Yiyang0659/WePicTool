@@ -147,19 +147,19 @@
       <view class="guide-steps">
         <view class="guide-step">
           <view class="guide-num">1</view>
-          <view class="guide-step-text">图片已按编号顺序保存到相册 ✓</view>
+          <view class="guide-step-text">每次只发送一叠，上衣、下装、鞋子分开发</view>
         </view>
         <view class="guide-step">
           <view class="guide-num">2</view>
-          <view class="guide-step-text">打开微信，进入要发送的聊天窗口</view>
+          <view class="guide-step-text">打开微信相册，按图片角标 01…勾选</view>
         </view>
         <view class="guide-step">
           <view class="guide-num">3</view>
-          <view class="guide-step-text">多选勾选刚保存的图片（按编号顺序选）</view>
+          <view class="guide-step-text">发送前确认 01 在第一位</view>
         </view>
         <view class="guide-step">
           <view class="guide-num">4</view>
-          <view class="guide-step-text">发送时勾选「发送后合并展示」，朋友就能滑着看</view>
+          <view class="guide-step-text">勾选「发送后合并展示」再发送，朋友就能滑着看</view>
         </view>
       </view>
       <view class="guide-btn-primary" bindtap="onSendGuidePreview">去看看朋友视角</view>

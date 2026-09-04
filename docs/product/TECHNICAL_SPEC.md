@@ -550,7 +550,7 @@ cloud://cloud1-d0g1blfsde474b168/
 
 ## 12. 叠图玩法管线技术规格
 
-> 2026-07-18 定位升级新增，2026-09-03 按分支事实校准。本节定义统一叠图管线的技术契约，玩法实现口径见 `PLAYBOOK.md` 第 3、4 章。P2.1 对应代码与自动化已存在，但外部部署/设备证据仍缺失；P2.2 是未纳入阶段一计划的实验代码。
+> 2026-07-18 定位升级新增，2026-09-04 按统一导出实现校准。本节定义统一叠图管线的技术契约，玩法实现口径见 `PLAYBOOK.md` 第 3、4 章。P2.1 对应代码与自动化已存在，但外部部署/设备证据仍缺失；P2.2 是未纳入阶段一计划的实验代码。
 
 ### 12.1 玩法模板注册表
 
@@ -576,9 +576,9 @@ cloud://cloud1-d0g1blfsde474b168/
 | --- | --- | --- |
 | 1. 输入器 | 选图 / 文字 / 模板参数 | 图片输入复用 `pages/index`；趣味字画使用 `pages/fun-text`，入口可由 `ENABLE_FUN_TEXT_STACK_ENTRY` 关闭 |
 | 2. 卡片生成器 | 把玩法计划转为可编辑场景并批量渲染 | 图片玩法复用 `cardComposer.js`；趣味字画已有规则策略、候选校验、`sceneComposer` 和小程序/云托管双渲染适配器。P2.2 AI 调度仅为实验 |
-| 3. 叠图预览 | 微信聊天效果预览 | `pages/preview` 已接收趣味字画单叠与既有图片分组；真实微信表现未验证 |
-| 4. 编号保存 | 让用户识别并按正确顺序选择图片 | 共享 `utils/imageExporter.js` 已实现 cloud/HTTP/本地解析与顺序断点续存；当前没有把编号写入最终图片，`wx.saveImageToPhotosAlbum` 也没有目标文件名或系统相册排序参数，顺序识别仍待 `2026-09-04-unified-stack-export-design.md` 确认和实施 |
-| 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 结果页已提供四步文案；真实聊天未验证 |
+| 3. 叠图预览 | 微信聊天效果预览 | `pages/preview` 优先接收已物化 manifest，只读取 `exportUrl`；旧 `{task}` / `{groups}` 输入保留一个兼容周期；真实微信表现未验证 |
+| 4. 编号保存 | 让用户识别并按正确顺序选择图片 | `stackExportManifest.js` 提供顺序事实源，`sequenceBadgeComposer.js` 把 `01…N` 写入最终图片，`imageExporter.js` 按 manifest 串行保存并支持带组身份的断点续存。`wx.saveImageToPhotosAlbum` 不能指定目标文件名或系统相册排序，因此不作相册顺序保证 |
+| 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 三个结果页统一提示“每次只发送一叠、按图片角标勾选、确认 01 在第一位、勾选发送后合并展示”；真实聊天未验证 |
 | 6. 回流引导卡 | 末卡"用 WePicTool 做同款"，可开关 | 尚未实现；不在当前统一导出设计范围内 |
 
 ### 12.3 用户生成内容安全门禁
@@ -636,11 +636,27 @@ cloud://cloud1-d0g1blfsde474b168/
 
 ```js
 {
-  groups: [{ name: '上衣组', cards: [{ url, num: '01' }, ...] }, ...],
-  theme: 'dark' | 'light',   // 为兼容旧调用方继续接收；页面固定渲染白色主题
+  manifest: {
+    version: 1,
+    badgeStyleVersion: 1,
+    fingerprint,
+    ratio,
+    stacks: [{
+      stackId,
+      title,
+      canExport,
+      cards: [{ cardId, sequence: 1, sequenceLabel: '01', isCover: true, sourceUrl, exportUrl }]
+    }]
+  },
+  selectedStackIds: ['tops'],
   ratio: '1:1' | '4:5' | '3:4'
 }
 ```
+
+- manifest 模式只读取 `exportUrl`，选中叠任一卡片缺少 `exportUrl` 时 fail closed，不回退到 `sourceUrl`。
+- 预览保持 manifest 叠顺序和组内顺序；`sequenceLabel='01'` 与 `isCover=true` 是封面身份，不由预览页重排。
+- 旧 `{ task }` 与 `{ groups, ratio }` 输入保留一个兼容周期并标记为 legacy；它们可继续打开历史记录，但不被宣称为带可见编号的最终导出。
+- 图片内角标属于导出层，不进入玩法 scene JSON、远端 render fingerprint 或长期记录缓存；记录重开时从原始项目与渲染卡片重建。
 
 **状态机：**
 

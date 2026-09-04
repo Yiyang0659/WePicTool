@@ -48,7 +48,7 @@
         <view class="guide-step-item">
           <view class="step-num">1</view>
           <view class="step-content">
-            <view class="step-bold">回微信聊天</view>
+            <view class="step-bold">每次只发送一叠</view>
             <view class="step-desc">打开你想发送的好友或群聊对话框</view>
           </view>
         </view>
@@ -56,24 +56,24 @@
         <view class="guide-step-item">
           <view class="step-num">2</view>
           <view class="step-content">
-            <view class="step-bold">从最近图片按顺序全选</view>
-            <view class="step-desc">从相册第一张开始，按刚才保存的顺序勾选全部卡片</view>
+            <view class="step-bold">按图片角标 01…勾选</view>
+            <view class="step-desc">在微信相册中依次勾选这一叠的全部卡片</view>
           </view>
         </view>
 
         <view class="guide-step-item">
           <view class="step-num">3</view>
           <view class="step-content">
-            <view class="step-bold">勾选“发送后合并展示”</view>
-            <view class="step-desc">选图完成后，在微信发送栏勾选合并展示选项</view>
+            <view class="step-bold">确认 01 在第一位</view>
+            <view class="step-desc">发送前检查选图顺序，避免叠图封面错位</view>
           </view>
         </view>
 
         <view class="guide-step-item">
           <view class="step-num">4</view>
           <view class="step-content">
-            <view class="step-bold">发送</view>
-            <view class="step-desc">点击发送，朋友点开即可滑着看你的心意</view>
+            <view class="step-bold">勾选「发送后合并展示」</view>
+            <view class="step-desc">再点击发送，朋友点开即可滑着看你的心意</view>
           </view>
         </view>
       </view>
