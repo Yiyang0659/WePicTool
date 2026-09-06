@@ -10,6 +10,9 @@ coverage/
 # 抠图模型本地测试输出
 scripts/.matting-test-out/
 
+# 高清素材源文件（不进入小程序主包）
+assets/source/
+
 # 工具会话状态（含 token/pid，不入库）
 .superpowers/
 .worktrees/

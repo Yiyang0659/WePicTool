@@ -39,7 +39,7 @@ function setup(overrides = {}) {
   const imageExporter = {
     saveExportManifest(wxArg, manifest, options) {
       calls.saves.push({ manifest, options });
-      return overrides.save ? overrides.save(manifest, options) : Promise.resolve({ ok: true, savedCount: 3 });
+      return overrides.save ? overrides.save(manifest, options) : Promise.resolve({ ok: true, savedCount: 4 });
     },
     saveImagesSequentially() { return Promise.resolve({ ok: true, savedCount: 1 }); }
   };
@@ -74,7 +74,7 @@ test('dressup prepares four independently numbered stacks and shows the same exp
     '../../assets/samples/head1.jpg'
   );
   assert.equal(Array.from(manifest.stacks).map((stack) => stack.stackId).join(','), 'head,tops,bottoms,shoes');
-  manifest.stacks.forEach((stack) => assert.equal(stack.cards.map((card) => card.sequenceLabel).join(','), '01,02,03'));
+  manifest.stacks.forEach((stack) => assert.equal(stack.cards.map((card) => card.sequenceLabel).join(','), '01,02,03,04'));
   assert.equal(page.data.groupList[0].items[0].exportUrl, '/numbered/head-01.png');
   assert.equal(page.data.exportFingerprint, manifest.fingerprint);
 });
@@ -108,7 +108,8 @@ test('dressup project mutations invalidate the cursor and produce a different fi
 
 test('dressup previews a short numbered stack but refuses to save it as a WeChat stack', async () => {
   const { page, calls, project } = setup();
-  const short = dressup.removeItem(project, 'head', project.groups.head[2].id);
+  const afterFirstRemoval = dressup.removeItem(project, 'head', project.groups.head[2].id);
+  const short = dressup.removeItem(afterFirstRemoval, 'head', project.groups.head[3].id);
   page.refreshProject(short, false);
   const manifest = await page.prepareExportManifest();
   assert.equal(manifest.stacks[0].cards.length, 2);
@@ -130,7 +131,7 @@ test('dressup save resumes at the failed stack sequence without duplicates', asy
         Object.assign(error, { code: 'SAVE_FAILED', nextIndex: 1, stackTitle: '头像与发型', sequenceLabel: '02' });
         return Promise.reject(error);
       }
-      return Promise.resolve({ ok: true, savedCount: 2 });
+      return Promise.resolve({ ok: true, savedCount: 3 });
     }
   });
   await page.prepareExportManifest();

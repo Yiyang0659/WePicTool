@@ -94,10 +94,18 @@ test('ships a valid complete built-in paper doll pack', () => {
 
   assert.equal(result.valid, true);
   assert.deepEqual(plain(Object.keys(pack.groups)), ['head', 'tops', 'bottoms', 'shoes']);
-  assert.equal(pack.groups.head.length, 3);
-  assert.equal(pack.groups.tops.length, 3);
-  assert.equal(pack.groups.bottoms.length, 3);
-  assert.equal(pack.groups.shoes.length, 3);
+  assert.equal(pack.version, 2);
+  assert.equal(pack.title, '四套基础穿搭');
+  assert.equal(pack.groups.head.length, 4);
+  assert.equal(pack.groups.tops.length, 4);
+  assert.equal(pack.groups.bottoms.length, 4);
+  assert.equal(pack.groups.shoes.length, 4);
+  assert.deepEqual(plain(pack.groups.head.map(item => item.url)), [
+    '/assets/samples/head1.jpg',
+    '/assets/samples/head2.jpg',
+    '/assets/samples/head3.jpg',
+    '/assets/samples/head4.jpg'
+  ]);
 });
 
 test('rejects an asset pack with a group below the WeChat stack threshold', () => {
@@ -131,10 +139,10 @@ test('creates a complete demo project from the built-in pack', () => {
 
   assert.equal(project.projectId, 'layered_1000');
   assert.equal(project.playId, 'layered-dressup');
-  assert.equal(project.groups.head.length, 3);
-  assert.equal(project.groups.tops.length, 3);
-  assert.equal(project.groups.bottoms.length, 3);
-  assert.equal(project.groups.shoes.length, 3);
+  assert.equal(project.groups.head.length, 4);
+  assert.equal(project.groups.tops.length, 4);
+  assert.equal(project.groups.bottoms.length, 4);
+  assert.equal(project.groups.shoes.length, 4);
   assert.equal(dressup.buildSendability(project).validGroupCount, 4);
 });
 
@@ -212,18 +220,19 @@ test('adding user material changes demo source to mixed and caps a group at twel
 
   assert.equal(next.sourceMode, 'mixed');
   assert.equal(next.groups.tops.length, 12);
-  assert.equal(next.groups.tops[3].source, 'user');
-  assert.equal(project.groups.tops.length, 3);
+  assert.equal(next.groups.tops[4].source, 'user');
+  assert.equal(project.groups.tops.length, 4);
 });
 
-test('removing the third card makes that group non-stackable without padding it', () => {
+test('removing cards until only two remain makes that group non-stackable without padding it', () => {
   const project = dressup.createProject({
     sourceMode: 'demo',
     templateId: 'funny-paper-doll-v1',
     now: 1000
   });
 
-  const next = dressup.removeItem(project, 'head', project.groups.head[2].id);
+  const afterFirstRemoval = dressup.removeItem(project, 'head', project.groups.head[2].id);
+  const next = dressup.removeItem(afterFirstRemoval, 'head', project.groups.head[3].id);
 
   assert.equal(next.groups.head.length, 2);
   assert.equal(dressup.buildSendability(next).groups.head.mode, 'normal');
@@ -243,7 +252,7 @@ test('moving an item changes the first card used by preview', () => {
 
   assert.equal(preview[3].key, 'shoes');
   assert.equal(preview[3].cards[0].url, expected);
-  assert.deepEqual(plain(next.groups.shoes.map(item => item.order)), [1, 2, 3]);
+  assert.deepEqual(plain(next.groups.shoes.map(item => item.order)), [1, 2, 3, 4]);
 });
 
 test('preview excludes empty groups but keeps real groups below three cards', () => {
@@ -287,7 +296,7 @@ function readJpegDimensions(data) {
   throw new Error('JPEG dimensions not found');
 }
 
-test('every built-in asset exists and the project-owned head cards are compact 640 square JPEGs', () => {
+test('every built-in asset exists and all four coordinated cases stay compact', () => {
   const pack = registry.getAssetPack('funny-paper-doll-v1');
   const allItems = Object.values(pack.groups).flat();
 
@@ -304,6 +313,15 @@ test('every built-in asset exists and the project-owned head cards are compact 6
     assert.deepEqual(Array.from(data.subarray(0, 2)), [0xff, 0xd8]);
     assert.deepEqual(readJpegDimensions(data), { width: 640, height: 640 });
     assert.ok(data.length < 150 * 1024, `head asset is too large: ${item.url}`);
+  });
+
+  ['tops', 'bottoms', 'shoes'].forEach((groupKey) => {
+    pack.groups[groupKey].forEach((item) => {
+      const assetPath = path.join(__dirname, '..', 'miniprogram', item.url.replace(/^\//, ''));
+      const data = fs.readFileSync(assetPath);
+      assert.deepEqual(readJpegDimensions(data), { width: 480, height: 640 });
+      assert.ok(data.length < 80 * 1024, `outfit asset is too large: ${item.url}`);
+    });
   });
 });
 

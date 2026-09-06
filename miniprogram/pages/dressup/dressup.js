@@ -26,7 +26,7 @@ Page({
     pendingList: [],
     aiAssistEnabled: ENABLE_OUTFIT_AI_ASSIST === true,
     sourceLabel: '',
-    packTitle: '抽象搞怪',
+    packTitle: '四套基础穿搭',
     validGroupCount: 0,
     canExport: false,
     saving: false,
@@ -186,7 +186,7 @@ Page({
       groupList: groupList,
       pendingList: pendingList,
       sourceLabel: sourceLabels[project.sourceMode] || '我的素材',
-      packTitle: pack ? pack.title : '抽象搞怪',
+      packTitle: pack ? pack.title : '四套基础穿搭',
       validGroupCount: sendability.validGroupCount,
       canExport: sendability.canExport
     }, function () {

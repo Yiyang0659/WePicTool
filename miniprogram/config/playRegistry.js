@@ -47,31 +47,35 @@ const ASSET_PACKS = [
   {
     id: 'funny-paper-doll-v1',
     playId: 'layered-dressup',
-    version: 1,
-    title: '抽象搞怪',
-    description: '四个部位随便滑，先用示例感受纸娃娃式换装。',
+    version: 2,
+    title: '四套基础穿搭',
+    description: '四套完整造型按相同序号对应，也可以自由滑动混搭。',
     cover: '/assets/samples/head1.jpg',
     license: 'project-owned',
     groups: {
       head: [
-        asset('funny_head_1', 'head', '橘色短发', '/assets/samples/head1.jpg', 640, 640),
-        asset('funny_head_2', 'head', '蓝色卷发', '/assets/samples/head2.jpg', 640, 640),
-        asset('funny_head_3', 'head', '紫色双丸子', '/assets/samples/head3.jpg', 640, 640)
+        asset('funny_head_1', 'head', '搭配 1 · 男生短发', '/assets/samples/head1.jpg', 640, 640),
+        asset('funny_head_2', 'head', '搭配 2 · 女生长发', '/assets/samples/head2.jpg', 640, 640),
+        asset('funny_head_3', 'head', '搭配 3 · 男生短发', '/assets/samples/head3.jpg', 640, 640),
+        asset('funny_head_4', 'head', '搭配 4 · 女生短发', '/assets/samples/head4.jpg', 640, 640)
       ],
       tops: [
-        asset('funny_top_1', 'tops', '上衣 1', '/assets/samples/top1.jpg', 640, 640),
-        asset('funny_top_2', 'tops', '上衣 2', '/assets/samples/top2.jpg', 640, 800),
-        asset('funny_top_3', 'tops', '上衣 3', '/assets/samples/top3.jpg', 640, 959)
+        asset('funny_top_1', 'tops', '搭配 1 · 白色短袖', '/assets/samples/top1.jpg', 480, 640),
+        asset('funny_top_2', 'tops', '搭配 2 · 米白针织衫', '/assets/samples/top2.jpg', 480, 640),
+        asset('funny_top_3', 'tops', '搭配 3 · 卡其外套', '/assets/samples/top3.jpg', 480, 640),
+        asset('funny_top_4', 'tops', '搭配 4 · 浅蓝上衣', '/assets/samples/top4.jpg', 480, 640)
       ],
       bottoms: [
-        asset('funny_bottom_1', 'bottoms', '下装 1', '/assets/samples/bottom1.jpg', 640, 512),
-        asset('funny_bottom_2', 'bottoms', '下装 2', '/assets/samples/bottom2.jpg', 640, 960),
-        asset('funny_bottom_3', 'bottoms', '下装 3', '/assets/samples/bottom3.jpg', 640, 427)
+        asset('funny_bottom_1', 'bottoms', '搭配 1 · 蓝色牛仔裤', '/assets/samples/bottom1.jpg', 480, 640),
+        asset('funny_bottom_2', 'bottoms', '搭配 2 · 灰色长裙', '/assets/samples/bottom2.jpg', 480, 640),
+        asset('funny_bottom_3', 'bottoms', '搭配 3 · 深灰工装裤', '/assets/samples/bottom3.jpg', 480, 640),
+        asset('funny_bottom_4', 'bottoms', '搭配 4 · 白色长裙', '/assets/samples/bottom4.jpg', 480, 640)
       ],
       shoes: [
-        asset('funny_shoe_1', 'shoes', '鞋子 1', '/assets/samples/shoe1.jpg', 640, 457),
-        asset('funny_shoe_2', 'shoes', '鞋子 2', '/assets/samples/shoe2.jpg', 640, 800),
-        asset('funny_shoe_3', 'shoes', '鞋子 3', '/assets/samples/shoe3.jpg', 640, 640)
+        asset('funny_shoe_1', 'shoes', '搭配 1 · 白色板鞋', '/assets/samples/shoe1.jpg', 480, 640),
+        asset('funny_shoe_2', 'shoes', '搭配 2 · 棕色短靴', '/assets/samples/shoe2.jpg', 480, 640),
+        asset('funny_shoe_3', 'shoes', '搭配 3 · 灰白运动鞋', '/assets/samples/shoe3.jpg', 480, 640),
+        asset('funny_shoe_4', 'shoes', '搭配 4 · 白色凉鞋', '/assets/samples/shoe4.jpg', 480, 640)
       ]
     }
   }

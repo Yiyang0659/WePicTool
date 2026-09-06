@@ -11,20 +11,20 @@ const CONFIRM_RATIO_OPTIONS = [
 ];
 
 // 「用示例试一叠」包内示例素材清单。
-// 顺序硬约束：3 张上衣 → 3 张下装 → 3 张鞋，
+// 顺序硬约束：前三套案例的 3 张上衣 → 3 张下装 → 3 张鞋，
 // 与 utils/task.js 的 getMockCategory 索引分组（0-2 tops、3-5 bottoms、6-8 shoes）对齐，
 // 保证示例结果页三组全满、都有「适合微信叠图」绿标，演示效果最佳。
 // width/height/size 为素材压缩后（≤80KB）的真实值，避免运行时再逐张探测。
 const SAMPLE_FILES = [
-  { name: 'top1.jpg', width: 640, height: 640, size: 25560 },
-  { name: 'top2.jpg', width: 640, height: 800, size: 40013 },
-  { name: 'top3.jpg', width: 640, height: 959, size: 39076 },
-  { name: 'bottom1.jpg', width: 640, height: 512, size: 20671 },
-  { name: 'bottom2.jpg', width: 640, height: 960, size: 26672 },
-  { name: 'bottom3.jpg', width: 640, height: 427, size: 33402 },
-  { name: 'shoe1.jpg', width: 640, height: 457, size: 43925 },
-  { name: 'shoe2.jpg', width: 640, height: 800, size: 23610 },
-  { name: 'shoe3.jpg', width: 640, height: 640, size: 18615 }
+  { name: 'top1.jpg', width: 480, height: 640, size: 13557 },
+  { name: 'top2.jpg', width: 480, height: 640, size: 32250 },
+  { name: 'top3.jpg', width: 480, height: 640, size: 33195 },
+  { name: 'bottom1.jpg', width: 480, height: 640, size: 33212 },
+  { name: 'bottom2.jpg', width: 480, height: 640, size: 34025 },
+  { name: 'bottom3.jpg', width: 480, height: 640, size: 21508 },
+  { name: 'shoe1.jpg', width: 480, height: 640, size: 17314 },
+  { name: 'shoe2.jpg', width: 480, height: 640, size: 19357 },
+  { name: 'shoe3.jpg', width: 480, height: 640, size: 27750 }
 ];
 
 const LAYERED_DEMO_ROWS = [
@@ -32,25 +32,25 @@ const LAYERED_DEMO_ROWS = [
     key: 'head',
     emoji: '🙂',
     name: '头像 / 发型',
-    images: ['/assets/samples/head1.jpg', '/assets/samples/head2.jpg', '/assets/samples/head3.jpg']
+    images: ['/assets/samples/head1.jpg', '/assets/samples/head2.jpg', '/assets/samples/head3.jpg', '/assets/samples/head4.jpg']
   },
   {
     key: 'tops',
     emoji: '👕',
     name: '上衣',
-    images: ['/assets/samples/top1.jpg', '/assets/samples/top2.jpg', '/assets/samples/top3.jpg']
+    images: ['/assets/samples/top1.jpg', '/assets/samples/top2.jpg', '/assets/samples/top3.jpg', '/assets/samples/top4.jpg']
   },
   {
     key: 'bottoms',
     emoji: '👖',
     name: '下装',
-    images: ['/assets/samples/bottom1.jpg', '/assets/samples/bottom2.jpg', '/assets/samples/bottom3.jpg']
+    images: ['/assets/samples/bottom1.jpg', '/assets/samples/bottom2.jpg', '/assets/samples/bottom3.jpg', '/assets/samples/bottom4.jpg']
   },
   {
     key: 'shoes',
     emoji: '👟',
     name: '鞋子',
-    images: ['/assets/samples/shoe1.jpg', '/assets/samples/shoe2.jpg', '/assets/samples/shoe3.jpg']
+    images: ['/assets/samples/shoe1.jpg', '/assets/samples/shoe2.jpg', '/assets/samples/shoe3.jpg', '/assets/samples/shoe4.jpg']
   }
 ];
 
