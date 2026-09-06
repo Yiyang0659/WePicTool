@@ -15,7 +15,7 @@
         <view class="home-play-icon home-play-icon-layered">👕</view>
         <view class="home-play-copy">
           <view class="home-play-title">分层换装</view>
-          <view class="home-play-desc">四个部位自由滑动组合</view>
+          <view class="home-play-desc">四叠按部位组织，好友滑着搭配</view>
         </view>
         <view class="home-play-check" wx:if="{{activeHomePlay === 'layered-dressup'}}">✓</view>
       </view>
@@ -40,7 +40,7 @@
         <view class="home-preview-head">
           <view>
             <view class="home-preview-title">分层换装</view>
-            <view class="home-preview-sub">四个部位独立滑动，搭配出你的专属风格</view>
+            <view class="home-preview-sub">按部位整理成四叠，发给好友滑着搭配</view>
           </view>
           <view class="home-preview-tag">随心搭配</view>
         </view>
@@ -98,7 +98,7 @@
           </view>
           <view class="home-action-secondary" bindtap="onCreateLayeredDressup">
             <view class="home-action-icon home-action-icon-upload">↑</view>
-            <view><view class="home-action-title">上传我的素材</view><view class="home-action-sub">用自己的图片创作</view></view>
+            <view><view class="home-action-title">上传我的素材</view><view class="home-action-sub">按部位上传，自己掌控</view></view>
           </view>
         </view>
       </block>
@@ -148,7 +148,7 @@
         <view class="home-tool-item" wx:if="{{item.status === 'available'}}" bindtap="onOpenOutfitPicker">
           <view class="home-tool-icon home-tool-icon-{{item.key}}">{{item.emoji}}</view>
           <view class="home-tool-name">{{item.name}}</view>
-          <view class="home-tool-status">可用</view>
+          <view class="home-tool-status">{{item.statusText || '可用'}}</view>
         </view>
         <view class="home-tool-item home-tool-item-coming" wx:else bindtap="onComingSoon">
           <view class="home-tool-icon home-tool-icon-{{item.key}}">{{item.emoji}}</view>
@@ -168,6 +168,7 @@
       <view class="confirm-repick" wx:if="{{pickedImages.length > 0}}" bindtap="onResetPickedImages">重新选择</view>
       <view class="confirm-head-spacer" wx:else></view>
     </view>
+    <view class="confirm-purpose-note">自动分类 · 去背 · 统一白底，整理成可发送的图片组</view>
 
     <!-- 空状态先解释任务，用户主动点击后才调起系统图片选择器。 -->
     <view class="picked-card">

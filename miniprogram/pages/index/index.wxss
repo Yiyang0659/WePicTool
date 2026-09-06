@@ -748,6 +748,14 @@
   min-height: 88rpx;
 }
 
+.confirm-purpose-note {
+  margin: -10rpx 4rpx 20rpx;
+  color: #8b90a6;
+  font-size: 22rpx;
+  line-height: 1.5;
+  text-align: center;
+}
+
 /* 已选图片缩略图网格（4 列，白卡容器） */
 .picked-card {
   background-color: #ffffff;
@@ -1280,7 +1288,7 @@
 
 .layered-current-panel {
   display: flex;
-  width: 172rpx;
+  width: 188rpx;
   padding: 14rpx 12rpx;
   border: 2rpx solid #eef0ff;
   border-radius: 22rpx;
@@ -1327,7 +1335,7 @@
 }
 
 .layered-current-cell {
-  width: 108rpx;
+  width: 116rpx;
   height: 80rpx;
   margin-top: 4rpx;
   overflow: hidden;
@@ -1612,7 +1620,7 @@
   }
 
   .layered-current-panel {
-    width: 142rpx;
+    width: 152rpx;
   }
 
   .layered-choice-meta {
@@ -1632,6 +1640,6 @@
   }
 
   .layered-current-cell {
-    width: 92rpx;
+    width: 100rpx;
   }
 }

@@ -312,6 +312,7 @@ test('homepage flagship actions navigate to demo and upload dressup modes', () =
     '/pages/dressup/dressup?mode=upload'
   ]);
   assert.equal(page.data.homeTools.find(item => item.key === 'ai-outfit').status, 'available');
+  assert.equal(page.data.homeTools.find(item => item.key === 'ai-outfit').statusText, '分类去背');
   assert.equal(page.data.homeTools.some(item => item.key === 'suit' || item.key === 'dressup'), false);
 });
 
@@ -325,6 +326,8 @@ test('homepage uses one shared two-play preview and keeps the AI outfit picker e
   assert.match(markup, /bindtap="onTryLayeredDemo"/);
   assert.match(markup, /bindtap="onCreateLayeredDressup"/);
   assert.match(markup, /bindtap="onOpenOutfitPicker"/);
+  assert.match(markup, /好友滑着搭配/);
+  assert.match(markup, /自动分类 · 去背 · 统一白底/);
   assert.doesNotMatch(markup, /layered-stack-edge|hero-card|hot-template-card|guide-card|fun-text-demo-card/);
 });
 
