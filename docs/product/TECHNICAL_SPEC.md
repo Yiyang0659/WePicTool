@@ -46,7 +46,7 @@
 ```text
 微信小程序产品外壳
   -> 首页任务选择 / 记录 / 我的
-  -> 分层云换装 | 趣味字画 | AI 穿搭整理
+  -> 穿搭叠图（手动分层 / AI 整理）| 趣味字画
 
 玩法层
   -> 玩法注册与素材包
@@ -74,9 +74,9 @@
 
 ```mermaid
 flowchart TD
-    HOME["首页任务选择"] --> DRESS["分层云换装"]
+    HOME["首页任务选择"] --> DRESS["穿搭叠图工作台"]
     HOME --> FUN["趣味字画"]
-    HOME --> OUTFIT["AI 穿搭整理"]
+    DRESS --> OUTFIT["AI 整理与复核子流程"]
 
     DRESS --> PROJECT["玩法项目 / 任务模型"]
     FUN --> PROJECT
@@ -107,7 +107,9 @@ flowchart TD
 
 | 目录 | 职责 |
 | --- | --- |
-| `miniprogram/pages/index/` | 首页 Tab：双玩法选择、单一共享预览、分层/趣味字画入口，以及次级 AI 穿搭选图确认流程 |
+| `miniprogram/pages/index/` | 首页 Tab：穿搭叠图/趣味字画选择、单一共享预览与当前玩法行动 |
+| `miniprogram/pages/dressup/` | 统一穿搭工作台：四部位项目、手动/AI 双添加方式、待确认素材、排序、预览和保存 |
+| `miniprogram/pages/outfit-import/` | AI 添加子流程：1–9 张选图、处理进度、分类复核、原图/白底选择与 eventChannel 回填 |
 | `miniprogram/pages/record/` | 记录 Tab：本地历史任务列表、查看、再次生成 |
 | `miniprogram/pages/profile/` | 我的 Tab：相册权限、反馈、分享、缓存清理 |
 | `miniprogram/pages/result/` | 结果页（非 Tab）：白色聊天风格，分组展示、保存、改分类、发送引导 |
@@ -117,7 +119,7 @@ flowchart TD
 | `miniprogram/config/stylePacks.js`、`fontFeels.js` | 7 套视觉包的背景/配色注册表与 3 种字体字感 |
 | `miniprogram/utils/funTextProject.js`、`funTextTransform.js` | 不可变项目编辑、20 步历史、恢复操作，以及装饰拖动/缩放/旋转的纯计算 |
 | `miniprogram/app.json` | 全局页面路由与底部 Tab（首页 / 记录 / 我的）配置 |
-| `miniprogram/config/env.js` | CloudBase 环境 ID、renderer 服务名/字体地址、本地预览与趣味字画入口开关 |
+| `miniprogram/config/env.js` | CloudBase 环境 ID、renderer 服务名/字体地址、本地预览、趣味字画入口和穿搭 AI 添加开关 |
 | `miniprogram/utils/task.js` | 任务规则、mock 分组、发送能力判断、图片尺寸计算 |
 | `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 AI 分类 + 阶段三抠图 |
 | `miniprogram/cloudfunctions/contentGuard/` | 云函数：使用微信内容安全接口审核用户反馈文本 |
@@ -213,7 +215,13 @@ others
 当前更适合普通发送；想要叠图效果，建议每组补到 3 张以上
 ```
 
-### 4.4 趣味字画场景与编辑历史
+### 4.4 统一穿搭项目与 AI 回填
+
+`layeredDressup` 项目继续以 `head / tops / bottoms / shoes` 为四个最终叠，并增加向后兼容的 `pendingItems: []`。老草稿缺少该字段时按空数组读取。手动与 AI 素材共享同一 item 结构；AI 项额外保留 `sourceImageId`、原图/处理图地址和 `classification`。
+
+`outfit-import` 只持有本批临时选择和复核状态，通过 `acceptAiImport` eventChannel 返回 `{ groups, pendingItems, ratio }`。工作台按 `sourceImageId` 或稳定图片地址去重后追加；不覆盖现有组。每组最多 12 张，低置信度、`others` 和容量溢出项进入最多 36 张的待确认区。任何追加、归类或删除都使旧 manifest 和保存续传状态失效。
+
+### 4.5 趣味字画场景与编辑历史
 
 趣味字画继续使用 version 1 项目外壳，以附加可选字段兼容已有本地记录；不把仅增加白名单样式元数据误判为不兼容协议升级。新建场景稳定记录：
 

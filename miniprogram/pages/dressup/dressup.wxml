@@ -4,12 +4,55 @@
       <text class="intro-kicker">{{sourceLabel}}</text>
       <text class="intro-pack">{{packTitle}}</text>
     </view>
-    <view class="intro-title">四个部位，各自滑动换装</view>
-    <view class="intro-desc">每组补到 3 张以上，保存后回微信分四次合并发送。系统素材和你的图片可以混着用。</view>
+    <view class="intro-title">穿搭叠图：四个部位，各自滑动</view>
+    <view class="intro-desc">自己按部位添加，或让 AI 先整理混合图片；两种方式可以一起用，不会清空已有素材。</view>
     <view class="intro-progress">
       <text class="progress-strong">{{validGroupCount}} / 4</text>
       <text> 个部位已经可以叠图</text>
     </view>
+  </view>
+
+  <view class="material-entry-card">
+    <view class="material-entry-heading">添加穿搭素材</view>
+    <view class="material-entry-desc">已经分好类就自己添加；一批混合图片可以交给 AI 预整理。</view>
+    <view class="material-entry-actions">
+      <view class="material-entry-button primary" bindtap="onOpenManualGroupPicker">
+        <view class="material-entry-icon">＋</view>
+        <view>
+          <view class="material-entry-title">自己分层</view>
+          <view class="material-entry-subtitle">选择部位后添加图片</view>
+        </view>
+      </view>
+      <view class="material-entry-button secondary {{!aiAssistEnabled ? 'disabled' : ''}}" bindtap="onOpenAiImporter">
+        <view class="material-entry-icon">AI</view>
+        <view>
+          <view class="material-entry-title">AI 帮我整理</view>
+          <view class="material-entry-subtitle">识别后先确认再加入</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="pending-card" wx:if="{{pendingList.length > 0}}">
+    <view class="pending-heading-row">
+      <view>
+        <view class="pending-title">待确认素材</view>
+        <view class="pending-desc">AI 不确定的图片留在这里，由你决定放进哪个部位。</view>
+      </view>
+      <text class="pending-count">{{pendingList.length}} 张</text>
+    </view>
+    <scroll-view class="pending-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
+      <view class="pending-row">
+        <view class="pending-item" wx:for="{{pendingList}}" wx:key="id" wx:for-item="pending">
+          <image class="pending-image" src="{{pending.displayUrl}}" mode="aspectFill" bindtap="onPreviewPendingItem" data-url="{{pending.displayUrl}}" />
+          <view class="pending-source">{{pending.sourceText}}</view>
+          <view class="pending-actions">
+            <view class="pending-assign" bindtap="onAssignPendingItem" data-id="{{pending.id}}">选部位</view>
+            <view class="pending-delete" bindtap="onRemovePendingItem" data-id="{{pending.id}}">删除</view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
   </view>
 
   <view class="group-card" wx:for="{{groupList}}" wx:key="key" wx:for-item="g">
@@ -49,7 +92,7 @@
     </view>
 
     <view class="group-actions">
-      <view class="action-secondary" bindtap="onAddUserItems" data-group="{{g.key}}">上传我的</view>
+      <view class="action-secondary" bindtap="onAddUserItems" data-group="{{g.key}}">上传到此部位</view>
       <view class="action-secondary" bindtap="onAddSystemItems" data-group="{{g.key}}">补系统素材</view>
       <view class="action-primary {{!g.canExport ? 'disabled' : ''}}" bindtap="onSaveGroup" data-group="{{g.key}}">保存此组</view>
     </view>

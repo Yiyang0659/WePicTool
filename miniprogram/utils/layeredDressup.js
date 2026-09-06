@@ -3,6 +3,7 @@ const registry = require('../config/playRegistry');
 const GROUP_DEFINITIONS = registry.GROUP_DEFINITIONS;
 const STACK_THRESHOLD = registry.STACK_THRESHOLD;
 const GROUP_KEYS = GROUP_DEFINITIONS.map(function (group) { return group.key; });
+const PENDING_MAX_COUNT = 36;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -33,17 +34,44 @@ function reindex(items, groupKey) {
   });
 }
 
+function reindexPending(items) {
+  return (items || []).map(function (item, index) {
+    return Object.assign({}, item, {
+      groupKey: 'pending',
+      order: index + 1,
+      label: '待确认素材 ' + (index + 1)
+    });
+  });
+}
+
+function itemIdentity(item) {
+  var input = item || {};
+  return input.sourceImageId || input.originalFileId || input.originalUrl || input.assetId || input.url || input.fileId || input.localPath || input.tempFilePath || input.id || '';
+}
+
 function normalizeItem(item, groupKey, source, index, seed) {
   var input = item || {};
-  var url = input.url || input.localPath || input.tempFilePath || input.fileId || '';
+  var processedUrl = input.processedUrl || input.mattedUrl || input.mattedFileId || '';
+  var originalUrl = input.originalUrl || input.originalFileId || input.localPath || input.tempFilePath || input.url || input.fileId || '';
+  var url = processedUrl || input.url || input.localPath || input.tempFilePath || input.fileId || originalUrl;
   return {
-    id: input.id || input.assetId || (source + '_' + seed + '_' + index),
+    id: input.id || input.resultId || input.assetId || (source + '_' + seed + '_' + index),
     assetId: input.assetId || (source === 'system' ? input.id || '' : ''),
+    sourceImageId: input.sourceImageId || input.imageId || '',
     groupKey: groupKey,
     source: source,
     title: input.title || '',
     url: url,
     localPath: input.localPath || input.tempFilePath || url,
+    fileId: input.fileId || '',
+    originalUrl: originalUrl,
+    originalFileId: input.originalFileId || '',
+    processedUrl: processedUrl,
+    mattedUrl: input.mattedUrl || '',
+    mattedFileId: input.mattedFileId || '',
+    matted: input.matted === true,
+    type: input.type || '',
+    classification: input.classification || null,
     width: Number(input.width) || 0,
     height: Number(input.height) || 0,
     size: Number(input.size) || 0,
@@ -53,7 +81,7 @@ function normalizeItem(item, groupKey, source, index, seed) {
 }
 
 function resolveSourceMode(currentMode, addedSource) {
-  if (addedSource === 'user') {
+  if (addedSource === 'user' || addedSource === 'ai') {
     return currentMode === 'demo' || currentMode === 'mixed' ? 'mixed' : 'upload';
   }
   if (addedSource === 'system') {
@@ -91,6 +119,7 @@ function createProject(options) {
     ratio: input.ratio || '4:5',
     labelMode: input.labelMode || 'clean',
     groups: groups,
+    pendingItems: [],
     createdAt: now,
     updatedAt: now
   };
@@ -140,6 +169,102 @@ function moveItem(project, groupKey, fromIndex, toIndex) {
   var moved = items.splice(from, 1)[0];
   items.splice(to, 0, moved);
   next.groups[groupKey] = reindex(items, groupKey);
+  next.updatedAt = Date.now();
+  return next;
+}
+
+function mergeImportedItems(project, importedGroups, pendingItems, source) {
+  var next = clone(project);
+  var addedSource = source || 'ai';
+  var groups = importedGroups || {};
+  var incomingPending = Array.isArray(pendingItems) ? pendingItems : [];
+  var identities = {};
+  var addedCount = 0;
+  var duplicateCount = 0;
+  var overflowCount = 0;
+  var seed = Date.now();
+
+  next.pendingItems = Array.isArray(next.pendingItems) ? next.pendingItems : [];
+  GROUP_KEYS.forEach(function (groupKey) {
+    next.groups[groupKey] = Array.isArray(next.groups[groupKey]) ? next.groups[groupKey] : [];
+    next.groups[groupKey].forEach(function (item) {
+      var identity = itemIdentity(item);
+      if (identity) identities[identity] = true;
+    });
+  });
+  next.pendingItems.forEach(function (item) {
+    var identity = itemIdentity(item);
+    if (identity) identities[identity] = true;
+  });
+
+  function accept(item, preferredGroupKey, index) {
+    var identity = itemIdentity(item);
+    if (!identity || identities[identity]) {
+      duplicateCount += 1;
+      return;
+    }
+    identities[identity] = true;
+    var definition = getGroupDefinition(preferredGroupKey);
+    var targetHasRoom = definition && next.groups[preferredGroupKey].length < definition.maxCount;
+    if (targetHasRoom) {
+      next.groups[preferredGroupKey].push(normalizeItem(item, preferredGroupKey, addedSource, index, seed));
+      addedCount += 1;
+      return;
+    }
+    if (next.pendingItems.length < PENDING_MAX_COUNT) {
+      next.pendingItems.push(normalizeItem(item, 'pending', addedSource, index, seed));
+      addedCount += 1;
+      if (definition) overflowCount += 1;
+    }
+  }
+
+  GROUP_KEYS.forEach(function (groupKey) {
+    (Array.isArray(groups[groupKey]) ? groups[groupKey] : []).forEach(function (item, index) {
+      accept(item, groupKey, index);
+    });
+  });
+  incomingPending.forEach(function (item, index) { accept(item, 'pending', index); });
+
+  GROUP_KEYS.forEach(function (groupKey) {
+    next.groups[groupKey] = reindex(next.groups[groupKey], groupKey);
+  });
+  next.pendingItems = reindexPending(next.pendingItems);
+  next.sourceMode = resolveSourceMode(next.sourceMode, addedSource);
+  next.updatedAt = Date.now();
+
+  return {
+    project: next,
+    addedCount: addedCount,
+    duplicateCount: duplicateCount,
+    overflowCount: overflowCount,
+    pendingCount: next.pendingItems.length
+  };
+}
+
+function assignPendingItem(project, itemId, groupKey) {
+  var definition = getGroupDefinition(groupKey);
+  if (!definition) return { project: clone(project), assigned: false, reason: 'unknown-group' };
+  var next = clone(project);
+  next.pendingItems = Array.isArray(next.pendingItems) ? next.pendingItems : [];
+  next.groups[groupKey] = Array.isArray(next.groups[groupKey]) ? next.groups[groupKey] : [];
+  if (next.groups[groupKey].length >= definition.maxCount) {
+    return { project: next, assigned: false, reason: 'group-full' };
+  }
+  var index = next.pendingItems.findIndex(function (item) { return item.id === itemId; });
+  if (index < 0) return { project: next, assigned: false, reason: 'not-found' };
+  var item = next.pendingItems.splice(index, 1)[0];
+  next.groups[groupKey].push(normalizeItem(item, groupKey, item.source || 'ai', next.groups[groupKey].length, Date.now()));
+  next.groups[groupKey] = reindex(next.groups[groupKey], groupKey);
+  next.pendingItems = reindexPending(next.pendingItems);
+  next.updatedAt = Date.now();
+  return { project: next, assigned: true, reason: '' };
+}
+
+function removePendingItem(project, itemId) {
+  var next = clone(project);
+  next.pendingItems = reindexPending((next.pendingItems || []).filter(function (item) {
+    return item.id !== itemId;
+  }));
   next.updatedAt = Date.now();
   return next;
 }
@@ -212,6 +337,9 @@ module.exports = {
   addItems: addItems,
   removeItem: removeItem,
   moveItem: moveItem,
+  mergeImportedItems: mergeImportedItems,
+  assignPendingItem: assignPendingItem,
+  removePendingItem: removePendingItem,
   buildSendability: buildSendability,
   buildPreviewGroups: buildPreviewGroups,
   serializeProject: serializeProject

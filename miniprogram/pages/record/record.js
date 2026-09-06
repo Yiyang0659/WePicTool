@@ -38,7 +38,7 @@ Page({
       outfit: { label: '穿搭叠图', emoji: '👕' },
       funtext: { label: '趣味字画', emoji: '🎨' },
       dressup: { label: '滑滑换装', emoji: '👠' },
-      'layered-dressup': { label: '分层换装', emoji: '👠' },
+      'layered-dressup': { label: '穿搭叠图', emoji: '👠' },
       bigtext: { label: '大字滑卡', emoji: '🔤' },
       story: { label: '剧情滑卡', emoji: '🎬' },
       blindbox: { label: '盲盒抽卡', emoji: '🎁' },

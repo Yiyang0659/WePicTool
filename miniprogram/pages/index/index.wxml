@@ -14,8 +14,8 @@
       >
         <view class="home-play-icon home-play-icon-layered">👕</view>
         <view class="home-play-copy">
-          <view class="home-play-title">分层换装</view>
-          <view class="home-play-desc">四叠按部位组织，好友滑着搭配</view>
+          <view class="home-play-title">穿搭叠图</view>
+          <view class="home-play-desc">整理成四叠，好友滑着搭配</view>
         </view>
         <view class="home-play-check" wx:if="{{activeHomePlay === 'layered-dressup'}}">✓</view>
       </view>
@@ -39,7 +39,7 @@
       <block wx:if="{{activeHomePlay === 'layered-dressup'}}">
         <view class="home-preview-head">
           <view>
-            <view class="home-preview-title">分层换装</view>
+            <view class="home-preview-title">穿搭叠图</view>
             <view class="home-preview-sub">按部位整理成四叠，发给好友滑着搭配</view>
           </view>
           <view class="home-preview-tag">随心搭配</view>
@@ -92,13 +92,13 @@
         </view>
 
         <view class="home-action-row">
-          <view class="home-action-primary" bindtap="onTryLayeredDemo">
-            <view class="home-action-icon">▶</view>
-            <view><view class="home-action-title">直接试玩</view><view class="home-action-sub">随机素材，立即体验</view></view>
+          <view class="home-action-primary" bindtap="onCreateLayeredDressup">
+            <view class="home-action-icon">↑</view>
+            <view><view class="home-action-title">用我的图片制作</view><view class="home-action-sub">手动分层或 AI 整理</view></view>
           </view>
-          <view class="home-action-secondary" bindtap="onCreateLayeredDressup">
-            <view class="home-action-icon home-action-icon-upload">↑</view>
-            <view><view class="home-action-title">上传我的素材</view><view class="home-action-sub">按部位上传，自己掌控</view></view>
+          <view class="home-action-secondary" bindtap="onTryLayeredDemo">
+            <view class="home-action-icon home-action-icon-upload">▶</view>
+            <view><view class="home-action-title">先试玩示例</view><view class="home-action-sub">随机素材，立即体验</view></view>
           </view>
         </view>
       </block>
@@ -145,12 +145,7 @@
     </view>
     <view class="home-tools-grid">
       <block wx:for="{{homeTools}}" wx:key="key">
-        <view class="home-tool-item" wx:if="{{item.status === 'available'}}" bindtap="onOpenOutfitPicker">
-          <view class="home-tool-icon home-tool-icon-{{item.key}}">{{item.emoji}}</view>
-          <view class="home-tool-name">{{item.name}}</view>
-          <view class="home-tool-status">{{item.statusText || '可用'}}</view>
-        </view>
-        <view class="home-tool-item home-tool-item-coming" wx:else bindtap="onComingSoon">
+        <view class="home-tool-item home-tool-item-coming" bindtap="onComingSoon">
           <view class="home-tool-icon home-tool-icon-{{item.key}}">{{item.emoji}}</view>
           <view class="home-tool-name">{{item.name}}</view>
           <view class="home-tool-status">即将上线</view>
@@ -159,65 +154,4 @@
     </view>
   </block>
 
-  <!-- ===== 步骤二：AI 穿搭整理选图与处理前确认 ===== -->
-  <view class="confirm-section" wx:if="{{step === 'confirm'}}">
-    <view class="confirm-head-row">
-      <view class="confirm-back" bindtap="onBackToHome" aria-label="返回首页">‹</view>
-      <view class="confirm-head" wx:if="{{pickedImages.length === 0}}">还未选择图片</view>
-      <view class="confirm-head" wx:else>已选 {{pickedImages.length}} 张图片</view>
-      <view class="confirm-repick" wx:if="{{pickedImages.length > 0}}" bindtap="onResetPickedImages">重新选择</view>
-      <view class="confirm-head-spacer" wx:else></view>
-    </view>
-    <view class="confirm-purpose-note">自动分类 · 去背 · 统一白底，整理成可发送的图片组</view>
-
-    <!-- 空状态先解释任务，用户主动点击后才调起系统图片选择器。 -->
-    <view class="picked-card">
-      <view class="picked-empty" wx:if="{{pickedImages.length === 0}}" bindtap="onAddMedia">
-        <view class="picked-empty-plus">＋</view>
-        <view class="picked-empty-title">添加图片</view>
-        <view class="picked-empty-sub">从相册选择或拍摄，最多 9 张</view>
-      </view>
-      <view class="picked-grid" wx:else>
-        <view class="picked-item" wx:for="{{pickedImages}}" wx:key="tempFilePath" bindtap="onPreviewConfirmImage" data-index="{{index}}">
-          <image class="picked-img" src="{{item.tempFilePath}}" mode="aspectFill" lazy-load="true" />
-          <!-- 单张移除：catchtap 阻止冒泡，避免同时触发预览 -->
-          <view class="picked-del" catchtap="onRemoveImage" data-index="{{index}}">×</view>
-        </view>
-        <!-- 添加图片入口：未满 9 张时显示，点击进入本地相册继续添加 -->
-        <view class="picked-add" wx:if="{{pickedImages.length < 9}}" bindtap="onAddMedia">
-          <view class="picked-add-plus">＋</view>
-          <view class="picked-add-text">添加</view>
-        </view>
-      </view>
-    </view>
-
-    <!-- 输出比例分段控件 -->
-    <view class="ratio-label">输出比例（白底卡片）</view>
-    <view class="ratio-seg">
-      <view
-        class="ratio-seg-item {{confirmRatio === item.key ? 'ratio-seg-item-on' : ''}}"
-        wx:for="{{ratioOptions}}"
-        wx:key="key"
-        bindtap="onSelectConfirmRatio"
-        data-key="{{item.key}}"
-      >{{item.label}}</view>
-    </view>
-    <view class="ratio-note">比例只影响白底卡片合成，不重新抠图；结果页可随时修改。</view>
-
-    <!-- 开始处理主按钮 -->
-    <view class="confirm-cta {{pickedImages.length === 0 ? 'confirm-cta-disabled' : ''}} {{processing ? 'confirm-cta-disabled' : ''}}" bindtap="onStartProcess">
-      <view class="btn-grad">{{processing ? '处理中...' : '开始处理'}}</view>
-    </view>
-    <view class="confirm-hint">若包含人像、风景等非穿搭图片，将自动归入「其他素材」</view>
-  </view>
-
-  <!-- 处理中的 Loading 弹窗 -->
-  <view class="loading-overlay" wx:if="{{loading}}">
-    <view class="loading-box">
-      <view class="spinner"></view>
-      <view class="loading-text">{{loadingText}}</view>
-      <view class="loading-subtext">正在处理您的穿搭素材...</view>
-      <view class="loading-cancel" bindtap="onCancelProcess">取消处理</view>
-    </view>
-  </view>
 </view>

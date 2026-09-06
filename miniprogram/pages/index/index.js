@@ -124,7 +124,6 @@ Page({
     funTextDemoIndex: 0,
     funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY === true,
     homeTools: [
-      { key: 'ai-outfit', name: 'AI 穿搭整理', emoji: '📸', status: 'available', statusText: '分类去背' },
       { key: 'film', name: '胶片相册', emoji: '🎞️', status: 'coming' },
       { key: 'beforeafter', name: '前后对比', emoji: '↔️', status: 'coming' },
       { key: 'more', name: '更多玩法', emoji: '•••', status: 'coming' }

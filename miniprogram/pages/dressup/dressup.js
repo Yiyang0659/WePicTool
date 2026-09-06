@@ -3,6 +3,7 @@ const dressup = require('../../utils/layeredDressup');
 const imageExporter = require('../../utils/imageExporter');
 const stackExportManifest = require('../../utils/stackExportManifest');
 const sequenceBadgeComposer = require('../../utils/sequenceBadgeComposer');
+const { ENABLE_OUTFIT_AI_ASSIST } = require('../../config/env');
 
 const DRAFT_KEY = 'wepictool_layered_dressup_draft_v1';
 const DEFAULT_PACK_ID = 'funny-paper-doll-v1';
@@ -22,6 +23,8 @@ Page({
   data: {
     project: null,
     groupList: [],
+    pendingList: [],
+    aiAssistEnabled: ENABLE_OUTFIT_AI_ASSIST === true,
     sourceLabel: '',
     packTitle: '抽象搞怪',
     validGroupCount: 0,
@@ -143,7 +146,7 @@ Page({
           isFirst: index === 0,
           canLeft: index > 0,
           canRight: index < all.length - 1,
-          sourceText: item.source === 'system' ? '系统' : '我的'
+          sourceText: item.source === 'system' ? '系统' : (item.source === 'ai' ? 'AI 整理' : '我的')
         });
       });
       var status = sendability.groups[definition.key];
@@ -170,11 +173,18 @@ Page({
       mixed: '混合素材'
     };
     var pack = registry.getAssetPack(project.templateId || DEFAULT_PACK_ID);
+    var pendingList = (project.pendingItems || []).map(function (item) {
+      return Object.assign({}, item, {
+        displayUrl: getItemUrl(item),
+        sourceText: item.source === 'ai' ? 'AI 整理' : '我的'
+      });
+    });
 
     var that = this;
     this.setData({
       project: project,
       groupList: groupList,
+      pendingList: pendingList,
       sourceLabel: sourceLabels[project.sourceMode] || '我的素材',
       packTitle: pack ? pack.title : '抽象搞怪',
       validGroupCount: sendability.validGroupCount,
@@ -271,8 +281,56 @@ Page({
     }
   },
 
+  onOpenManualGroupPicker: function () {
+    var that = this;
+    wx.showActionSheet({
+      itemList: registry.GROUP_DEFINITIONS.map(function (group) {
+        return group.emoji + ' ' + group.title;
+      }),
+      success: function (result) {
+        var definition = registry.GROUP_DEFINITIONS[result.tapIndex];
+        if (definition) that.chooseUserItemsForGroup(definition.key);
+      }
+    });
+  },
+
+  onOpenAiImporter: function () {
+    if (!this.data.aiAssistEnabled) {
+      wx.showToast({ title: 'AI 整理暂未开放', icon: 'none' });
+      return;
+    }
+    var that = this;
+    wx.navigateTo({
+      url: '/pages/outfit-import/outfit-import',
+      success: function (result) {
+        if (!result.eventChannel || typeof result.eventChannel.on !== 'function') return;
+        result.eventChannel.on('acceptAiImport', function (payload) {
+          that.onAcceptAiImport(payload || {});
+        });
+      }
+    });
+  },
+
+  onAcceptAiImport: function (payload) {
+    var result = dressup.mergeImportedItems(
+      this.data.project,
+      payload.groups || {},
+      payload.pendingItems || [],
+      'ai'
+    );
+    if (payload.ratio) result.project.ratio = payload.ratio;
+    this.refreshProject(result.project);
+    var title = result.addedCount > 0
+      ? '已加入 ' + result.addedCount + ' 张'
+      : (result.duplicateCount > 0 ? '这些图片已在工作台' : '没有可加入的图片');
+    wx.showToast({ title: title, icon: 'none' });
+  },
+
   onAddUserItems: function (event) {
-    var groupKey = event.currentTarget.dataset.group;
+    this.chooseUserItemsForGroup(event.currentTarget.dataset.group);
+  },
+
+  chooseUserItemsForGroup: function (groupKey) {
     var definition = registry.GROUP_DEFINITIONS.find(function (group) {
       return group.key === groupKey;
     });
@@ -312,6 +370,42 @@ Page({
         }
       }
     });
+  },
+
+  onPreviewPendingItem: function (event) {
+    var current = event.currentTarget.dataset.url;
+    var urls = (this.data.pendingList || []).map(function (item) {
+      return item.displayUrl;
+    }).filter(Boolean);
+    if (urls.length > 0) wx.previewImage({ current: current || urls[0], urls: urls });
+  },
+
+  onAssignPendingItem: function (event) {
+    var itemId = event.currentTarget.dataset.id;
+    if (!itemId) return;
+    var that = this;
+    wx.showActionSheet({
+      itemList: registry.GROUP_DEFINITIONS.map(function (group) {
+        return group.emoji + ' ' + group.title;
+      }),
+      success: function (sheetResult) {
+        var definition = registry.GROUP_DEFINITIONS[sheetResult.tapIndex];
+        if (!definition) return;
+        var moveResult = dressup.assignPendingItem(that.data.project, itemId, definition.key);
+        if (!moveResult.assigned) {
+          wx.showToast({ title: moveResult.reason === 'group-full' ? '这一组已满 12 张' : '素材归类失败', icon: 'none' });
+          return;
+        }
+        that.refreshProject(moveResult.project);
+        wx.showToast({ title: '已放入' + definition.title, icon: 'success' });
+      }
+    });
+  },
+
+  onRemovePendingItem: function (event) {
+    var itemId = event.currentTarget.dataset.id;
+    if (!itemId) return;
+    this.refreshProject(dressup.removePendingItem(this.data.project, itemId));
   },
 
   onAddSystemItems: function (event) {
@@ -665,7 +759,7 @@ Page({
 
   onShareAppMessage: function () {
     return {
-      title: '四个部位随便滑，来玩分层云换装',
+      title: '四个部位随便滑，来玩穿搭叠图',
       path: '/pages/index/index'
     };
   }

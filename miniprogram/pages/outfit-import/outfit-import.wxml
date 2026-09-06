@@ -1,0 +1,83 @@
+<view class="import-page">
+  <block wx:if="{{phase === 'select'}}">
+    <view class="purpose-card">
+      <view class="purpose-badge">AI 添加方式</view>
+      <view class="purpose-title">把混在一起的图片交给 AI</view>
+      <view class="purpose-desc">自动分类、去背并统一白底。整理结果确认后才会加入穿搭叠图，不会覆盖已有素材。</view>
+    </view>
+
+    <view class="section-head">
+      <view class="section-title">{{pickedImages.length > 0 ? '已选 ' + pickedImages.length + ' 张图片' : '添加图片'}}</view>
+      <view class="reset-link" wx:if="{{pickedImages.length > 0}}" bindtap="onResetPickedImages">重新选择</view>
+    </view>
+
+    <view class="picked-card">
+      <view class="picked-empty" wx:if="{{pickedImages.length === 0}}" bindtap="onAddMedia">
+        <view class="picked-empty-plus">＋</view>
+        <view class="picked-empty-title">添加混合图片</view>
+        <view class="picked-empty-sub">从相册选择或拍摄，最多 9 张</view>
+      </view>
+      <view class="picked-grid" wx:else>
+        <view class="picked-item" wx:for="{{pickedImages}}" wx:key="tempFilePath" bindtap="onPreviewPickedImage" data-index="{{index}}">
+          <image class="picked-img" src="{{item.tempFilePath}}" mode="aspectFill" />
+          <view class="picked-del" catchtap="onRemovePickedImage" data-index="{{index}}">×</view>
+        </view>
+        <view class="picked-add" wx:if="{{pickedImages.length < 9}}" bindtap="onAddMedia">
+          <view class="picked-add-plus">＋</view>
+          <view>继续添加</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="ratio-title">输出比例（白底卡片）</view>
+    <view class="ratio-seg">
+      <view class="ratio-item {{ratio === item.key ? 'ratio-item-active' : ''}}" wx:for="{{ratioOptions}}" wx:key="key" data-key="{{item.key}}" bindtap="onSelectRatio">{{item.label}}</view>
+    </view>
+    <view class="ratio-note">比例只影响 AI 整理后的白底卡片，不裁掉原图主体。</view>
+
+    <view class="primary-button {{pickedImages.length === 0 || processing ? 'button-disabled' : ''}}" bindtap="onStartProcess">{{processing ? '正在整理…' : '开始 AI 整理'}}</view>
+    <view class="secondary-button" bindtap="onBackToWorkbench">返回穿搭工作台</view>
+  </block>
+
+  <block wx:if="{{phase === 'review'}}">
+    <view class="review-head">
+      <view class="review-title">AI 整理完成</view>
+      <view class="review-sub">请确认分类；“待确认”素材需要你选择部位。</view>
+    </view>
+    <view class="review-summary">{{reviewSummary}}</view>
+
+    <view class="review-group" wx:for="{{reviewGroups}}" wx:key="key" wx:if="{{item.items.length > 0}}">
+      <view class="review-group-head">
+        <view class="review-group-title">{{item.emoji}} {{item.title}}</view>
+        <view class="review-group-count">{{item.items.length}} 张</view>
+      </view>
+      <scroll-view class="review-scroll" scroll-x="true" enhanced="true" show-scrollbar="false">
+        <view class="review-row">
+          <view class="review-item" wx:for="{{item.items}}" wx:key="id" wx:for-item="image">
+            <image class="review-image" src="{{image.displayUrl}}" mode="aspectFit" bindtap="onPreviewReviewImage" data-id="{{image.id}}" />
+            <view class="review-badge" wx:if="{{image.needsConfirmation}}">待确认</view>
+            <view class="review-actions">
+              <view bindtap="onChangeReviewGroup" data-id="{{image.id}}">改分类</view>
+              <view wx:if="{{image.canToggle}}" bindtap="onToggleReviewVersion" data-id="{{image.id}}">{{image.showMode === 'original' ? '白底' : '原图'}}</view>
+              <view class="review-delete" bindtap="onRemoveReviewItem" data-id="{{image.id}}">删除</view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="review-actions-bottom">
+      <view class="secondary-button" bindtap="onUseManual">改为自己分层</view>
+      <view class="primary-button" bindtap="onApplyImport">加入穿搭叠图</view>
+    </view>
+  </block>
+
+  <view class="loading-overlay" wx:if="{{loading}}">
+    <view class="loading-box">
+      <view class="spinner"></view>
+      <view class="loading-title">{{loadingText}}</view>
+      <view class="loading-desc">可以取消，本批图片不会影响工作台已有素材</view>
+      <view class="loading-cancel" bindtap="onCancelProcess">取消处理</view>
+    </view>
+  </view>
+</view>

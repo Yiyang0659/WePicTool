@@ -11,7 +11,7 @@ const PLAY_REGISTRY = [
   {
     id: 'layered-dressup',
     version: 1,
-    title: '分层云换装',
+    title: '穿搭叠图',
     status: 'available',
     entryModes: ['demo', 'upload', 'mixed'],
     groupSchema: GROUP_DEFINITIONS.map(function (group) { return group.key; }),
