@@ -1,5 +1,7 @@
 'use strict';
 
+const decorationColors = require('./decorationColors');
+
 function drawHeart(context, fill) {
   context.beginPath();
   context.moveTo(0, 18);
@@ -114,9 +116,10 @@ const STICKER_DRAWERS = {
 };
 
 function drawProceduralAsset(context, layer) {
+  const paint = decorationColors.getDecorationPaint(layer);
   context.save();
-  context.strokeStyle = '#171717';
-  context.fillStyle = '#F35C8C';
+  context.strokeStyle = paint.stroke;
+  context.fillStyle = paint.fill;
   context.lineWidth = 8;
   const sticker = STICKER_DRAWERS[layer.assetKey];
   if (sticker) {

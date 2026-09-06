@@ -15,6 +15,7 @@ const model = require('../miniprogram/utils/funTextProject');
 const taskModule = require('../miniprogram/utils/task');
 
 const plannerClient = require('../miniprogram/utils/creativePlannerClient');
+const funTextCases = require('../miniprogram/config/funTextCases');
 
 const CANDIDATES_PAGE = '/pages/fun-text-candidates/fun-text-candidates';
 
@@ -52,7 +53,8 @@ function loadFunTextPage(wxApi) {
     '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/contentGuardClient': client,
     '../../utils/creativePlannerClient': plannerClient,
-    '../../utils/funTextProject': model
+    '../../utils/funTextProject': model,
+    '../../config/funTextCases': funTextCases
   }, wxApi));
 }
 
@@ -91,6 +93,23 @@ test('fun text input page exposes only one sentence, tags and the generate actio
   assert.match(wxml, /比如：我今天想见你/);
   assert.match(wxml, /帮我变成一叠/);
   assert.ok(!/字体|背景|贴纸/.test(wxml), '输入页不得出现字体/背景/贴纸参数');
+});
+
+test('input page exposes structured inspiration cases and selecting one fills editable fields', () => {
+  const { wxApi } = recordingWx({});
+  const page = loadFunTextPage(wxApi);
+  assert.equal(page.data.caseCategories.length, 6);
+  assert.equal(page.data.funTextCases.length, 12);
+  page.onSelectCase({ currentTarget: { dataset: { caseId: 'birthday-wish' } } });
+  assert.equal(page.data.selectedCaseId, 'birthday-wish');
+  assert.equal(page.data.inputText, '你的生日愿望会实现');
+  assert.equal(page.data.expressionKey, 'cute-direct');
+  assert.equal(page.data.preferredStrategyId, 'countdown_reveal');
+  assert.equal(page.data.preferredStylePackId, 'gentle-journal-v1');
+  assert.equal(page.data.charCount, Array.from(page.data.inputText).length);
+  const wxml = readMiniProgramFile('miniprogram/pages/fun-text/fun-text.wxml');
+  assert.match(wxml, /找个灵感/);
+  assert.match(wxml, /用这个案例/);
 });
 
 test('onGenerate trims, audits once, and navigates with a three-candidate rules project', async () => {
@@ -220,4 +239,30 @@ test('release feature flag keeps the static demo visible but closes its interact
 
   assert.deepEqual(calls.navigations, []);
   assert.match(calls.toasts[0].title, /暂不可用/);
+});
+
+test('homepage switches the shared preview without resetting the fun text card', () => {
+  const { wxApi } = recordingWx({});
+  const page = loadIndexPage(wxApi);
+
+  page.onSelectHomePlay({ currentTarget: { dataset: { playId: 'fun-text-stack' } } });
+  page.onFunTextDemoChange({ detail: { current: 3 } });
+  page.onSelectHomePlay({ currentTarget: { dataset: { playId: 'layered-dressup' } } });
+  page.onSelectHomePlay({ currentTarget: { dataset: { playId: 'fun-text-stack' } } });
+
+  assert.equal(page.data.activeHomePlay, 'fun-text-stack');
+  assert.equal(page.data.funTextDemoIndex, 3);
+});
+
+test('homepage provides a guarded direct entry to the fun text input page', () => {
+  const enabled = recordingWx({});
+  const enabledPage = loadIndexPage(enabled.wxApi);
+  enabledPage.onCreateFunText();
+  assert.deepEqual(enabled.calls.navigations, ['/pages/fun-text/fun-text']);
+
+  const disabled = recordingWx({});
+  const disabledPage = loadIndexPage(disabled.wxApi, { ENABLE_FUN_TEXT_STACK_ENTRY: false });
+  disabledPage.onCreateFunText();
+  assert.deepEqual(disabled.calls.navigations, []);
+  assert.match(disabled.calls.toasts[0].title, /暂不可用/);
 });

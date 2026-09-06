@@ -6,6 +6,10 @@ const { loadMiniProgramPage, instantiatePage } = require('./helpers/miniprogram-
 const model = require('../miniprogram/utils/funTextProject');
 const task = require('../miniprogram/utils/task');
 const styles = require('../miniprogram/config/stylePacks');
+const cases = require('../miniprogram/config/funTextCases');
+const assets = require('../miniprogram/config/assetRegistry');
+const fontFeels = require('../miniprogram/config/fontFeels');
+const transforms = require('../miniprogram/utils/funTextTransform');
 
 function fixture(pageName) {
   const effects = [];
@@ -15,6 +19,10 @@ function fixture(pageName) {
     '../../utils/task': task,
     '../../utils/funTextProject': model,
     '../../config/stylePacks': styles,
+    '../../config/funTextCases': cases,
+    '../../config/assetRegistry': assets,
+    '../../config/fontFeels': fontFeels,
+    '../../utils/funTextTransform': transforms,
     '../../utils/contentGuardClient': { async checkTextContent() { effects.push('audit'); } },
     '../../utils/creativePlannerClient': { async planCandidates() { effects.push('plan'); return {}; } },
     '../../utils/funCardRendererClient': {

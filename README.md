@@ -1,10 +1,10 @@
 # WePicTool 微信小程序
 
-WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换装是当前功能分支的旗舰玩法，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线；源码与自动化已覆盖穿搭「选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 图片内可见序号 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送」主链路，并在功能分支让穿搭、分层云换装和趣味字画共用同一顺序导出契约。
+WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换装与趣味字画是当前功能分支的两条主玩法，AI 穿搭整理是已有次级工具，玩法模板库是长期资产（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线；源码与自动化已覆盖穿搭「选图 -> 压缩 -> 安全审查 -> AI 分类抠图 -> 前端 Canvas 白底卡片合成 -> 图片内可见序号 -> 微信折叠预览 -> 按组保存 -> 回微信合并发送」主链路，并在功能分支让穿搭、分层云换装和趣味字画共用同一顺序导出契约。
 
-当前证据边界：趣味字画阶段一与 P2.2 实验只有代码和自动化结果；Docker 镜像、CloudBase 部署/公网关闭开关、线上端点、微信开发者工具、iOS、Android 和真实微信聊天均未验证，功能也尚未合并或发布。生产仍为 **NOT READY**，代码头部检查和发布配置声明不能替代平台访问边界核验。
+当前证据边界：趣味字画阶段一与 P2.2 实验尚未取得 Docker、CloudBase、线上端点或双端真机证据；开发者工具已验证普通编译、分层换装编号/保存入口以及微信预览关键交互，但未完成趣味字画全链路、iOS、Android、真实相册和真实微信聊天验收。功能尚未合并或发布。生产仍为 **NOT READY**，当前发布预检会因私密访问模式未声明、HTTP 字体地址和本机 loopback 地址失败。
 
-小程序 UI 采用底部三 Tab 架构（首页 / 记录 / 我的），结果页与预览页采用沉浸式微信聊天窗口风格，让用户提前预演多图合并发送后的真实叠图折叠效果。
+小程序 UI 采用底部三 Tab 架构（首页 / 记录 / 我的）。功能分支首页使用“分层换装 / 趣味字画”双玩法选择和单一共享预览，让用户先选任务、在同一区域试玩或开始创作；结果页与预览页采用沉浸式微信聊天窗口风格，让用户提前预演多图合并发送后的真实叠图折叠效果。
 
 ---
 
@@ -12,12 +12,15 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换�
 
 实时项目状态与近期优先级分别以 [`docs/current.md`](docs/current.md) 和 [`docs/roadmap.md`](docs/roadmap.md) 为准；本说明提供项目全景入口与运行指南。
 
+当前继续开发入口是 `.worktrees/fun-text-stack-phase1`（`codex/unified-stack-export`）。仓库根目录仍检出较早的 `codex/layered-dressup-design`，不要在根目录旧分支继续开发或读取其旧状态文档作为当前结论。
+
 ### 当前已实现特性
 
+- **双玩法共享首页（功能分支）**：以“今天想做什么？”进入分层换装或趣味字画；两种玩法共用一块主预览并保留各自选择进度。分层预览只展示真实缩略图和当前四项选择，不再使用无内容白色叠卡；当前玩法的试玩/上传或示例/输入操作紧跟预览。
 - **首页选图与压缩**：支持选择 1–9 张衣物/鞋子图片，上传前自动进行等比压缩（最长边不超过 1600px）。
 - **分层云换装（功能分支）**：支持内置纸娃娃素材直接试玩或按部位上传，按头像/发型、上衣、下装、鞋子四组独立排序、预览和保存；真机验收尚未完成。
-- **趣味字画输入与三套候选（功能分支代码）**：首页展示五张包内静态示例牌堆；输入页提供一句话与组合表达标签，文案经 `contentGuard` 审核后进入三套独立可滑候选页，支持「用这套」、「自己改改」与「再来三套」；Canvas 失败时调用云托管 `/preview-stack` 降级为服务端低清图，不使用系统字体回退。入口可由 `ENABLE_FUN_TEXT_STACK_ENTRY` 紧急关闭，同时保留首页静态示例。
-- **趣味字画轻编辑与高清结果（功能分支）**：轻编辑页聚焦提供「改文字」、「换整叠风格」与「调整顺序」；通用结果页（`pages/template-result`）自动调用云托管输出 1080 高清 PNG、写入本地历史任务、支持深色微信牌堆全屏预演（`pages/preview`）与顺序断点续存，保存完成提供明确的微信四步发送指引。
+- **趣味字画输入与三套候选（功能分支代码）**：首页展示五张包内静态示例牌堆；输入页提供一句话、组合表达标签，以及 6 类共 12 个可继续修改的灵感案例。系统可从 8 种规则叙事玩法中生成三套结构不同的可滑候选，支持「用这套」、「自己改改」与「再来三套」；Canvas 失败时调用云托管 `/preview-stack` 降级为服务端低清图，不使用系统字体回退。入口可由 `ENABLE_FUN_TEXT_STACK_ENTRY` 紧急关闭，同时保留首页静态示例。
+- **趣味字画聚焦编辑与高清结果（功能分支）**：编辑页固定为「内容 / 样式 / 装饰」三入口，支持改单卡文字与字号、卡片排序、7 套风格的背景/配色、3 种授权字感、白名单贴纸/涂鸦的拖动/双指缩放/旋转，以及 20 步撤销重做和单卡/整组恢复；编辑会让旧渲染立即失效。通用结果页（`pages/template-result`）调用云托管输出 1080 高清 PNG、写入本地历史任务、支持普通/深色微信牌堆全屏预演（`pages/preview`）与顺序断点续存，保存完成提供明确的微信四步发送指引。
 - **趣味字画本地记录与旧记录兼容（功能分支）**：记录页支持「趣味字画」分类展示与任务重开，历史大字滑卡记录展示友好升级引导与重新制作入口；提供完整的云托管部署指南（`docs/deployment/fun-card-renderer.md`）与自动化配置预检。
 - **P2.2 AI 故事规划器（计划外实验代码）**：分支含 `planFunTextStory`、结构化候选校验/单次修复、客户端规则降级与本地模拟测试；它不在已确认的阶段一计划交付范围内，发布范围尚未确认，云函数部署、模型 API key、线上域名和真机链路仍待办。
 - **本地/云端双模式**：未配置云环境时自动启用本地 Mock 预览模式；配置后走云存储与云函数链路。
@@ -26,9 +29,9 @@ WePicTool 是微信「合并发送 / 叠图」玩法生成器——分层云换�
 - **前端 Canvas 白底卡合成**：`utils/cardComposer.js` 提供 1:1 / 4:5 / 3:4 多比例合成、品类视觉重心锚点对齐、浅色衣物微阴影与描边兜底。
 - **统一可见序号导出（功能分支）**：`stackExportManifest.js`、`sequenceBadgeComposer.js` 与 `imageExporter.js` 为三种玩法生成独立叠、把 `01…N` 写入最终图片，并按同一 manifest 串行预览/保存、失败续存。微信 API 不能指定相册文件名或排序，用户仍需按图片角标确认 `01` 在第一位。
 - **微信聊天风结果页**（`pages/result`）：白色微信聊天气泡展示分组卡片，支持展开横滑缩略图、原图/白底图切换、改分类、大图预览。
-- **微信发送效果全屏预览**（`pages/preview`）：深色全屏聊天风格，50% 舞台比例等比适配，支持扑克牌 3D 堆叠手势滑卡切换与纵向展开。
+- **微信发送效果全屏预览**（`pages/preview`）：固定一屏的微信聊天壳层，导航和底部预览栏保持原位，只有聊天内容区纵向滚动；图片按微信消息通道与原图比例展示，支持普通/深色模式合并按钮、顶层卡横滑、纵向展开和原生大图查看。
 - **微信叠图发送能力判定**：`utils/task.js` 自动判定分组是否达到微信 $\ge 3$ 张叠图阈值，不足时提供降级提示。
-- **一键合并发送与保存**：支持一键保存全部、按分组批量保存到系统相册，并附带相册授权引导。
+- **批量保存与发送引导**：支持保存全部、按分组批量保存到系统相册，并附带相册授权和回微信勾选发送指引；小程序不能直接替用户发送图片，也不承诺系统相册自动排序。
 - **本地轻量历史记录**（`pages/record`）：处理完成自动写入设备本地缓存（最多保留 20 条，不上传云端，无账号负担），支持按相对日期（今天/昨天/N天前）聚合查看与再次生成。
 - **个人中心**（`pages/profile`）：提供相册权限管理、缓存清理、反馈建议、分享推荐与隐私说明。
 - **自动化测试与预检**：内置纯规则单元测试、语法检查、小程序配置预检及文档治理一致性校验。
@@ -96,14 +99,14 @@ WePicTool/
 │   │   ├── env.js                    # CloudBase 环境、renderer 服务/字体地址与入口开关
 │   │   └── playRegistry.js           # 玩法与内置素材包注册表
 │   ├── pages/                        # 页面视图层
-│   │   ├── index/                    # 首页 Tab：选图入口 (wx.chooseMedia)、分层云换装与趣味字画示例
-│   │   ├── fun-text/                 # 趣味字画输入页：一句话 + 组合表达标签
+│   │   ├── index/                    # 首页 Tab：双玩法选择、共享预览、分层/趣味字画入口与 AI 选图
+│   │   ├── fun-text/                 # 趣味字画输入页：一句话、表达标签与 12 个结构化案例
 │   │   ├── fun-text-candidates/      # 趣味字画候选页：三套独立可滑牌堆、用这套、自己改改、再来三套与低清降级
-│   │   ├── fun-text-editor/          # 趣味字画轻编辑页：改本卡文字、整叠换风格、调整顺序（首张微信封面）
+│   │   ├── fun-text-editor/          # 趣味字画聚焦编辑：内容、样式、装饰、手势与撤销恢复
 │   │   ├── template-result/          # 趣味字画/通用模板结果页：高清渲染、微信预演、按序保存与发送引导
 │   │   ├── dressup/                  # 分层云换装：素材编辑、排序、分组保存
 │   │   ├── result/                   # 结果页：白色聊天气泡、分组卡片、Canvas 合成、改分类
-│   │   ├── preview/                  # 预览页：深色微信聊天全屏预演、扑克牌堆叠、滑卡切换
+│   │   ├── preview/                  # 预览页：固定微信外壳、普通/深色切换、聊天区滚动与牌堆滑卡
 │   │   ├── record/                   # 记录 Tab：本地历史任务列表、相对日期聚合、再次生成
 │   │   └── profile/                  # 我的 Tab：相册权限、缓存清理、反馈与隐私说明
 │   ├── cloudfunctions/               # 微信云开发云函数
@@ -119,17 +122,19 @@ WePicTool/
 │       ├── sequenceBadgeComposer.js  # 独立 Canvas 写入 01…N 可见序号并物化最终导出图
 │       ├── imageExporter.js          # 按 manifest 串行保存相册，返回组/序号级断点游标
 │       ├── cardComposer.js           # 前端 Canvas 白底卡排版合成引擎 (1:1/4:5/3:4, 阴影描边)
-│       └── previewLayout.js          # 预览页 50% 宽度手势舞台比例计算
+│       └── previewLayout.js          # 预览页微信消息通道、38vw 紧凑缩略卡与比例计算
 ├── docs/                             # [项目大脑] 治理体系与知识库
+│   ├── README.md                     # 文档总览、接手顺序、职责地图与统一状态词
 │   ├── current.md                    # 当前阶段、活跃分支、阻塞项与下一步（唯一事实源）
-│   ├── roadmap.md                    # 优先级路线图 (P0~P5) 与进入条件
+│   ├── roadmap.md                    # 交付门禁 G0~G3 与产品能力 P1~P5
 │   ├── decisions.md                  # 架构、技术与产品关键决策库
 │   ├── governance.md                 # 开发与文档同步治理规则
 │   ├── changelog.md                  # 用户可感知的功能变更日志
 │   ├── product/                      # 产品核心文档
 │   │   ├── PRD.md                    # 产品需求文档
 │   │   ├── PLAYBOOK.md               # 叠图玩法实现手册 (微信平台事实与统一叠图管线)
-│   │   └── TECHNICAL_SPEC.md         # 架构与技术规格说明书
+│   │   ├── TECHNICAL_SPEC.md         # 架构与技术规格说明书
+│   │   └── DESIGN_SYSTEM.md          # 页面骨架、视觉令牌和组件基线（待确认）
 │   ├── ai-workflows/                 # AI 提示词工程与模型评测
 │   ├── iterations/                   # 每日敏捷迭代日志 (YYYY-MM-DD.md)
 │   ├── superpowers/                  # 单项功能设计说明 (specs/) 与实施计划 (plans/)
@@ -149,7 +154,8 @@ WePicTool/
 │   └── check-documentation.test.cjs  # 文档治理机制测试
 ├── .worktrees/                       # [Git 工作树] 独立功能分支
 │   ├── bigtext-handwrite/            # 历史大字滑卡实验，供趣味字画选择性迁移
-│   └── layered-dressup-mvp/          # 分层云换装 MVP，待集成与真机验收
+│   ├── layered-dressup-mvp/          # 分层云换装来源分支，保留历史/差异核对
+│   └── fun-text-stack-phase1/        # 当前集成工作树：codex/unified-stack-export
 ├── src/ & dist/                      # [演示沙盒] Vite + React + Tailwind 模拟器（不随小程序上传）
 ├── ui-reference/                     # 微信真实叠图录屏与视觉参考原型
 ├── package.json                      # 项目 npm 依赖与 scripts 配置
@@ -171,15 +177,17 @@ WePicTool/
 5. 分别右键 `miniprogram/cloudfunctions/` 下的 `processOutfit` 和 `contentGuard`，选择“上传并部署：云端安装依赖”。
 6. 需要联调趣味字画时，按 [`docs/deployment/fun-card-renderer.md`](docs/deployment/fun-card-renderer.md) 部署：小程序 POST 始终只通过 `wx.cloud.callContainer`，服务端/发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only`。上线硬前提是在服务设置关闭公网并保存核验证据，HTTP 网关仅公开字体精确路径；context/OpenID 头部不是独立公网鉴权。配置服务名、HTTPS 字体地址和 flag，客户端不得传 OpenID/context 或秘密。flag=false 时只保留首页静态示例，关闭直链输入、候选/编辑、记录重开/再次生成及结果恢复/渲染/保存；静态包不需 renderer URL/服务/access mode，其他玩法不受影响。
 7. 如评估后决定验证 P2.2，再单独部署 `planFunTextStory` 并配置服务端模型 API key；当前尚未完成这一步，也未确认它属于发布范围。
-8. 运行 `npm run check:miniprogram:release` 后再进入微信开发者工具、iOS、Android 与真实聊天验收。当前分支的页面、渲染、保存和记录链路只有代码/自动化证据，不代表线上或真机已通过。
+8. 运行 `npm run check:miniprogram:release` 后再进入微信开发者工具、iOS、Android 与真实聊天验收。当前发布预检仍因 access mode、HTTP 和 loopback 字体地址失败；已有开发者工具局部回归不代表趣味字画线上链路或双端真机已通过。
 
 ---
 
 ## 核心文档索引
 
+- 🧭 **文档总览与接手顺序**：[`docs/README.md`](docs/README.md)
 - 📋 **产品需求**：[`docs/product/PRD.md`](docs/product/PRD.md)
 - 🎮 **叠图玩法手册**：[`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)
 - 📐 **技术方案设计**：[`docs/product/TECHNICAL_SPEC.md`](docs/product/TECHNICAL_SPEC.md)
+- 🎨 **界面与页面模板基线（待确认）**：[`docs/product/DESIGN_SYSTEM.md`](docs/product/DESIGN_SYSTEM.md)
 - 📍 **当前状态**：[`docs/current.md`](docs/current.md)
 - 🗺️ **路线图与优先级**：[`docs/roadmap.md`](docs/roadmap.md)
 - ✍️ **趣味字画设计**：[`docs/superpowers/specs/2026-08-31-fun-text-stack-design.md`](docs/superpowers/specs/2026-08-31-fun-text-stack-design.md)

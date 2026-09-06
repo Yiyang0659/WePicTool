@@ -10,6 +10,11 @@ const {
 } = require('./sceneValidator');
 
 const DEFAULT_FONT_PATH = path.join(__dirname, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
+const DEFAULT_FONT_PATHS = Object.freeze({
+  'LXGWMarkerGothic-Regular.ttf': DEFAULT_FONT_PATH,
+  'SmileySans-Oblique.ttf': path.join(__dirname, 'fonts', 'SmileySans-Oblique.ttf'),
+  'MaShanZheng-Regular.ttf': path.join(__dirname, 'fonts', 'MaShanZheng-Regular.ttf')
+});
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const DEFAULT_RATE_LIMIT = 30;
 const DEFAULT_RATE_WINDOW_MS = 60 * 1000;
@@ -219,15 +224,18 @@ function readJson(request) {
 
 function createHttpServer(options) {
   const config = options || {};
-  const fontPath = config.fontPath || DEFAULT_FONT_PATH;
+  const fontPaths = Object.assign({}, DEFAULT_FONT_PATHS, config.fontPaths || {});
+  if (config.fontPath) fontPaths['LXGWMarkerGothic-Regular.ttf'] = config.fontPath;
   const devMode = config.devMode === true;
   const rateLimiter = typeof config.rateLimiter === 'function'
     ? config.rateLimiter
     : createCallerRateLimiter();
   return http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://localhost');
-    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/font/LXGWMarkerGothic-Regular.ttf') {
+    const fontFileName = url.pathname.indexOf('/font/') === 0 ? url.pathname.slice('/font/'.length) : '';
+    if ((request.method === 'GET' || request.method === 'HEAD') && fontPaths[fontFileName]) {
       try {
+        const fontPath = fontPaths[fontFileName];
         const stat = fs.statSync(fontPath);
         response.writeHead(200, {
           'content-type': 'font/ttf',

@@ -10,6 +10,8 @@ if (rootArgIndex >= 0 && !args[rootArgIndex + 1]) {
 const root = path.resolve(rootArgIndex >= 0 ? args[rootArgIndex + 1] : process.cwd());
 const releaseMode = args.includes('--release');
 const miniprogramRoot = path.join(root, 'miniprogram');
+const MAIN_PACKAGE_LIMIT_BYTES = 2 * 1024 * 1024;
+const MAIN_PACKAGE_WARNING_BYTES = Math.floor(1.8 * 1024 * 1024);
 
 const errors = [];
 const warnings = [];
@@ -71,6 +73,53 @@ const rootProjectConfig = exists('project.config.json') ? readJson('project.conf
 const projectConfig = exists('miniprogram/project.config.json')
   ? readJson('miniprogram/project.config.json')
   : null;
+
+function normalizePackageRoot(value) {
+  return String(value || '').replace(/^[/\\]+|[/\\]+$/g, '').split(/[\\/]+/).join(path.sep);
+}
+
+function measureMainPackageSource() {
+  if (!fs.existsSync(miniprogramRoot)) return 0;
+  const declaredSubpackages = appConfig && (appConfig.subPackages || appConfig.subpackages);
+  const subpackageRoots = Array.isArray(declaredSubpackages)
+    ? declaredSubpackages.map(item => normalizePackageRoot(item && item.root)).filter(Boolean)
+    : [];
+  const excludedRoots = ['cloudfunctions', 'cloudhosting'];
+  let total = 0;
+  const stack = [miniprogramRoot];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const entryPath = path.join(current, entry.name);
+      const relativePath = path.relative(miniprogramRoot, entryPath);
+      if (entry.isDirectory()) {
+        const isExcludedRoot = excludedRoots.includes(relativePath);
+        const isSubpackageRoot = subpackageRoots.some(packageRoot => (
+          relativePath === packageRoot || relativePath.startsWith(`${packageRoot}${path.sep}`)
+        ));
+        if (entry.name !== 'node_modules' && !isExcludedRoot && !isSubpackageRoot) {
+          stack.push(entryPath);
+        }
+        continue;
+      }
+      if (entry.isFile()) total += fs.statSync(entryPath).size;
+    }
+  }
+
+  return total;
+}
+
+const mainPackageSourceBytes = measureMainPackageSource();
+if (mainPackageSourceBytes > MAIN_PACKAGE_LIMIT_BYTES) {
+  errors.push(
+    `小程序主包源码约 ${(mainPackageSourceBytes / 1024).toFixed(1)} KiB，超过微信单个主包 2 MiB 限制。`
+  );
+} else if (mainPackageSourceBytes > MAIN_PACKAGE_WARNING_BYTES) {
+  warnings.push(
+    `小程序主包源码约 ${(mainPackageSourceBytes / 1024).toFixed(1)} KiB，已接近微信单个主包 2 MiB 限制。`
+  );
+}
 
 if (!exists('project.config.json')) {
   warnings.push('根目录缺少 project.config.json；从项目根目录导入微信开发者工具时不会自动识别小程序。');

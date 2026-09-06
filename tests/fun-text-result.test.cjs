@@ -97,9 +97,11 @@ function loadResultPage(wxApi, customDeps) {
 
   const assetRegistry = loadMiniProgramModule('miniprogram/config/assetRegistry.js');
   const stylePacks = loadMiniProgramModule('miniprogram/config/stylePacks.js');
+  const fontFeels = loadMiniProgramModule('miniprogram/config/fontFeels.js');
   const painter = loadMiniProgramModule('miniprogram/utils/scenePainter.js', {
     '../config/assetRegistry': assetRegistry,
-    '../config/stylePacks': stylePacks
+    '../config/stylePacks': stylePacks,
+    '../config/fontFeels': fontFeels
   });
 
   const defaultSequenceComposer = {

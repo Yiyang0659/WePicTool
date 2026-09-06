@@ -9,7 +9,7 @@ function normalizeCreativeBrief(input) {
   var expressionKey = EXPRESSION_KEYS.indexOf(value.expressionKey) >= 0
     ? value.expressionKey
     : 'random-fun';
-  return {
+  var brief = {
     sourceText: sourceText,
     expressionKey: expressionKey,
     relationship: 'unspecified',
@@ -19,6 +19,14 @@ function normalizeCreativeBrief(input) {
     locale: 'zh-CN',
     variant: Math.max(0, Number(value.variant) || 0)
   };
+  if (typeof value.caseId === 'string' && value.caseId) brief.caseId = value.caseId;
+  if (typeof value.preferredStrategyId === 'string' && value.preferredStrategyId) {
+    brief.preferredStrategyId = value.preferredStrategyId;
+  }
+  if (typeof value.preferredStylePackId === 'string' && value.preferredStylePackId) {
+    brief.preferredStylePackId = value.preferredStylePackId;
+  }
+  return brief;
 }
 
 module.exports = {

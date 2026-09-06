@@ -4,6 +4,7 @@
 const contentGuardClient = require('../../utils/contentGuardClient');
 const creativePlannerClient = require('../../utils/creativePlannerClient');
 const funTextProject = require('../../utils/funTextProject');
+const funTextCases = require('../../config/funTextCases');
 const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 
 const EXPRESSION_OPTIONS = [
@@ -24,6 +25,12 @@ Page({
     charCount: 0,
     expressionOptions: EXPRESSION_OPTIONS,
     expressionKey: 'random-fun',
+    caseCategories: funTextCases.listFunTextCategories(),
+    funTextCases: funTextCases.listFunTextCases(),
+    activeCaseCategory: 'all',
+    selectedCaseId: '',
+    preferredStrategyId: '',
+    preferredStylePackId: '',
     generating: false
   },
 
@@ -38,7 +45,28 @@ Page({
   onSelectExpression: function (event) {
     const key = event.currentTarget.dataset.key;
     if (!key) return;
-    this.setData({ expressionKey: key });
+    this.setData({ expressionKey: key, selectedCaseId: '', preferredStrategyId: '', preferredStylePackId: '' });
+  },
+
+  onSelectCaseCategory: function (event) {
+    const key = event.currentTarget.dataset.key || 'all';
+    this.setData({
+      activeCaseCategory: key,
+      funTextCases: funTextCases.listFunTextCases(key === 'all' ? '' : key)
+    });
+  },
+
+  onSelectCase: function (event) {
+    const selected = funTextCases.getFunTextCase(event.currentTarget.dataset.caseId);
+    if (!selected) return;
+    this.setData({
+      selectedCaseId: selected.caseId,
+      inputText: selected.sourceText,
+      charCount: Array.from(selected.sourceText).length,
+      expressionKey: selected.expressionKey,
+      preferredStrategyId: selected.preferredStrategyId,
+      preferredStylePackId: selected.preferredStylePackId
+    });
   },
 
   onGenerate: async function () {
@@ -62,6 +90,9 @@ Page({
       const brief = {
         sourceText: sourceText,
         expressionKey: this.data.expressionKey,
+        caseId: this.data.selectedCaseId,
+        preferredStrategyId: this.data.preferredStrategyId,
+        preferredStylePackId: this.data.preferredStylePackId,
         now: Date.now()
       };
       const planRes = await creativePlannerClient.planCandidates(wx, brief);

@@ -703,6 +703,7 @@ test('candidates page template declares 3 stacks, swiper cards, and no system fo
   const combined = [wxml, js, wxss].join('\n');
 
   assert.match(wxml, /fun-card-canvas/);
+  assert.match(wxml, /bindfontunavailable="onCanvasError"/);
   assert.match(wxml, /用这套/);
   assert.match(wxml, /自己改改/);
   assert.match(wxml, /再来三套/);

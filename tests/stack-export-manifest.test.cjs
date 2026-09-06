@@ -103,6 +103,14 @@ test('rejects malformed manifests and unsupported sources', () => {
   assert.throws(() => manifest.validateManifest(unsupported), /图片路径协议不支持/);
 });
 
+test('accepts the WeChat DevTools temp-file host without allowing arbitrary HTTP', () => {
+  const manifest = load();
+  assert.equal(manifest.isSupportedSourceUrl('http://tmp/numbered-card.jpg'), true);
+  assert.equal(manifest.isSupportedSourceUrl('http://tmp'), true);
+  assert.equal(manifest.isSupportedSourceUrl('http://tmp.evil.example/numbered-card.jpg'), false);
+  assert.equal(manifest.isSupportedSourceUrl('http://example.com/numbered-card.jpg'), false);
+});
+
 test('fingerprint tracks source, ratio, order and badge version but ignores export urls', () => {
   const manifest = load();
   const base = manifest.buildOutfitManifest('task_3', {

@@ -17,7 +17,7 @@ function normalizeVariant(variant) {
 
 function planRuleCandidates(brief) {
   var variant = normalizeVariant(brief.variant);
-  var strategyIds = selector.selectStrategyIds(brief.expressionKey, variant);
+  var strategyIds = selector.selectStrategyIds(brief.expressionKey, variant, brief.preferredStrategyId);
   var candidates = strategyIds.map(function (strategyId) {
     var strategy = strategies.STRATEGY_REGISTRY[strategyId];
     var seed = hashSeed([

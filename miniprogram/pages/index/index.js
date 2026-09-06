@@ -27,20 +27,12 @@ const SAMPLE_FILES = [
   { name: 'shoe3.jpg', width: 640, height: 640, size: 18615 }
 ];
 
-// 首屏「朋友视角」演示卡轮播内容：直接复用包内示例图前 4 张（含上/下/鞋三类）
-const DEMO_SLIDES = [
-  { src: '/assets/samples/top1.jpg', num: '01' },
-  { src: '/assets/samples/bottom1.jpg', num: '02' },
-  { src: '/assets/samples/shoe1.jpg', num: '03' },
-  { src: '/assets/samples/top2.jpg', num: '04' }
-];
-
 const LAYERED_DEMO_ROWS = [
   {
     key: 'head',
     emoji: '🙂',
     name: '头像 / 发型',
-    images: ['/assets/samples/head1.png', '/assets/samples/head2.png', '/assets/samples/head3.png']
+    images: ['/assets/samples/head1.jpg', '/assets/samples/head2.jpg', '/assets/samples/head3.jpg']
   },
   {
     key: 'tops',
@@ -72,6 +64,47 @@ const FUN_TEXT_DEMO_SLIDES = [
   { src: '/assets/fun-text/demo/05.png' }
 ];
 
+const INITIAL_LAYERED_DEMO_INDICES = {
+  head: 0,
+  tops: 0,
+  bottoms: 0,
+  shoes: 0
+};
+
+function buildLayeredDemoState(indices) {
+  const normalizedIndices = Object.assign({}, INITIAL_LAYERED_DEMO_INDICES, indices || {});
+  const viewRows = LAYERED_DEMO_ROWS.map(function (row) {
+    const rawIndex = Number(normalizedIndices[row.key]);
+    const currentIndex = Number.isInteger(rawIndex) && rawIndex >= 0 && rawIndex < row.images.length
+      ? rawIndex
+      : 0;
+    normalizedIndices[row.key] = currentIndex;
+    return {
+      key: row.key,
+      emoji: row.emoji,
+      name: row.name,
+      currentIndex: currentIndex,
+      total: row.images.length,
+      images: row.images.map(function (src, index) {
+        return { src: src, index: index, selected: index === currentIndex };
+      })
+    };
+  });
+  return {
+    indices: normalizedIndices,
+    viewRows: viewRows,
+    currentItems: viewRows.map(function (row) {
+      return {
+        key: row.key,
+        name: row.name,
+        src: row.images[row.currentIndex].src
+      };
+    })
+  };
+}
+
+const INITIAL_LAYERED_DEMO_STATE = buildLayeredDemoState(INITIAL_LAYERED_DEMO_INDICES);
+
 Page({
   data: {
     loading: false,
@@ -82,20 +115,55 @@ Page({
     pickedImages: [],
     confirmRatio: '4:5',
     ratioOptions: CONFIRM_RATIO_OPTIONS,
-    // 首屏「朋友视角」仿真演示卡的轮播数据
-    demoSlides: DEMO_SLIDES,
-    layeredDemoRows: LAYERED_DEMO_ROWS,
+    activeHomePlay: 'layered-dressup',
+    layeredDemoIndices: INITIAL_LAYERED_DEMO_STATE.indices,
+    layeredDemoViewRows: INITIAL_LAYERED_DEMO_STATE.viewRows,
+    layeredCurrentItems: INITIAL_LAYERED_DEMO_STATE.currentItems,
     // 趣味字画真实示例（开发中）：可滑五张，滑到末张展示 CTA
     funTextDemoSlides: FUN_TEXT_DEMO_SLIDES,
     funTextDemoIndex: 0,
     funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY === true,
-    // 玩法模板（即将上线）：数据驱动渲染，点击统一走 onComingSoon
-    comingModules: [
-      { key: 'film', name: '胶片相册', emoji: '🎞️', desc: '把生活照做成统一画册' },
-      { key: 'beforeafter', name: '前后对比', emoji: '↔️', desc: '两种状态，滑动看变化' },
-      { key: 'panorama', name: '无缝画卷', emoji: '🖼️', desc: '一张宽图，分段连续滑动' },
-      { key: 'drama', name: '剧情反转', emoji: '🎬', desc: '封面留悬念，末张抖包袱' }
+    homeTools: [
+      { key: 'ai-outfit', name: 'AI 穿搭整理', emoji: '📸', status: 'available' },
+      { key: 'film', name: '胶片相册', emoji: '🎞️', status: 'coming' },
+      { key: 'beforeafter', name: '前后对比', emoji: '↔️', status: 'coming' },
+      { key: 'more', name: '更多玩法', emoji: '•••', status: 'coming' }
     ]
+  },
+
+  onSelectHomePlay: function (event) {
+    const playId = event && event.currentTarget && event.currentTarget.dataset
+      ? event.currentTarget.dataset.playId
+      : '';
+    if (playId !== 'layered-dressup' && playId !== 'fun-text-stack') return;
+    if (playId === this.data.activeHomePlay) return;
+    this.setData({ activeHomePlay: playId });
+  },
+
+  onSelectLayeredDemoItem: function (event) {
+    const dataset = event && event.currentTarget ? event.currentTarget.dataset || {} : {};
+    const groupKey = dataset.groupKey;
+    const index = Number(dataset.index);
+    const row = LAYERED_DEMO_ROWS.find(function (item) { return item.key === groupKey; });
+    if (!row || !Number.isInteger(index) || index < 0 || index >= row.images.length) return;
+    const nextIndices = Object.assign({}, this.data.layeredDemoIndices, { [groupKey]: index });
+    const nextState = buildLayeredDemoState(nextIndices);
+    this.setData({
+      layeredDemoIndices: nextState.indices,
+      layeredDemoViewRows: nextState.viewRows,
+      layeredCurrentItems: nextState.currentItems
+    });
+  },
+
+  onShiftLayeredDemoItem: function (event) {
+    const dataset = event && event.currentTarget ? event.currentTarget.dataset || {} : {};
+    const groupKey = dataset.groupKey;
+    const direction = Number(dataset.direction);
+    const row = LAYERED_DEMO_ROWS.find(function (item) { return item.key === groupKey; });
+    if (!row || (direction !== -1 && direction !== 1)) return;
+    const current = Number(this.data.layeredDemoIndices[groupKey]) || 0;
+    const nextIndex = (current + direction + row.images.length) % row.images.length;
+    this.onSelectLayeredDemoItem({ currentTarget: { dataset: { groupKey: groupKey, index: nextIndex } } });
   },
 
   onTryLayeredDemo: function () {
@@ -131,6 +199,14 @@ Page({
         navRes.eventChannel.emit('funTextProject', { project: project });
       }
     });
+  },
+
+  onCreateFunText: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
+      wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: '/pages/fun-text/fun-text' });
   },
 
   // 即将上线模块统一提示

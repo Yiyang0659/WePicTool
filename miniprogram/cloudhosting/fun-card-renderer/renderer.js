@@ -6,16 +6,22 @@ const { drawProceduralAsset } = require('./drawAssets');
 const SCENE_SIZE = 1080;
 const PREVIEW_SIZE = 360;
 const FINAL_SIZE = 1080;
-const FONT_FAMILY = 'LXGWMarkerGothic';
-let fontRegistered = false;
+const FONT_REGISTRY = Object.freeze({
+  marker: { family: 'LXGWMarkerGothic', file: 'LXGWMarkerGothic-Regular.ttf' },
+  playful: { family: 'SmileySans', file: 'SmileySans-Oblique.ttf' },
+  headline: { family: 'MaShanZheng', file: 'MaShanZheng-Regular.ttf' }
+});
+let fontsRegistered = false;
 
 function registerFont(GlobalFonts) {
-  if (fontRegistered) return;
-  const fontPath = path.join(__dirname, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
-  if (!GlobalFonts.registerFromPath(fontPath, FONT_FAMILY)) {
-    throw new Error('licensed font registration failed');
-  }
-  fontRegistered = true;
+  if (fontsRegistered) return;
+  Object.values(FONT_REGISTRY).forEach((font) => {
+    const fontPath = path.join(__dirname, 'fonts', font.file);
+    if (!GlobalFonts.registerFromPath(fontPath, font.family)) {
+      throw new Error('licensed font registration failed: ' + font.family);
+    }
+  });
+  fontsRegistered = true;
 }
 
 function paintText(context, layer, ratio) {
@@ -28,7 +34,11 @@ function paintText(context, layer, ratio) {
   context.translate(layer.x * ratio, layer.y * ratio);
   context.rotate((layer.rotation || 0) * Math.PI / 180);
   context.scale(layer.scale || 1, layer.scale || 1);
-  context.font = String(layer.fontSize * ratio) + 'px ' + FONT_FAMILY;
+  const font = FONT_REGISTRY[layer.fontKey || 'marker'];
+  if (!font || (layer.fontFamily && layer.fontFamily !== font.family)) {
+    throw new Error('unsupported font');
+  }
+  context.font = String(layer.fontSize * ratio) + 'px ' + font.family;
   context.textAlign = layer.align;
   context.textBaseline = 'middle';
   context.lineJoin = 'round';
@@ -139,6 +149,7 @@ module.exports = {
   SCENE_SIZE,
   PREVIEW_SIZE,
   FINAL_SIZE,
+  FONT_REGISTRY,
   createPngMaker,
   createSceneRenderer,
   createCardRollback

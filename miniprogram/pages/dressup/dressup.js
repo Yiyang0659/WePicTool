@@ -228,7 +228,10 @@ Page({
     var generation = ++this._exportGeneration;
     this.setData({ exportPreparing: true, exportError: '' });
     var materializing = sequenceBadgeComposer.materializeManifest(wx, this._sequenceCanvas, sourceManifest, {
-      isCurrent: function () { return that._exportGeneration === generation; }
+      isCurrent: function () { return that._exportGeneration === generation; },
+      resolvePath: function (wxApi, sourceUrl) {
+        return that.resolveSequenceImagePath(sourceUrl);
+      }
     }).then(function (manifest) {
       if (that._exportGeneration !== generation) {
         throw Object.assign(new Error('顺序图任务已过期'), { code: 'STALE_EXPORT_GENERATION' });
@@ -616,6 +619,15 @@ Page({
       });
     }
     return Promise.resolve(url);
+  },
+
+  resolveSequenceImagePath: function (url) {
+    if (!url) return Promise.reject(new Error('图片地址为空'));
+    // Canvas 2D resolves a leading-slash package path against the current page
+    // in DevTools/real-device rendering. Use an explicit path from dressup.js
+    // to the mini-program package root instead of copying the bundled asset.
+    if (url.indexOf('/assets/') === 0) return Promise.resolve('../..' + url);
+    return this.resolveImageFilePath(url);
   },
 
   saveToAlbum: function (filePath) {

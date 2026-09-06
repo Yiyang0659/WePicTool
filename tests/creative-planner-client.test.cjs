@@ -5,6 +5,7 @@ const { loadMiniProgramModule } = require('./helpers/miniprogram-loader.cjs');
 const strategies = loadMiniProgramModule('miniprogram/config/funTextStrategies.js');
 const stylePacks = loadMiniProgramModule('miniprogram/config/stylePacks.js');
 const assetRegistry = loadMiniProgramModule('miniprogram/config/assetRegistry.js');
+const fontFeels = loadMiniProgramModule('miniprogram/config/fontFeels.js');
 const strategySelector = loadMiniProgramModule('miniprogram/utils/strategySelector.js', {
   '../config/funTextStrategies': strategies
 });
@@ -20,6 +21,7 @@ const styleMatcher = loadMiniProgramModule('miniprogram/utils/styleMatcher.js', 
 const sceneComposer = loadMiniProgramModule('miniprogram/utils/sceneComposer.js', {
   '../config/stylePacks': stylePacks,
   '../config/assetRegistry': assetRegistry,
+  '../config/fontFeels': fontFeels,
   './candidatePlanner': candidatePlanner
 });
 

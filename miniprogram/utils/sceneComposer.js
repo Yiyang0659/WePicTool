@@ -1,6 +1,8 @@
 var stylePacks = require('../config/stylePacks');
 var assets = require('../config/assetRegistry');
 var planner = require('./candidatePlanner');
+var fontFeels = require('../config/fontFeels');
+var decorationColors = require('../config/decorationColors');
 
 var ROLE_LAYOUTS = {
   hook: { x: 540, y: 355, fontSize: 190, lineHeight: 225, align: 'center' },
@@ -87,7 +89,18 @@ function roleDecorations(candidate, card, stylePack) {
   return layers;
 }
 
-function composeScene(candidate, card, stylePack) {
+function composeScene(candidate, card, stylePack, options) {
+  var opts = options || {};
+  var backgroundVariantKey = opts.backgroundVariantKey || stylePack.defaultBackgroundVariantKey;
+  var paletteKey = opts.paletteKey || stylePack.defaultPaletteKey;
+  var fontFeelKey = opts.fontFeelKey || stylePack.defaultFontFeelKey;
+  var backgroundVariant = stylePacks.getBackgroundVariant(stylePack, backgroundVariantKey);
+  var paletteEntry = stylePacks.getPalette(stylePack, paletteKey);
+  var fontFeel = fontFeels.getFontFeel(fontFeelKey);
+  if (!backgroundVariant) throw new Error('未知背景变体：' + backgroundVariantKey);
+  if (!paletteEntry) throw new Error('未知配色：' + paletteKey);
+  if (!fontFeel) throw new Error('未知字感：' + fontFeelKey);
+  var palette = paletteEntry.colors;
   var layout = ROLE_LAYOUTS[card.role];
   if (!layout) throw new Error('不支持的卡片角色：' + card.role);
   var lines = splitText(card.text, card.role);
@@ -96,15 +109,16 @@ function composeScene(candidate, card, stylePack) {
     type: 'text',
     text: card.text,
     lines: lines,
-    effectKey: stylePack.textEffectsByRole[card.role],
-    fontFamily: 'LXGWMarkerGothic',
-    fontSize: fontSizeFor(card, layout),
+    effectKey: stylePack.textEffectsByRole[card.role] || fontFeel.defaultEffectKey,
+    fontKey: fontFeel.key,
+    fontFamily: fontFeel.fontFamily,
+    fontSize: Math.round(fontSizeFor(card, layout) * fontFeel.sizeScale),
     lineHeight: layout.lineHeight,
     x: Math.round(layout.x + jitter(candidate, card.order, 'text_main', 14)),
     y: Math.round(layout.y + jitter(candidate, card.order, 'text_main_y', 14)),
     rotation: Math.round(jitter(candidate, card.order, 'text_main_r', 3) * 10) / 10,
     scale: Math.round((1 + jitter(candidate, card.order, 'text_main_s', 0.04)) * 100) / 100,
-    color: stylePack.palette.primary,
+    color: palette.primary,
     align: layout.align
   };
   var layers = card.text ? [textLayer] : [];
@@ -114,17 +128,21 @@ function composeScene(candidate, card, stylePack) {
     role: card.role,
     width: 1080,
     height: 1080,
-    background: Object.assign({}, stylePack.background),
+    stylePackId: stylePack.id,
+    backgroundVariantKey: backgroundVariant.key,
+    paletteKey: paletteEntry.key,
+    fontFeelKey: fontFeel.key,
+    background: { assetKey: backgroundVariant.assetKey, color: backgroundVariant.color },
     layers: layers.concat(roleDecorations(candidate, card, stylePack))
   };
 }
 
-function composeCandidate(candidate, stylePackId) {
+function composeCandidate(candidate, stylePackId, options) {
   if (!candidate || !Array.isArray(candidate.cards)) throw new Error('候选缺少 cards');
   var stylePack = stylePacks.getStylePack(stylePackId);
   if (!stylePack) throw new Error('未知视觉包：' + stylePackId);
   return candidate.cards.map(function (card) {
-    return composeScene(candidate, card, stylePack);
+    return composeScene(candidate, card, stylePack, options);
   });
 }
 
@@ -133,7 +151,9 @@ function validateScene(scene) {
   if (!scene || scene.width !== 1080 || scene.height !== 1080) errors.push('场景必须为 1080 方图');
   if (!scene || !scene.background || typeof scene.background.color !== 'string') errors.push('场景缺少背景');
   if (scene && scene.background && !stylePacks.STYLE_PACKS.some(function (pack) {
-    return pack.background.assetKey === scene.background.assetKey;
+    return pack.backgroundVariants.some(function (variant) {
+      return variant.assetKey === scene.background.assetKey;
+    });
   })) {
     errors.push('背景素材不在视觉包白名单');
   }
@@ -162,6 +182,12 @@ function validateScene(scene) {
     if (layer && layer.type === 'text' && stylePacks.TEXT_EFFECT_KEYS.indexOf(layer.effectKey) < 0) {
       errors.push('文字效果不在白名单');
     }
+    if (layer && layer.type === 'text') {
+      var fontFeel = fontFeels.getFontFeel(layer.fontKey || scene.fontFeelKey || 'marker');
+      if (!fontFeel || (layer.fontFamily && layer.fontFamily !== fontFeel.fontFamily)) {
+        errors.push('字体不在白名单');
+      }
+    }
     if (layer && layer.type !== 'text') {
       var asset = assets.getAsset(layer.assetKey);
       if (!asset) {
@@ -169,8 +195,30 @@ function validateScene(scene) {
       } else if (asset.type !== layer.type) {
         errors.push('装饰素材类型不匹配');
       }
+      if (layer.decorationColorKey !== undefined && !decorationColors.getDecorationColor(layer.decorationColorKey)) {
+        errors.push('装饰颜色不在白名单');
+      }
     }
   });
+  var scenePack = stylePacks.getStylePack(scene && scene.stylePackId);
+  if (scenePack) {
+    var variant = stylePacks.getBackgroundVariant(scenePack, scene.backgroundVariantKey);
+    var palette = stylePacks.getPalette(scenePack, scene.paletteKey);
+    if (!variant || variant.assetKey !== scene.background.assetKey || variant.color !== scene.background.color) {
+      errors.push('背景变体与视觉包不匹配');
+    }
+    if (!palette) {
+      errors.push('配色与视觉包不匹配');
+    } else {
+      var allowedColors = Object.keys(palette.colors).map(function (key) { return palette.colors[key]; });
+      textLayers.forEach(function (layer) {
+        if (allowedColors.indexOf(layer.color) < 0) errors.push('文字颜色不属于当前配色');
+      });
+    }
+    if (!fontFeels.getFontFeel(scene.fontFeelKey)) errors.push('字感不在白名单');
+  } else if (scene && scene.stylePackId) {
+    errors.push('视觉包不在白名单');
+  }
   return { valid: errors.length === 0, errors: errors };
 }
 

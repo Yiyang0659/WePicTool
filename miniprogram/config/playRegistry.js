@@ -50,13 +50,13 @@ const ASSET_PACKS = [
     version: 1,
     title: '抽象搞怪',
     description: '四个部位随便滑，先用示例感受纸娃娃式换装。',
-    cover: '/assets/samples/head1.png',
+    cover: '/assets/samples/head1.jpg',
     license: 'project-owned',
     groups: {
       head: [
-        asset('funny_head_1', 'head', '橘色短发', '/assets/samples/head1.png', 640, 640),
-        asset('funny_head_2', 'head', '蓝色卷发', '/assets/samples/head2.png', 640, 640),
-        asset('funny_head_3', 'head', '紫色双丸子', '/assets/samples/head3.png', 640, 640)
+        asset('funny_head_1', 'head', '橘色短发', '/assets/samples/head1.jpg', 640, 640),
+        asset('funny_head_2', 'head', '蓝色卷发', '/assets/samples/head2.jpg', 640, 640),
+        asset('funny_head_3', 'head', '紫色双丸子', '/assets/samples/head3.jpg', 640, 640)
       ],
       tops: [
         asset('funny_top_1', 'tops', '上衣 1', '/assets/samples/top1.jpg', 640, 640),

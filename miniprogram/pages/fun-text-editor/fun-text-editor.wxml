@@ -1,20 +1,55 @@
 <!-- pages/fun-text-editor/fun-text-editor.wxml -->
 <view class="editor-page">
-  <!-- 当前卡片画布 -->
+  <view class="editor-topbar">
+    <view class="history-action {{canUndo ? '' : 'history-action-disabled'}}" bindtap="onUndo">↶ 撤销</view>
+    <view class="editor-card-status">第 {{currentCardIndex + 1}} / {{scenes.length}} 张</view>
+    <view class="history-action {{canRedo ? '' : 'history-action-disabled'}}" bindtap="onRedo">重做 ↷</view>
+  </view>
+
   <view class="editor-stage">
+    <image
+      wx:if="{{currentFallbackImage && !editingTextModalVisible}}"
+      class="editor-stage-fallback"
+      src="{{currentFallbackImage}}"
+      mode="aspectFit"
+    />
     <fun-card-canvas
-      wx:if="{{currentScene}}"
+      wx:elif="{{currentScene && !editingTextModalVisible}}"
       scene="{{currentScene}}"
       size="{{320}}"
       revision="{{canvasRevision}}"
+      bindfontunavailable="onFontUnavailable"
+      bindrendererror="onFontUnavailable"
     />
+    <view wx:if="{{serverPreviewLoading && !currentFallbackImage && !editingTextModalVisible}}" class="editor-preview-status">
+      <view class="editor-preview-status-title">正在恢复手写预览…</view>
+      <view class="editor-preview-status-text">你的文字和编辑不会丢失</view>
+    </view>
+    <view wx:if="{{serverPreviewFailed && !currentFallbackImage && !editingTextModalVisible}}" class="editor-preview-status editor-preview-status-error">
+      <view class="editor-preview-status-title">手写预览暂时没连上</view>
+      <view class="editor-preview-status-text">你的文字和编辑已保留</view>
+      <button class="editor-preview-retry" bindtap="onRetryEditorPreview">重新加载</button>
+    </view>
+    <view wx:if="{{activeEditorTab === 'decoration' && !editingTextModalVisible}}" class="decoration-overlay">
+      <view
+        wx:for="{{decorationHandles}}"
+        wx:key="id"
+        class="decoration-handle {{item.selected ? 'decoration-handle-selected' : ''}}"
+        style="left: {{item.left}}px; top: {{item.top}}px; width: {{item.size}}px; height: {{item.size}}px; color: {{item.color}}; transform: rotate({{item.rotation}}deg);"
+        data-layer-id="{{item.id}}"
+        bindtap="onSelectDecoration"
+        catchtouchstart="onDecorationTouchStart"
+        catchtouchmove="onDecorationTouchMove"
+        catchtouchend="onDecorationTouchEnd"
+        catchtouchcancel="onDecorationTouchEnd"
+      >{{item.label}}</view>
+    </view>
   </view>
 
-  <!-- 1. 调整顺序 / 缩略图卡片序列 -->
-  <view class="editor-section">
-    <view class="section-header">
-      <text class="section-title">调整顺序</text>
-      <text class="section-hint">点击选中卡片，首张为微信封面</text>
+  <view class="editor-section cards-section">
+    <view class="section-header compact-header">
+      <text class="section-title">卡片顺序</text>
+      <text class="section-hint">拖动排序，首张是微信封面</text>
     </view>
     <scroll-view class="cards-scroll" scroll-x="true">
       <movable-area class="cards-movable-area" style="width: {{sortAreaWidth}}px; height: {{sortItemWidth}}px;">
@@ -24,80 +59,178 @@
           class="card-thumb-movable"
           style="width: {{sortItemWidth}}px; height: {{sortItemWidth}}px;"
           direction="horizontal"
-          x="{{item.x}}"
+          x="{{item.positionX}}"
           y="{{0}}"
+          animation="{{index !== draggingIndex}}"
           data-index="{{index}}"
           bindtouchstart="onSortStart"
           bindchange="onSortMove"
           bindtouchend="onSortEnd"
         >
           <view
-            class="card-thumb-item {{index === currentCardIndex ? 'thumb-active' : ''}} {{index === draggingIndex ? 'thumb-dragging' : ''}}"
+            class="card-thumb-item {{item.previewPatternClass}} {{index === currentCardIndex ? 'thumb-active' : ''}} {{index === draggingIndex ? 'thumb-dragging' : ''}} {{item.isDropTarget ? 'thumb-drop-target' : ''}}"
+            style="background-color: {{item.previewBackground}};"
             data-index="{{index}}"
             bindtap="onSelectCard"
           >
             <view class="thumb-badge {{index === 0 ? 'badge-cover' : ''}}">{{item.label}}</view>
-            <view class="thumb-text">{{item.layers[0].text || '……'}}</view>
+            <view class="thumb-decorations" style="color: {{item.previewDecorationColor}};">{{item.previewDecorations}}</view>
+            <view class="thumb-text" style="color: {{item.previewTextColor}};">{{item.previewText}}</view>
           </view>
         </movable-view>
       </movable-area>
     </scroll-view>
   </view>
 
-  <!-- 2. 改文字 -->
-  <view class="editor-section">
+  <view class="editor-tabs">
+    <view
+      wx:for="{{editorTabs}}"
+      wx:key="key"
+      class="editor-tab {{activeEditorTab === item.key ? 'editor-tab-active' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onSelectEditorTab"
+    >{{item.label}}</view>
+  </view>
+
+  <view wx:if="{{activeEditorTab === 'content'}}" class="editor-panel">
     <view class="section-header">
-      <text class="section-title">改文字</text>
-      <text class="section-hint">仅修改当前卡（第 {{currentCardIndex + 1}} 张）</text>
+      <text class="section-title">文字内容</text>
+      <text class="section-hint">只修改当前卡</text>
     </view>
     <view class="edit-text-row" bindtap="onEditText">
-      <view class="edit-text-preview">
-        {{currentScene.layers[0].text ? currentScene.layers[0].text : '（此卡为纯涂鸦停顿，点此添加文字）'}}
-      </view>
-      <view class="edit-text-action">改文字 ✎</view>
+      <view class="edit-text-preview">{{currentText ? currentText : '（纯涂鸦卡，点此添加文字）'}}</view>
+      <view class="edit-text-action">改文字</view>
+    </view>
+    <view class="control-label">字号</view>
+    <view class="size-options">
+      <view class="size-chip" data-preset="small" bindtap="onSetTextSize">小</view>
+      <view class="size-chip" data-preset="standard" bindtap="onSetTextSize">标准</view>
+      <view class="size-chip" data-preset="large" bindtap="onSetTextSize">大</view>
+    </view>
+    <view class="restore-row">
+      <view class="restore-action" bindtap="onRestoreCard">恢复当前卡</view>
+      <view class="restore-action" bindtap="onRestoreStack">恢复整组</view>
     </view>
   </view>
 
-  <!-- 3. 换整叠风格 -->
-  <view class="editor-section">
+  <view wx:if="{{activeEditorTab === 'style'}}" class="editor-panel">
+    <view class="scope-switch">
+      <view class="scope-option {{editScope === 'card' ? 'scope-option-active' : ''}}" data-scope="card" bindtap="onSetEditScope">仅当前卡</view>
+      <view class="scope-option {{editScope === 'stack' ? 'scope-option-active' : ''}}" data-scope="stack" bindtap="onSetEditScope">应用到整组</view>
+    </view>
+    <view class="control-label">整组风格</view>
+    <scroll-view class="horizontal-controls" scroll-x enable-flex>
+      <view class="style-packs-row">
+        <view
+          wx:for="{{stylePacks}}"
+          wx:key="id"
+          class="style-pack-chip {{item.id === selectedCandidate.stylePackId ? 'style-chip-active' : ''}}"
+          data-style-pack-id="{{item.id}}"
+          bindtap="onSelectStylePack"
+        >
+          <view class="style-preview {{item.patternClass}}" style="background-color: {{item.color || '#fff'}}; color: {{item.textColor}};">
+            <text>字</text><view class="style-preview-accent" style="background: {{item.accentColor}};"></view>
+          </view>
+          <text class="style-name">{{item.name}}</text>
+          <text wx:if="{{item.id === selectedCandidate.stylePackId}}" class="choice-status">当前</text>
+        </view>
+      </view>
+    </scroll-view>
+    <view class="control-label">背景</view>
+    <view class="choice-grid">
+      <view wx:for="{{styleControls.backgrounds}}" wx:key="key" class="visual-choice background-choice {{item.selected ? 'visual-choice-active' : ''}}" data-key="{{item.key}}" bindtap="onSelectBackground">
+        <view class="background-swatch {{item.patternClass}}" style="background-color: {{item.color}}; color: {{item.previewTextColor}};">字</view>
+        <text>{{item.name}}</text><text wx:if="{{item.selected}}" class="choice-check">✓</text>
+      </view>
+    </view>
+    <view class="control-label">配色</view>
+    <view class="choice-grid">
+      <view wx:for="{{styleControls.palettes}}" wx:key="key" class="visual-choice {{item.selected ? 'visual-choice-active' : ''}}" data-key="{{item.key}}" bindtap="onSelectPalette">
+        <view class="palette-swatch"><view class="palette-color" style="background: {{item.color}};"></view><view class="palette-color" style="background: {{item.accent}};"></view></view><text>{{item.name}}</text><text wx:if="{{item.selected}}" class="choice-check">✓</text>
+      </view>
+    </view>
+    <view class="control-label">字感</view>
+    <view class="font-options">
+      <view wx:for="{{styleControls.fonts}}" wx:key="key" class="font-choice {{item.selected ? 'font-choice-active' : ''}}" data-key="{{item.key}}" bindtap="onSelectFontFeel">
+        <view class="font-name">{{item.name}}</view><view class="font-desc">{{item.description}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{activeEditorTab === 'decoration'}}" class="editor-panel">
     <view class="section-header">
-      <text class="section-title">换整叠风格</text>
-      <text class="section-hint">整叠风格统一更换</text>
+      <text class="section-title">贴纸和涂鸦</text>
+      <text class="section-hint">点素材添加，直接在画面拖动</text>
     </view>
-    <view class="style-packs-row">
-      <view
-        wx:for="{{stylePacks}}"
-        wx:key="id"
-        class="style-pack-chip {{item.id === selectedCandidate.stylePackId ? 'style-chip-active' : ''}}"
-        data-style-pack-id="{{item.id}}"
-        bindtap="onSelectStylePack"
-      >
-        <view class="style-color-dot" style="background: {{item.color || '#fff'}};"></view>
-        <text class="style-name">{{item.name}}</text>
+    <scroll-view class="horizontal-controls" scroll-x enable-flex>
+      <view class="decoration-list">
+        <view wx:for="{{decorationAssets}}" wx:key="key" class="decoration-asset {{item.inScene ? 'decoration-asset-added' : ''}} {{item.selected ? 'decoration-asset-selected' : ''}}" data-asset-key="{{item.key}}" bindtap="onAddDecoration">
+          <view class="asset-symbol asset-symbol-{{item.type}}">{{item.glyph}}</view>
+          <view class="asset-key">{{item.name}}</view>
+          <view class="asset-type">{{item.typeLabel}}{{item.addedCount ? ' · 已添加' : ''}}</view>
+        </view>
       </view>
+    </scroll-view>
+    <view class="decoration-color-panel">
+      <view class="decoration-color-header">
+        <view>
+          <view class="decoration-color-title">装饰颜色</view>
+          <view class="decoration-color-subtitle">只修改当前选中的贴纸或涂鸦</view>
+        </view>
+        <view
+          wx:if="{{selectedDecorationId}}"
+          class="color-reset {{decorationColorIsDefault ? 'color-reset-active' : ''}}"
+          bindtap="onResetDecorationColor"
+        >恢复原色</view>
+      </view>
+      <view wx:if="{{selectedDecorationId}}">
+        <view class="decoration-color-groups">
+          <view
+            wx:for="{{decorationColorGroups}}"
+            wx:key="key"
+            class="color-group-tab {{activeDecorationColorGroup === item.key ? 'color-group-tab-active' : ''}}"
+            data-group-key="{{item.key}}"
+            bindtap="onSelectDecorationColorGroup"
+          >{{item.name}}</view>
+        </view>
+        <scroll-view class="decoration-color-scroll" scroll-x enable-flex>
+          <view class="decoration-color-swatches">
+            <view
+              wx:for="{{decorationColorOptions}}"
+              wx:key="key"
+              class="decoration-color-choice {{item.selected ? 'decoration-color-choice-active' : ''}}"
+              data-color-key="{{item.key}}"
+              bindtap="onSetDecorationColor"
+              aria-label="{{item.name}}"
+            >
+              <view class="decoration-color-dot-wrap {{item.transparent ? 'decoration-color-transparent' : ''}}">
+                <view class="decoration-color-dot" style="{{item.swatchStyle}}"></view>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+      <view wx:else class="decoration-color-empty">请先点击画面里的装饰，再选择颜色</view>
     </view>
+    <view wx:if="{{selectedDecorationId}}" class="selected-decoration-tools">
+      <view class="decoration-tool {{decorationLayerState.canMoveBackward ? '' : 'decoration-tool-disabled'}}" data-direction="backward" bindtap="onMoveDecorationLayer">往后显示</view>
+      <view class="decoration-tool {{decorationLayerState.canMoveForward ? '' : 'decoration-tool-disabled'}}" data-direction="forward" bindtap="onMoveDecorationLayer">往前显示</view>
+      <view class="decoration-tool delete-decoration" bindtap="onDeleteDecoration">删除</view>
+    </view>
+    <view wx:if="{{selectedDecorationId}}" class="layer-help">只在装饰互相重叠时改变遮挡顺序；删除只移除当前选中的装饰</view>
+    <view wx:else class="decoration-tip">选择画面里的装饰后，可以双指缩放和旋转</view>
   </view>
 
-  <!-- 底部操作栏 -->
   <view class="editor-footer">
     <button class="btn-confirm-edits" bindtap="onConfirmEdits">完成，制作这叠</button>
   </view>
 
-  <!-- 文字修改弹窗 -->
   <view wx:if="{{editingTextModalVisible}}" class="modal-mask" catchtouchmove="true">
     <view class="modal-dialog">
       <view class="modal-title">修改第 {{currentCardIndex + 1}} 张文字</view>
       <view class="modal-input-wrap">
-        <textarea
-          class="modal-textarea"
-          value="{{editingText}}"
-          maxlength="{{maxCharCount}}"
-          placeholder="请输入本卡文字"
-          bindinput="onInputEditText"
-        />
-        <view class="modal-counter {{editingCharCount > maxCharCount ? 'counter-over' : ''}}">
-          {{editingCharCount}} / {{maxCharCount}}
-        </view>
+        <textarea class="modal-textarea" value="{{editingText}}" maxlength="{{maxCharCount}}" placeholder="请输入本卡文字" bindinput="onInputEditText" />
+        <view class="modal-counter {{editingCharCount > maxCharCount ? 'counter-over' : ''}}">{{editingCharCount}} / {{maxCharCount}}</view>
       </view>
       <view class="modal-actions">
         <button class="btn-modal-cancel" bindtap="onCancelEditText">取消</button>

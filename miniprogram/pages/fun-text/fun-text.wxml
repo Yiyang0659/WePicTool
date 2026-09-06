@@ -10,6 +10,35 @@
     <view class="fun-text-sub">一句话，自动变成三套可滑卡片</view>
   </view>
 
+  <view class="fun-text-label fun-text-inspiration-title">找个灵感</view>
+  <scroll-view class="fun-text-case-categories" scroll-x enable-flex>
+    <view class="fun-text-category-row">
+      <view class="fun-text-category {{activeCaseCategory === 'all' ? 'fun-text-category-on' : ''}}" data-key="all" bindtap="onSelectCaseCategory">全部</view>
+      <view
+        wx:for="{{caseCategories}}"
+        wx:key="key"
+        class="fun-text-category {{activeCaseCategory === item.key ? 'fun-text-category-on' : ''}}"
+        data-key="{{item.key}}"
+        bindtap="onSelectCaseCategory"
+      >{{item.icon}} {{item.label}}</view>
+    </view>
+  </scroll-view>
+  <scroll-view class="fun-text-cases" scroll-x enable-flex>
+    <view class="fun-text-case-row">
+      <view
+        wx:for="{{funTextCases}}"
+        wx:key="caseId"
+        class="fun-text-case {{selectedCaseId === item.caseId ? 'fun-text-case-on' : ''}}"
+        data-case-id="{{item.caseId}}"
+        bindtap="onSelectCase"
+      >
+        <view class="fun-text-case-title">{{item.title}}</view>
+        <view class="fun-text-case-copy">{{item.sourceText}}</view>
+        <view class="fun-text-case-action">用这个案例</view>
+      </view>
+    </view>
+  </scroll-view>
+
   <!-- 一句话输入 -->
   <view class="fun-text-input-card">
     <textarea

@@ -7,7 +7,11 @@ var styleMatcher = require('./styleMatcher');
 var sceneComposer = require('./sceneComposer');
 
 function composeCandidateList(rawCandidates, brief) {
-  var stylePackIds = styleMatcher.matchStylePacks(rawCandidates, brief && brief.variant);
+  var stylePackIds = styleMatcher.matchStylePacks(
+    rawCandidates,
+    brief && brief.variant,
+    brief && brief.preferredStylePackId
+  );
   return rawCandidates.map(function (candidate, index) {
     var stylePackId = candidate.stylePackId || stylePackIds[index];
     var scenes = sceneComposer.composeCandidate(candidate, stylePackId);
@@ -44,7 +48,7 @@ async function planCandidates(wxApi, creativeBrief, options) {
     };
   }
 
-  var selectedStrategies = strategySelector.selectStrategyIds(brief.expressionKey, brief.variant);
+  var selectedStrategies = strategySelector.selectStrategyIds(brief.expressionKey, brief.variant, brief.preferredStrategyId);
 
   if (!wxApi || !wxApi.cloud || typeof wxApi.cloud.callFunction !== 'function') {
     return fallbackToRules(brief, '当前环境不支持云函数');

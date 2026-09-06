@@ -38,7 +38,10 @@ function recordingCanvas(log) {
     createImage() {
       const image = {};
       Object.defineProperty(image, 'src', {
-        set() { queueMicrotask(() => image.onload && image.onload()); }
+        set(value) {
+          log.push(['imageSrc', value]);
+          queueMicrotask(() => image.onload && image.onload());
+        }
       });
       return image;
     }
@@ -115,6 +118,66 @@ test('materializes cards at source dimensions and preserves png versus jpeg outp
   assert.equal(png.exportUrl, 'wxfile://numbered-1.png');
   assert.equal(jpeg.exportUrl, 'wxfile://numbered-2.jpg');
   assert.ok(log.some(entry => entry[0] === 'drawImage' && entry[3] === 640 && entry[4] === 640));
+});
+
+test('materializes a built-in card through the caller path resolver before Canvas decoding', async () => {
+  const { composer } = loadModules();
+  const log = [];
+  const outputs = [];
+  const activity = [];
+  const resolved = [];
+  const wxApi = fakeWx({
+    '../../assets/samples/head1.jpg': { width: 640, height: 640 }
+  }, outputs, activity);
+  wxApi.getImageInfo = function (options) {
+    activity.push('info:' + options.src);
+    options.success({ width: 640, height: 640, path: '/assets/samples/head1.jpg' });
+  };
+
+  const result = await composer.materializeCard(wxApi, recordingCanvas(log), {
+    cardId: 'head-1',
+    stackId: 'head',
+    sourceUrl: '/assets/samples/head1.jpg',
+    sequence: 1,
+    sequenceLabel: '01'
+  }, {
+    resolvePath(wxArg, sourceUrl) {
+      resolved.push([wxArg === wxApi, sourceUrl]);
+      return Promise.resolve('../../assets/samples/head1.jpg');
+    }
+  });
+
+  assert.deepEqual(resolved, [[true, '/assets/samples/head1.jpg']]);
+  assert.equal(activity[0], 'info:../../assets/samples/head1.jpg');
+  assert.ok(log.some(entry => entry[0] === 'imageSrc' && entry[1] === '../../assets/samples/head1.jpg'));
+  assert.equal(result.exportUrl, 'wxfile://numbered-1.jpg');
+});
+
+test('prefers the platform temp path returned for a page-relative package asset', async () => {
+  const { composer } = loadModules();
+  const log = [];
+  const wxApi = fakeWx({}, [], []);
+  wxApi.getImageInfo = function (options) {
+    options.success({
+      width: 640,
+      height: 640,
+      path: 'wxfile://tmp/package-head1.jpg'
+    });
+  };
+
+  await composer.materializeCard(wxApi, recordingCanvas(log), {
+    cardId: 'head-1',
+    stackId: 'head',
+    sourceUrl: '/assets/samples/head1.jpg',
+    sequence: 1,
+    sequenceLabel: '01'
+  }, {
+    resolvePath() {
+      return Promise.resolve('../../assets/samples/head1.jpg');
+    }
+  });
+
+  assert.ok(log.some(entry => entry[0] === 'imageSrc' && entry[1] === 'wxfile://tmp/package-head1.jpg'));
 });
 
 test('materializes a manifest strictly one card at a time without mutating input', async () => {

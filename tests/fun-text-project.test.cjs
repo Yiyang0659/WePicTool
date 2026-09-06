@@ -17,12 +17,14 @@ const planner = loadMiniProgramModule('miniprogram/utils/candidatePlanner.js', {
 });
 const stylePacks = loadMiniProgramModule('miniprogram/config/stylePacks.js');
 const assets = loadMiniProgramModule('miniprogram/config/assetRegistry.js');
+const fontFeels = loadMiniProgramModule('miniprogram/config/fontFeels.js');
 const matcher = loadMiniProgramModule('miniprogram/utils/styleMatcher.js', {
   '../config/stylePacks': stylePacks
 });
 const composer = loadMiniProgramModule('miniprogram/utils/sceneComposer.js', {
   '../config/stylePacks': stylePacks,
   '../config/assetRegistry': assets,
+  '../config/fontFeels': fontFeels,
   './candidatePlanner': planner
 });
 const brief = loadMiniProgramModule('miniprogram/utils/creativeBrief.js');
@@ -32,7 +34,9 @@ const model = loadMiniProgramModule('miniprogram/utils/funTextProject.js', {
   './styleMatcher': matcher,
   './sceneComposer': composer,
   './candidateValidator': validator,
-  '../config/stylePacks': stylePacks
+  '../config/stylePacks': stylePacks,
+  '../config/assetRegistry': assets,
+  '../config/fontFeels': fontFeels
 });
 
 function reverseObjectKeys(value) {
@@ -200,6 +204,25 @@ test('restores a cleared pause card with a recomposed text layer', () => {
   assert.equal(composer.validateScene(scene).valid, true);
 });
 
+test('restored text inherits the card palette and font selected while it was empty', () => {
+  const project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const candidate = project.candidates[0];
+  const pause = candidate.editedScenes.find((scene) => scene.role === 'pause');
+  let next = model.updateCardText(project, candidate.candidateId, pause.sceneId, '');
+  next = model.updateCardStyle(next, candidate.candidateId, pause.sceneId, {
+    paletteKey: 'pink-note-coral',
+    fontFeelKey: 'headline'
+  }, 'card');
+  next = model.updateCardText(next, candidate.candidateId, pause.sceneId, '现在揭晓');
+  const scene = next.candidates[0].editedScenes.find((item) => item.sceneId === pause.sceneId);
+  const textLayer = scene.layers.find((layer) => layer.type === 'text');
+  const palette = stylePacks.getPalette(stylePacks.getStylePack(candidate.stylePackId), 'pink-note-coral');
+
+  assert.equal(textLayer.fontKey, 'headline');
+  assert.equal(textLayer.fontFamily, 'MaShanZheng');
+  assert.equal(textLayer.color, palette.colors.primary);
+});
+
 test('rejects an unknown style pack without changing the source project', () => {
   const project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
 
@@ -266,4 +289,77 @@ test('switching style preserves moved scene identity for later text edits', () =
   ]);
   assert.deepEqual(plain(switchedCandidate.editedScenes.map((scene) => scene.order)), [1, 2, 3, 4, 5]);
   assert.equal(editedScene.layers.find((layer) => layer.type === 'text').text, '等一下呀');
+});
+
+test('edits current-card background, palette and font feel without mutating the source', () => {
+  let project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const candidate = project.candidates[0];
+  const sceneId = candidate.editedScenes[0].sceneId;
+  const source = plain(project);
+  project = model.updateCardStyle(project, candidate.candidateId, sceneId, {
+    backgroundVariantKey: 'pink-note-lilac',
+    paletteKey: 'pink-note-grape',
+    fontFeelKey: 'playful'
+  }, 'card');
+  const scene = project.candidates[0].editedScenes[0];
+  assert.equal(scene.backgroundVariantKey, 'pink-note-lilac');
+  assert.equal(scene.paletteKey, 'pink-note-grape');
+  assert.equal(scene.fontFeelKey, 'playful');
+  assert.equal(scene.layers.find((layer) => layer.type === 'text').fontFamily, 'SmileySans');
+  assert.deepEqual(plain(source.candidates[0].editedScenes[0]), plain(model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 }).candidates[0].editedScenes[0]));
+  assert.equal(project.editHistory.past.length, 1);
+});
+
+test('applies a style choice to the whole stack and supports twenty-step undo/redo history', () => {
+  let project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const candidateId = project.candidates[0].candidateId;
+  const sceneId = project.candidates[0].editedScenes[0].sceneId;
+  project = model.updateCardStyle(project, candidateId, sceneId, { fontFeelKey: 'headline' }, 'stack');
+  assert.ok(project.candidates[0].editedScenes.every((scene) => scene.fontFeelKey === 'headline'));
+  for (let index = 0; index < 22; index += 1) {
+    project = model.setTextSizePreset(project, candidateId, sceneId, index % 2 ? 'small' : 'large');
+  }
+  assert.equal(project.editHistory.past.length, 20);
+  const beforeUndo = project.candidates[0].editedScenes[0].layers.find((layer) => layer.type === 'text').fontSize;
+  project = model.undoEdit(project);
+  const afterUndo = project.candidates[0].editedScenes[0].layers.find((layer) => layer.type === 'text').fontSize;
+  assert.notEqual(afterUndo, beforeUndo);
+  assert.equal(project.editHistory.future.length, 1);
+  project = model.redoEdit(project);
+  assert.equal(project.candidates[0].editedScenes[0].layers.find((layer) => layer.type === 'text').fontSize, beforeUndo);
+});
+
+test('adds, transforms, reorders and removes a whitelisted decoration', () => {
+  let project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const candidateId = project.candidates[0].candidateId;
+  const sceneId = project.candidates[0].editedScenes[0].sceneId;
+  project = model.addDecoration(project, candidateId, sceneId, 'sticker_11');
+  let scene = project.candidates[0].editedScenes[0];
+  const added = scene.layers.find((layer) => layer.userAdded === true);
+  assert.ok(added);
+  project = model.updateDecorationTransform(project, candidateId, sceneId, added.id, {
+    x: 900, y: 120, scale: 2.2, rotation: 175
+  });
+  scene = project.candidates[0].editedScenes[0];
+  assert.deepEqual(
+    Object.fromEntries(['x', 'y', 'scale', 'rotation'].map((key) => [key, scene.layers.find((layer) => layer.id === added.id)[key]])),
+    { x: 900, y: 120, scale: 2.2, rotation: 175 }
+  );
+  project = model.moveDecorationLayer(project, candidateId, sceneId, added.id, 'backward');
+  project = model.removeDecoration(project, candidateId, sceneId, added.id);
+  assert.equal(project.candidates[0].editedScenes[0].layers.some((layer) => layer.id === added.id), false);
+});
+
+test('restores one card or the full stack to the current style baseline', () => {
+  let project = model.createFunTextProject({ sourceText: '我今天想见你', now: 1000 });
+  const candidateId = project.candidates[0].candidateId;
+  const first = project.candidates[0].editedScenes[0].sceneId;
+  const second = project.candidates[0].editedScenes[1].sceneId;
+  project = model.updateCardText(project, candidateId, first, '先等等');
+  project = model.updateCardText(project, candidateId, second, '再等等');
+  project = model.restoreCard(project, candidateId, first);
+  assert.notEqual(project.candidates[0].editedScenes[0].layers.find((layer) => layer.type === 'text').text, '先等等');
+  assert.equal(project.candidates[0].editedScenes[1].layers.find((layer) => layer.type === 'text').text, '再等等');
+  project = model.restoreCandidate(project, candidateId);
+  assert.notEqual(project.candidates[0].editedScenes[1].layers.find((layer) => layer.type === 'text').text, '再等等');
 });

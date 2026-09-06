@@ -156,15 +156,31 @@ function sourceFileType(sourceUrl) {
   return value.endsWith('.jpg') || value.endsWith('.jpeg') ? 'jpg' : 'png';
 }
 
+function canvasImagePath(requestPath, infoPath) {
+  var requested = String(requestPath || '');
+  var resolved = String(infoPath || '');
+  if (/^(wxfile|https?):\/\//.test(resolved) || /^data:image\//.test(resolved) || resolved.indexOf('blob:') === 0) {
+    return resolved;
+  }
+  // DevTools may rewrite ../../assets/... back to /assets/...; Canvas 2D then
+  // incorrectly resolves that value beneath pages/dressup. Keep the explicit
+  // page-relative path only for that package-asset case.
+  if (/^\.\.?(\/|\\)/.test(requested)) return requested;
+  return resolved || requested;
+}
+
 async function materializeCard(wxApi, canvas, card, options) {
   var input = card || {};
   var opts = options || {};
   if (typeof opts.isCurrent === 'function' && !opts.isCurrent()) {
     throw makeError('顺序图任务已过期', 'STALE_EXPORT_GENERATION');
   }
-  var localPath = await imageExporter.resolveImagePath(wxApi, input.sourceUrl);
+  var pathResolver = typeof opts.resolvePath === 'function'
+    ? opts.resolvePath
+    : imageExporter.resolveImagePath;
+  var localPath = await pathResolver(wxApi, input.sourceUrl, input);
   var info = await getImageInfo(wxApi, localPath);
-  var image = await loadCanvasImage(canvas, info.path);
+  var image = await loadCanvasImage(canvas, canvasImagePath(localPath, info.path));
   if (typeof opts.isCurrent === 'function' && !opts.isCurrent()) {
     throw makeError('顺序图任务已过期', 'STALE_EXPORT_GENERATION');
   }
@@ -203,7 +219,8 @@ async function materializeManifest(wxApi, canvas, manifest, options) {
       try {
         stack.cards[cardIndex] = await materializeCard(wxApi, canvas, Object.assign({ stackId: stack.stackId }, stack.cards[cardIndex]), {
           badgeStyleVersion: output.badgeStyleVersion,
-          isCurrent: opts.isCurrent
+          isCurrent: opts.isCurrent,
+          resolvePath: opts.resolvePath
         });
         delete stack.cards[cardIndex].stackId;
       } catch (error) {

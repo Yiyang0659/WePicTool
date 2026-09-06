@@ -1,27 +1,53 @@
 <!-- pages/preview/preview.wxml -->
-<!-- 白底微信发送预演：固定手势舞台、比例安全卡片、三节点循环牌堆 -->
-<view class="wx">
-  <view class="wx-status"><text>12:00</text><text>◔ ◔ ▰</text></view>
-  <view class="wx-nav">
-    <view class="back" bindtap="onBack">‹</view>
-    <view class="name">分享给好友</view>
-    <view class="dots">···</view>
+<!-- 固定微信外壳：导航与输入栏固定，只有聊天区纵向滚动。 -->
+<view class="wx {{themeClass}}" style="{{viewportStyle}}">
+  <view class="wx-nav" style="{{navStyle}}">
+    <view class="wx-nav-row" style="{{navRowStyle}}">
+      <view class="back" aria-role="button" aria-label="返回" bindtap="onBack">‹</view>
+      <view class="name">好友</view>
+    </view>
+
+    <view
+      class="theme-toggle"
+      style="{{themeToggleStyle}}"
+      aria-role="button"
+      aria-label="{{themeToggleLabel}}"
+      bindtap="onToggleTheme"
+    >
+      <view class="theme-segment {{themeMode === 'light' ? 'active' : ''}}">
+        <text class="theme-symbol theme-sun">☼</text>
+        <text class="sr-only">普通模式</text>
+      </view>
+      <view class="theme-divider"></view>
+      <view class="theme-segment {{themeMode === 'dark' ? 'active' : ''}}">
+        <text class="theme-symbol theme-moon">☾</text>
+        <text class="sr-only">深色模式</text>
+      </view>
+    </view>
   </view>
 
-  <scroll-view class="wx-body" scroll-y="{{!scrollLock}}" enhanced="true" show-scrollbar="{{false}}">
+  <scroll-view
+    class="wx-body"
+    scroll-y="{{!scrollLock}}"
+    enhanced="true"
+    show-scrollbar="{{false}}"
+    bindscroll="onChatScroll"
+  >
     <view class="wx-body-inner">
       <view class="wx-time">{{chatTime}}</view>
 
       <block wx:for="{{groupList}}" wx:for-item="g" wx:for-index="gi" wx:key="key">
         <view class="msg me stackmsg">
-          <view class="avatar mine">😎</view>
+          <view class="avatar mine" aria-label="我的头像">😎</view>
           <view class="stackmsg-content">
-            <view class="group-label" wx:if="{{g.name}}">{{g.name}}</view>
             <view
               hidden="{{g.expanded}}"
               class="stackwrap"
               style="{{g.stageStyle}}"
               data-gi="{{gi}}"
+              aria-role="button"
+              aria-label="{{g.name}}，左右滑动切换，点击查看大图"
+              bindtap="onStackTap"
               bindtouchstart="onStackTouchStart"
               bindtouchmove="onStackTouchMove"
               bindtouchend="onStackTouchEnd"
@@ -33,41 +59,55 @@
                 wx:for-item="nd"
                 wx:for-index="ni"
                 wx:key="index"
-                class="stk {{nd.pos}} {{ni === g.frontIdx && g.dragging ? 'dragging' : ''}} {{ni === g.frontIdx && g.flying ? 'flying' : ''}} {{ni === g.noanimIdx ? 'noanim' : ''}}"
-                style="{{ni === g.frontIdx ? g.dragStyle : ''}}"
+                class="stk {{nd.pos}} {{g.dragging ? 'tracking' : ''}} {{g.settling ? 'settling' : ''}} {{ni === g.frontIdx ? 'front-active' : ''}} {{nd.incoming ? 'incoming' : ''}} {{ni === g.noanimIdx ? 'noanim' : ''}}"
+                style="{{nd.motionStyle}}"
               >
                 <view class="stack-card" style="{{nd.cardStyle}}">
-                  <image wx:if="{{!nd.err}}" class="card-img" src="{{nd.url}}" mode="aspectFit" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="node" data-ni="{{ni}}" binderror="onImgError" />
-                  <view wx:else class="img-fallback"><text class="ic">🖼️</text><text>图片加载失败</text></view>
+                  <image wx:if="{{!nd.err}}" class="card-img" src="{{nd.url}}" mode="aspectFill" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="node" data-ni="{{ni}}" binderror="onImgError" />
+                  <view wx:else class="img-fallback"><text class="fallback-icon">▧</text><text>图片加载失败</text></view>
                 </view>
               </view>
             </view>
 
             <view hidden="{{!g.expanded}}" class="xcard" style="{{g.stageStyle}}" data-gi="{{gi}}" data-url="{{g.cards[0].url}}" bindtap="onOpenViewer" bindlongpress="onCardLongPress">
               <view class="stack-card" style="{{g.cards[0].cardStyle}}">
-                <image wx:if="{{!g.cards[0].err}}" class="card-img" src="{{g.cards[0].url}}" mode="aspectFit" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="card" data-ci="{{0}}" binderror="onImgError" />
-                <view wx:else class="img-fallback"><text class="ic">🖼️</text><text>图片加载失败</text></view>
+                <image wx:if="{{!g.cards[0].err}}" class="card-img" src="{{g.cards[0].url}}" mode="aspectFill" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="card" data-ci="{{0}}" binderror="onImgError" />
+                <view wx:else class="img-fallback"><text class="fallback-icon">▧</text><text>图片加载失败</text></view>
               </view>
             </view>
           </view>
-          <view class="expand-cap" wx:if="{{g.n > 1}}" data-gi="{{gi}}" bindtap="onToggleCapsule">{{g.expanded ? '收起' : '展开 ' + g.n}}</view>
+          <view class="expand-cap" wx:if="{{g.n > 1}}" data-gi="{{gi}}" aria-role="button" aria-label="{{g.expanded ? '收起' : '展开' + g.n + '张'}}" bindtap="onToggleCapsule">{{g.expanded ? '收起' : '展开 ' + g.n}}</view>
+          <view class="gesture-tip" wx:if="{{gi === 0 && guideVisible}}">左右滑动切换 · 点展开查看全部</view>
         </view>
 
         <view wx:for="{{g.rest}}" wx:for-item="cd" wx:for-index="ki" wx:key="num" hidden="{{!g.expanded}}" class="msg me xrow {{g.leaving ? 'leave' : 'enter'}}" style="animation-delay: {{g.leaving ? cd.leaveDelay : cd.enterDelay}}ms;">
-          <view class="avatar mine">😎</view>
+          <view class="avatar mine" aria-label="我的头像">😎</view>
           <view class="xcard" style="{{g.stageStyle}}" data-gi="{{gi}}" data-url="{{cd.url}}" bindtap="onOpenViewer" bindlongpress="onCardLongPress">
             <view class="stack-card" style="{{cd.cardStyle}}">
-              <image wx:if="{{!cd.err}}" class="card-img" src="{{cd.url}}" mode="aspectFit" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="rest" data-ci="{{ki}}" binderror="onImgError" />
-              <view wx:else class="img-fallback"><text class="ic">🖼️</text><text>图片加载失败</text></view>
+              <image wx:if="{{!cd.err}}" class="card-img" src="{{cd.url}}" mode="aspectFill" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="rest" data-ci="{{ki}}" binderror="onImgError" />
+              <view wx:else class="img-fallback"><text class="fallback-icon">▧</text><text>图片加载失败</text></view>
             </view>
           </view>
         </view>
       </block>
 
-      <view class="empty-state" wx:if="{{isEmpty}}"><view class="empty-icon">📂</view><view class="empty-text">未找到有效的分组结果</view></view>
+      <view class="empty-state" wx:if="{{isEmpty}}">
+        <view class="empty-icon">▧</view>
+        <view class="empty-text">{{inputError || '没有可预览的图片'}}</view>
+        <view class="empty-action" aria-role="button" bindtap="onBack">返回整理素材</view>
+      </view>
     </view>
   </scroll-view>
 
-  <view class="wx-inputbar"><text class="ic">🎤</text><view class="field"></view><text class="ic">😊</text><text class="ic">➕</text></view>
-  <view class="viewer" wx:if="{{viewer.show}}" catchtap="onCloseViewer"><image class="vimg" src="{{viewer.url}}" mode="aspectFit" /><view class="vtip">模拟微信大图查看 · 点任意处关闭</view></view>
+  <view class="wx-inputbar" aria-role="button" aria-label="预览模式，点击查看说明" bindtap="onInputHint">
+    <text class="input-icon">◉</text>
+    <view class="field">预览模式</view>
+    <text class="input-icon">☺</text>
+    <text class="input-icon input-plus">＋</text>
+  </view>
+
+  <view class="viewer" wx:if="{{viewer.show}}" catchtap="onCloseViewer">
+    <image class="vimg" src="{{viewer.url}}" mode="aspectFit" />
+    <view class="vtip">点任意处关闭</view>
+  </view>
 </view>

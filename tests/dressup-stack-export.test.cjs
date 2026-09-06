@@ -68,6 +68,11 @@ test('dressup prepares four independently numbered stacks and shows the same exp
   const manifest = await page.prepareExportManifest();
 
   assert.equal(calls.materialize[0].canvas.id, 'dressup-sequence');
+  assert.equal(typeof calls.materialize[0].options.resolvePath, 'function');
+  assert.equal(
+    await calls.materialize[0].options.resolvePath(null, '/assets/samples/head1.jpg'),
+    '../../assets/samples/head1.jpg'
+  );
   assert.equal(Array.from(manifest.stacks).map((stack) => stack.stackId).join(','), 'head,tops,bottoms,shoes');
   manifest.stacks.forEach((stack) => assert.equal(stack.cards.map((card) => card.sequenceLabel).join(','), '01,02,03'));
   assert.equal(page.data.groupList[0].items[0].exportUrl, '/numbered/head-01.png');

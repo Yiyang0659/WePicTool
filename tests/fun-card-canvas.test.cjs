@@ -7,11 +7,15 @@ const { loadMiniProgramModule } = require('./helpers/miniprogram-loader.cjs');
 
 const assets = loadMiniProgramModule('miniprogram/config/assetRegistry.js');
 const stylePacks = loadMiniProgramModule('miniprogram/config/stylePacks.js');
+const fontFeels = loadMiniProgramModule('miniprogram/config/fontFeels.js');
 const painter = loadMiniProgramModule('miniprogram/utils/scenePainter.js', {
   '../config/assetRegistry': assets,
-  '../config/stylePacks': stylePacks
+  '../config/stylePacks': stylePacks,
+  '../config/fontFeels': fontFeels
 });
-const font = loadMiniProgramModule('miniprogram/utils/funTextFont.js');
+const font = loadMiniProgramModule('miniprogram/utils/funTextFont.js', {
+  '../config/fontFeels': fontFeels
+});
 
 function recordingContext(operations) {
   return {
@@ -36,11 +40,12 @@ function recordingContext(operations) {
 function fixtureScene() {
   return {
     sceneId: 'scene_1', order: 1, width: 1080, height: 1080,
+    fontFeelKey: 'marker',
     background: { color: '#FCE4EC', assetKey: 'pink-note-01' },
     layers: [
       {
         id: 'text_main', type: 'text', text: '我今天', lines: ['我今天'],
-        effectKey: 'marker-bold', fontFamily: 'LXGWMarkerGothic', fontSize: 220,
+        effectKey: 'marker-bold', fontKey: 'marker', fontFamily: 'LXGWMarkerGothic', fontSize: 220,
         lineHeight: 250, x: 540, y: 520, rotation: 0, scale: 1,
         color: '#171717', align: 'center'
       },
@@ -201,14 +206,16 @@ test('uses a deterministic, distinct production recipe for every registered stic
 });
 
 test('font loader rejects when the renderer URL is absent without asking wx to load a font', async () => {
+  font.resetFontLoadCache();
   let calls = 0;
   await assert.rejects(() => font.loadFunTextFont({
     loadFontFace() { calls += 1; }
-  }, ''), /手写预览服务尚未配置/);
+  }, ''), /字画预览服务尚未配置/);
   assert.equal(calls, 0);
 });
 
 test('font loader asks wx to load the licensed font from the renderer URL', async () => {
+  font.resetFontLoadCache();
   let request;
   await font.loadFunTextFont({
     loadFontFace(options) {
@@ -224,7 +231,18 @@ test('font loader asks wx to load the licensed font from the renderer URL', asyn
   assert.equal(typeof request.fail, 'function');
 });
 
-test('component paints with fallback font gracefully when font loading fails', async () => {
+test('font loader selects the requested licensed font and rejects unknown keys', async () => {
+  font.resetFontLoadCache();
+  let request;
+  await font.loadFunTextFont({
+    loadFontFace(options) { request = options; options.success(); }
+  }, 'https://renderer.example', 'headline');
+  assert.equal(request.family, 'MaShanZheng');
+  assert.equal(request.source, 'url("https://renderer.example/font/MaShanZheng-Regular.ttf")');
+  await assert.rejects(() => font.loadFunTextFont({ loadFontFace() {} }, 'https://renderer.example', 'unknown'), /未知字感/);
+});
+
+test('component reports an unavailable font without drawing a false fallback', async () => {
   let paintCalls = 0;
   const wxApi = {
     getSystemInfoSync() { return { pixelRatio: 1 }; },
@@ -252,8 +270,8 @@ test('component paints with fallback font gracefully when font loading fails', a
   component.lifetimes.attached.call(instance);
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.ok(paintCalls >= 1);
-  assert.equal(events.filter(([name]) => name === 'rendererror').length, 0);
+  assert.equal(paintCalls, 0);
+  assert.equal(events.filter(([name]) => name === 'fontunavailable').length, 1);
 });
 
 test('component paints at DPR dimensions, emits ready, and repaints after revision changes', async () => {
@@ -294,7 +312,7 @@ test('component paints at DPR dimensions, emits ready, and repaints after revisi
   component.lifetimes.attached.call(instance);
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(instance.fontReady, true);
+  assert.equal(instance._readyFontKey, 'marker');
   assert.equal(canvas.width, 720);
   assert.equal(canvas.height, 720);
   assert.deepEqual(operations[0], ['scale', 2, 2]);

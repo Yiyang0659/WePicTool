@@ -27,13 +27,15 @@ function textLayer(text) {
     text,
     lines: [text],
     effectKey: 'marker-bold',
+    fontKey: 'marker',
+    fontFamily: 'LXGWMarkerGothic',
     fontSize: 180,
     lineHeight: 210,
     x: 540,
     y: 520,
     rotation: 0,
     scale: 1,
-    color: '#171717',
+    color: '#F35C8C',
     align: 'center'
   };
 }
@@ -50,6 +52,10 @@ function validPayload() {
       width: 1080,
       height: 1080,
       background: { assetKey: 'pink-note-01', color: '#FCE4EC' },
+      stylePackId: 'pink-note-v1',
+      backgroundVariantKey: 'pink-note-soft',
+      paletteKey: 'pink-note-rose',
+      fontFeelKey: 'marker',
       layers: [textLayer(order === 3 ? '我今天想见你' : '再滑一下')]
     }))
   };
@@ -70,12 +76,28 @@ function validPreviewPayload() {
         'chalk-chaos-v1': { assetKey: 'chalk-board-01', color: '#24303A' },
         'paper-collage-v1': { assetKey: 'paper-collage-01', color: '#F4EAD7' }
       };
+      const metadata = {
+        'pink-note-v1': ['pink-note-soft', 'pink-note-rose', 'marker', '#F35C8C'],
+        'chalk-chaos-v1': ['chalk-board-dark', 'chalk-mint', 'marker', '#F9F4D0'],
+        'paper-collage-v1': ['paper-collage-cream', 'paper-ink', 'headline', '#245D8C']
+      };
       return {
         candidateId,
         stylePackId,
         scenes: base.scenes.map((scene) => Object.assign({}, clone(scene), {
           sceneId: 'scene_' + (candidateIndex + 1) + '_' + scene.order,
-          background: clone(backgrounds[stylePackId])
+          stylePackId,
+          backgroundVariantKey: metadata[stylePackId][0],
+          paletteKey: metadata[stylePackId][1],
+          fontFeelKey: metadata[stylePackId][2],
+          background: clone(backgrounds[stylePackId]),
+          layers: scene.layers.map((layer) => layer.type === 'text'
+            ? Object.assign({}, layer, {
+              fontKey: metadata[stylePackId][2],
+              fontFamily: metadata[stylePackId][2] === 'headline' ? 'MaShanZheng' : 'LXGWMarkerGothic',
+              color: metadata[stylePackId][3]
+            })
+            : layer)
         }))
       };
     })
@@ -121,6 +143,10 @@ test('server whitelist sets exactly match the client asset and effect registries
     [...validator.SUPPORTED_EFFECT_KEYS].sort(),
     Array.from(clientStyles.TEXT_EFFECT_KEYS).sort()
   );
+  assert.deepEqual(
+    [...validator.SUPPORTED_STYLE_PACK_KEYS].sort(),
+    Array.from(clientStyles.STYLE_PACKS, (pack) => pack.id).sort()
+  );
 });
 
 test('rejects an invalid stack before audit or drawing', async () => {
@@ -154,6 +180,7 @@ test('rejects malformed, over-layered, or unregistered scenes', () => {
     }],
     ['missing effect', (payload) => { delete payload.scenes[0].layers[0].effectKey; }],
     ['unknown effect', (payload) => { payload.scenes[0].layers[0].effectKey = 'unknown-effect'; }],
+    ['text color outside selected palette', (payload) => { payload.scenes[0].layers[0].color = '#123456'; }],
     ['unknown asset', (payload) => {
       payload.scenes[0].layers.push({
         id: 'bad_asset', type: 'sticker', assetKey: 'unknown-asset',
@@ -449,6 +476,27 @@ test('real PNG rendering is deterministic and uses exact preview/final dimension
   assert.equal(high.length > lowA.length, true);
 });
 
+test('all three licensed Chinese font keys produce non-empty PNG output', async () => {
+  const makePng = renderer.createPngMaker();
+  const fonts = [
+    ['marker', 'LXGWMarkerGothic'],
+    ['playful', 'SmileySans'],
+    ['headline', 'MaShanZheng']
+  ];
+
+  for (const [fontKey, fontFamily] of fonts) {
+    const scene = validPayload().scenes[0];
+    scene.fontFeelKey = fontKey;
+    scene.layers[0].fontKey = fontKey;
+    scene.layers[0].fontFamily = fontFamily;
+    scene.layers[0].text = '今天真开心';
+    scene.layers[0].lines = ['今天真开心'];
+    const png = await makePng(scene, 360);
+    assert.deepEqual(pngDimensions(png), { width: 360, height: 360 });
+    assert.ok(png.length > 1000, fontKey + ' should render visible PNG data');
+  }
+});
+
 test('real PNG rendering rejects a text layer without an explicit registered effect', async () => {
   const scene = validPayload().scenes[0];
   delete scene.layers[0].effectKey;
@@ -457,7 +505,7 @@ test('real PNG rendering rejects a text layer without an explicit registered eff
   await assert.rejects(() => makePng(scene, 360), /effect/i);
 });
 
-test('HTTP routes expose both handlers and the licensed font with CORS headers', async (t) => {
+test('HTTP routes expose both handlers and all licensed fonts with CORS headers', async (t) => {
   const fontPath = path.join(serviceRoot, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
   const httpServer = server.createHttpServer({
     devMode: true,
@@ -471,11 +519,13 @@ test('HTTP routes expose both handlers and the licensed font with CORS headers',
   const address = httpServer.address();
   const baseUrl = 'http://127.0.0.1:' + address.port;
 
-  const font = await request(baseUrl, '/font/LXGWMarkerGothic-Regular.ttf');
-  assert.equal(font.status, 200);
-  assert.match(font.headers.get('content-type') || '', /font\/ttf/);
-  assert.equal(font.headers.get('access-control-allow-origin'), '*');
-  assert.equal(font.body.equals(fs.readFileSync(fontPath)), true);
+  for (const fileName of ['LXGWMarkerGothic-Regular.ttf', 'SmileySans-Oblique.ttf', 'MaShanZheng-Regular.ttf']) {
+    const font = await request(baseUrl, '/font/' + fileName);
+    assert.equal(font.status, 200);
+    assert.match(font.headers.get('content-type') || '', /font\/ttf/);
+    assert.equal(font.headers.get('access-control-allow-origin'), '*');
+    assert.equal(font.body.equals(fs.readFileSync(path.join(serviceRoot, 'fonts', fileName))), true);
+  }
 
   const render = await request(baseUrl, '/render-stack', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'

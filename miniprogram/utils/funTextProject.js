@@ -3,7 +3,13 @@ var planner = require('./candidatePlanner');
 var matcher = require('./styleMatcher');
 var composer = require('./sceneComposer');
 var stylePacks = require('../config/stylePacks');
+var assets = require('../config/assetRegistry');
+var fontFeels = require('../config/fontFeels');
+var decorationColors = require('../config/decorationColors');
 var candidateValidator = require('./candidateValidator');
+
+var HISTORY_LIMIT = 20;
+var SIZE_PRESET_SCALE = { small: 0.84, standard: 1, large: 1.16 };
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -66,6 +72,34 @@ function resetRenderState(project) {
   return project;
 }
 
+function ensureHistory(project) {
+  if (!project.editHistory || !Array.isArray(project.editHistory.past) || !Array.isArray(project.editHistory.future)) {
+    project.editHistory = { past: [], future: [] };
+  }
+  return project.editHistory;
+}
+
+function historySnapshot(project) {
+  return {
+    candidates: clone(project.candidates),
+    selectedCandidateId: project.selectedCandidateId
+  };
+}
+
+function commitEdit(project, mutate) {
+  var next = clone(project);
+  var before = stableSerialize(next.candidates);
+  mutate(next);
+  if (stableSerialize(next.candidates) === before) return project;
+  var existing = project.editHistory && Array.isArray(project.editHistory.past)
+    ? clone(project.editHistory.past)
+    : [];
+  ensureHistory(next);
+  next.editHistory.past = existing.concat([historySnapshot(project)]).slice(-HISTORY_LIMIT);
+  next.editHistory.future = [];
+  return resetRenderState(next);
+}
+
 function findCandidate(project, candidateId) {
   var candidates = project && Array.isArray(project.candidates) ? project.candidates : [];
   return candidates.find(function (candidate) {
@@ -77,6 +111,14 @@ function requireCandidate(project, candidateId) {
   var candidate = findCandidate(project, candidateId);
   if (!candidate) throw new Error('未找到该方案');
   return candidate;
+}
+
+function requireScene(candidate, sceneId) {
+  var scene = (candidate.editedScenes || []).find(function (item) {
+    return item.sceneId === sceneId;
+  });
+  if (!scene) throw new Error('未找到该卡片');
+  return scene;
 }
 
 function textFromScene(scene) {
@@ -132,10 +174,10 @@ function cardsFromEditedScenes(candidate, textOverrides) {
   });
 }
 
-function composeEditedScenes(candidate, stylePackId, textOverrides) {
+function composeEditedScenes(candidate, stylePackId, textOverrides, options) {
   return composer.composeCandidate(Object.assign({}, candidate, {
     cards: cardsFromEditedScenes(candidate, textOverrides)
-  }), stylePackId);
+  }), stylePackId, options);
 }
 
 function createFunTextProject(input) {
@@ -156,27 +198,33 @@ function createFunTextProject(input) {
     });
   } else {
     var planned = planner.planRuleCandidates(brief);
-    var stylePackIds = matcher.matchStylePacks(planned.candidates, brief.variant);
+    var stylePackIds = matcher.matchStylePacks(planned.candidates, brief.variant, brief.preferredStylePackId);
     generationMode = planned.generationMode;
     candidates = planned.candidates.map(function (candidate, index) {
       return createCandidate(candidate, stylePackIds[index]);
     });
   }
 
+  var projectBrief = {
+    expressionKey: brief.expressionKey,
+    variant: brief.variant
+  };
+  if (brief.caseId) projectBrief.caseId = brief.caseId;
+  if (brief.preferredStrategyId) projectBrief.preferredStrategyId = brief.preferredStrategyId;
+  if (brief.preferredStylePackId) projectBrief.preferredStylePackId = brief.preferredStylePackId;
+
   return {
     projectId: value.projectId || ('funtext_' + now),
     playId: 'fun-text-stack',
     version: 1,
     sourceText: brief.sourceText,
-    brief: {
-      expressionKey: brief.expressionKey,
-      variant: brief.variant
-    },
+    brief: projectBrief,
     generationMode: generationMode,
     candidates: candidates,
     selectedCandidateId: '',
     renderStatus: 'draft',
     renderedCards: [],
+    editHistory: { past: [], future: [] },
     createdAt: now,
     updatedAt: now
   };
@@ -189,6 +237,9 @@ function replanProject(project) {
     sourceText: project.sourceText,
     expressionKey: project.brief && project.brief.expressionKey,
     variant: Number(project.brief && project.brief.variant) + 1,
+    caseId: project.brief && project.brief.caseId,
+    preferredStrategyId: project.brief && project.brief.preferredStrategyId,
+    preferredStylePackId: project.brief && project.brief.preferredStylePackId,
     now: Date.now()
   });
   next.createdAt = project.createdAt;
@@ -203,13 +254,13 @@ function selectCandidate(project, candidateId) {
 }
 
 function updateCardText(project, candidateId, sceneId, text) {
-  var next = clone(project);
-  var candidate = requireCandidate(next, candidateId);
-  var scene = (candidate.editedScenes || []).find(function (item) {
-    return item.sceneId === sceneId;
-  });
-  if (!scene) throw new Error('未找到该卡片');
   if (typeof text !== 'string') throw new Error('卡片文字必须是字符串');
+  var sourceCandidate = requireCandidate(project, candidateId);
+  var sourceScene = requireScene(sourceCandidate, sceneId);
+  validateEditedText(sourceScene.role, text);
+  return commitEdit(project, function (next) {
+  var candidate = requireCandidate(next, candidateId);
+  var scene = requireScene(candidate, sceneId);
   validateEditedText(scene.role, text);
 
   var textLayer = (scene.layers || []).find(function (layer) { return layer.type === 'text'; });
@@ -221,7 +272,11 @@ function updateCardText(project, candidateId, sceneId, text) {
   } else {
     var textOverrides = {};
     textOverrides[sceneId] = text;
-    var recomposed = composeEditedScenes(candidate, candidate.stylePackId, textOverrides);
+    var recomposed = composeEditedScenes(candidate, candidate.stylePackId, textOverrides, {
+      backgroundVariantKey: scene.backgroundVariantKey,
+      paletteKey: scene.paletteKey,
+      fontFeelKey: scene.fontFeelKey
+    });
     var recomposedScene = recomposed.find(function (item) { return item.sceneId === sceneId; });
     var recomposedText = recomposedScene && recomposedScene.layers.find(function (layer) {
       return layer.type === 'text';
@@ -230,17 +285,18 @@ function updateCardText(project, candidateId, sceneId, text) {
     scene.layers.unshift(recomposedText);
   }
 
-  return resetRenderState(next);
+  });
 }
 
 function switchCandidateStyle(project, candidateId, stylePackId) {
   if (!stylePacks.getStylePack(stylePackId)) throw new Error('未知视觉包：' + stylePackId);
-  var next = clone(project);
+  requireCandidate(project, candidateId);
+  return commitEdit(project, function (next) {
   var candidate = requireCandidate(next, candidateId);
   candidate.stylePackId = stylePackId;
   candidate.originalScenes = clone(composer.composeCandidate(candidate, stylePackId));
   candidate.editedScenes = clone(composeEditedScenes(candidate, stylePackId));
-  return resetRenderState(next);
+  });
 }
 
 function moveCard(project, candidateId, fromIndex, toIndex) {
@@ -251,7 +307,7 @@ function moveCard(project, candidateId, fromIndex, toIndex) {
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= scenes.length || to < 0 || to >= scenes.length || from === to) {
     return project;
   }
-  var next = clone(project);
+  return commitEdit(project, function (next) {
   candidate = requireCandidate(next, candidateId);
   scenes = candidate.editedScenes;
   var moved = scenes.splice(from, 1)[0];
@@ -259,6 +315,199 @@ function moveCard(project, candidateId, fromIndex, toIndex) {
   scenes.forEach(function (scene, index) {
     scene.order = index + 1;
   });
+  });
+}
+
+function updateSceneStyle(scene, pack, changes) {
+  var value = changes || {};
+  if (value.backgroundVariantKey) {
+    var variant = stylePacks.getBackgroundVariant(pack, value.backgroundVariantKey);
+    if (!variant) throw new Error('背景不属于当前风格');
+    scene.backgroundVariantKey = variant.key;
+    scene.background = { assetKey: variant.assetKey, color: variant.color };
+  }
+  if (value.paletteKey) {
+    var palette = stylePacks.getPalette(pack, value.paletteKey);
+    if (!palette) throw new Error('配色不属于当前风格');
+    scene.paletteKey = palette.key;
+    (scene.layers || []).forEach(function (layer) {
+      if (layer.type === 'text') layer.color = palette.colors.primary;
+    });
+  }
+  if (value.fontFeelKey) {
+    var nextFeel = fontFeels.getFontFeel(value.fontFeelKey);
+    if (!nextFeel) throw new Error('字感不在白名单');
+    var previousFeel = fontFeels.getFontFeel(scene.fontFeelKey || 'marker') || fontFeels.getFontFeel('marker');
+    var ratio = nextFeel.sizeScale / previousFeel.sizeScale;
+    scene.fontFeelKey = nextFeel.key;
+    (scene.layers || []).forEach(function (layer) {
+      if (layer.type !== 'text') return;
+      layer.fontKey = nextFeel.key;
+      layer.fontFamily = nextFeel.fontFamily;
+      layer.fontSize = Math.max(40, Math.min(600, Math.round(layer.fontSize * ratio)));
+      layer.lineHeight = Math.max(48, Math.min(720, Math.round(layer.lineHeight * ratio)));
+    });
+  }
+}
+
+function updateCardStyle(project, candidateId, sceneId, changes, scope) {
+  var sourceCandidate = requireCandidate(project, candidateId);
+  requireScene(sourceCandidate, sceneId);
+  var pack = stylePacks.getStylePack(sourceCandidate.stylePackId);
+  if (!pack) throw new Error('当前视觉包不可用');
+  return commitEdit(project, function (next) {
+    var candidate = requireCandidate(next, candidateId);
+    var targets = scope === 'stack' ? candidate.editedScenes : [requireScene(candidate, sceneId)];
+    targets.forEach(function (scene) { updateSceneStyle(scene, pack, changes); });
+  });
+}
+
+function setTextSizePreset(project, candidateId, sceneId, preset) {
+  if (!SIZE_PRESET_SCALE[preset]) throw new Error('字号档位不合法');
+  requireScene(requireCandidate(project, candidateId), sceneId);
+  return commitEdit(project, function (next) {
+    var scene = requireScene(requireCandidate(next, candidateId), sceneId);
+    var layer = (scene.layers || []).find(function (item) { return item.type === 'text'; });
+    if (!layer) throw new Error('该卡片没有文字');
+    var previous = SIZE_PRESET_SCALE[layer.sizePreset || 'standard'];
+    var ratio = SIZE_PRESET_SCALE[preset] / previous;
+    layer.fontSize = Math.max(40, Math.min(600, Math.round(layer.fontSize * ratio)));
+    layer.lineHeight = Math.max(48, Math.min(720, Math.round(layer.lineHeight * ratio)));
+    layer.sizePreset = preset;
+  });
+}
+
+function addDecoration(project, candidateId, sceneId, assetKey) {
+  var asset = assets.getAsset(assetKey);
+  if (!asset) throw new Error('装饰素材不在白名单');
+  requireScene(requireCandidate(project, candidateId), sceneId);
+  return commitEdit(project, function (next) {
+    var scene = requireScene(requireCandidate(next, candidateId), sceneId);
+    var decorations = scene.layers.filter(function (layer) { return layer.type !== 'text'; });
+    if (decorations.length >= 6) throw new Error('每张卡片最多添加 6 个装饰');
+    var suffix = 1;
+    var id;
+    do {
+      id = 'user_' + assetKey.replace(/[^A-Za-z0-9_-]/g, '') + '_' + suffix;
+      suffix += 1;
+    } while (scene.layers.some(function (layer) { return layer.id === id; }));
+    scene.layers.push({
+      id: id,
+      type: asset.type,
+      assetKey: asset.key,
+      x: 820,
+      y: 220,
+      rotation: 0,
+      scale: 0.8,
+      userAdded: true
+    });
+  });
+}
+
+function normalizeRotation(value) {
+  var result = Number(value) || 0;
+  while (result > 180) result -= 360;
+  while (result < -180) result += 360;
+  return Math.round(result * 10) / 10;
+}
+
+function updateDecorationTransform(project, candidateId, sceneId, layerId, transform) {
+  requireScene(requireCandidate(project, candidateId), sceneId);
+  return commitEdit(project, function (next) {
+    var scene = requireScene(requireCandidate(next, candidateId), sceneId);
+    var layer = scene.layers.find(function (item) { return item.id === layerId && item.type !== 'text'; });
+    if (!layer) throw new Error('未找到该装饰');
+    var value = transform || {};
+    if (value.x !== undefined) layer.x = Math.max(0, Math.min(1080, Math.round(Number(value.x) || 0)));
+    if (value.y !== undefined) layer.y = Math.max(0, Math.min(1080, Math.round(Number(value.y) || 0)));
+    if (value.scale !== undefined) layer.scale = Math.max(0.35, Math.min(2.5, Math.round((Number(value.scale) || 0.35) * 100) / 100));
+    if (value.rotation !== undefined) layer.rotation = normalizeRotation(value.rotation);
+  });
+}
+
+function setDecorationColor(project, candidateId, sceneId, layerId, colorKey) {
+  var normalizedKey = colorKey === 'default' || colorKey === '' || colorKey === null ? '' : colorKey;
+  if (normalizedKey && !decorationColors.getDecorationColor(normalizedKey)) {
+    throw new Error('装饰颜色不在白名单');
+  }
+  requireScene(requireCandidate(project, candidateId), sceneId);
+  return commitEdit(project, function (next) {
+    var scene = requireScene(requireCandidate(next, candidateId), sceneId);
+    var layer = scene.layers.find(function (item) { return item.id === layerId && item.type !== 'text'; });
+    if (!layer) throw new Error('未找到该装饰');
+    if (normalizedKey) layer.decorationColorKey = normalizedKey;
+    else delete layer.decorationColorKey;
+  });
+}
+
+function removeDecoration(project, candidateId, sceneId, layerId) {
+  requireScene(requireCandidate(project, candidateId), sceneId);
+  return commitEdit(project, function (next) {
+    var scene = requireScene(requireCandidate(next, candidateId), sceneId);
+    var index = scene.layers.findIndex(function (item) { return item.id === layerId && item.type !== 'text'; });
+    if (index < 0) throw new Error('未找到该装饰');
+    scene.layers.splice(index, 1);
+  });
+}
+
+function moveDecorationLayer(project, candidateId, sceneId, layerId, direction) {
+  if (direction !== 'forward' && direction !== 'backward') throw new Error('层级方向不合法');
+  requireScene(requireCandidate(project, candidateId), sceneId);
+  return commitEdit(project, function (next) {
+    var scene = requireScene(requireCandidate(next, candidateId), sceneId);
+    var index = scene.layers.findIndex(function (item) { return item.id === layerId && item.type !== 'text'; });
+    if (index < 0) throw new Error('未找到该装饰');
+    var target = direction === 'forward' ? index + 1 : index - 1;
+    while (target >= 0 && target < scene.layers.length && scene.layers[target].type === 'text') {
+      target += direction === 'forward' ? 1 : -1;
+    }
+    if (target < 0 || target >= scene.layers.length) return;
+    var moved = scene.layers.splice(index, 1)[0];
+    scene.layers.splice(target, 0, moved);
+  });
+}
+
+function restoreCard(project, candidateId, sceneId) {
+  var sourceCandidate = requireCandidate(project, candidateId);
+  requireScene(sourceCandidate, sceneId);
+  return commitEdit(project, function (next) {
+    var candidate = requireCandidate(next, candidateId);
+    var index = candidate.editedScenes.findIndex(function (scene) { return scene.sceneId === sceneId; });
+    var original = candidate.originalScenes.find(function (scene) { return scene.sceneId === sceneId; });
+    if (!original) throw new Error('未找到原始卡片');
+    var restored = clone(original);
+    restored.order = candidate.editedScenes[index].order;
+    candidate.editedScenes[index] = restored;
+  });
+}
+
+function restoreCandidate(project, candidateId) {
+  requireCandidate(project, candidateId);
+  return commitEdit(project, function (next) {
+    var candidate = requireCandidate(next, candidateId);
+    candidate.editedScenes = clone(candidate.originalScenes);
+  });
+}
+
+function undoEdit(project) {
+  var next = clone(project);
+  var history = ensureHistory(next);
+  if (!history.past.length) return project;
+  var target = history.past.pop();
+  history.future = history.future.concat([historySnapshot(project)]).slice(-HISTORY_LIMIT);
+  next.candidates = clone(target.candidates);
+  next.selectedCandidateId = target.selectedCandidateId;
+  return resetRenderState(next);
+}
+
+function redoEdit(project) {
+  var next = clone(project);
+  var history = ensureHistory(next);
+  if (!history.future.length) return project;
+  var target = history.future.pop();
+  history.past = history.past.concat([historySnapshot(project)]).slice(-HISTORY_LIMIT);
+  next.candidates = clone(target.candidates);
+  next.selectedCandidateId = target.selectedCandidateId;
   return resetRenderState(next);
 }
 
@@ -366,6 +615,17 @@ module.exports = {
   updateCardText: updateCardText,
   switchCandidateStyle: switchCandidateStyle,
   moveCard: moveCard,
+  updateCardStyle: updateCardStyle,
+  setTextSizePreset: setTextSizePreset,
+  addDecoration: addDecoration,
+  updateDecorationTransform: updateDecorationTransform,
+  setDecorationColor: setDecorationColor,
+  removeDecoration: removeDecoration,
+  moveDecorationLayer: moveDecorationLayer,
+  restoreCard: restoreCard,
+  restoreCandidate: restoreCandidate,
+  undoEdit: undoEdit,
+  redoEdit: redoEdit,
   buildPreviewPayload: buildPreviewPayload,
   buildRenderPayload: buildRenderPayload,
   createRenderFingerprint: createRenderFingerprint,

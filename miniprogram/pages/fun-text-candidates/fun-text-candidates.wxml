@@ -49,6 +49,7 @@
               wx:elif="{{sceneIdx >= item.currentIndex - 1 && sceneIdx <= item.currentIndex + 1}}"
               scene="{{scene}}"
               size="{{300}}"
+              bindfontunavailable="onCanvasError"
               bindrendererror="onCanvasError"
             />
             <view wx:else class="card-empty-slot"></view>

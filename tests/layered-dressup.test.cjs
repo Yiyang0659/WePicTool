@@ -209,7 +209,34 @@ test('preview excludes empty groups but keeps real groups below three cards', ()
   assert.equal(preview[0].cards.length, 2);
 });
 
-test('every built-in asset exists and the project-owned head cards are 640 square PNGs', () => {
+function readJpegDimensions(data) {
+  assert.equal(data[0], 0xff);
+  assert.equal(data[1], 0xd8);
+
+  let offset = 2;
+  while (offset + 8 < data.length) {
+    if (data[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = data[offset + 1];
+    if (marker === 0xd8 || marker === 0xd9) {
+      offset += 2;
+      continue;
+    }
+    const segmentLength = data.readUInt16BE(offset + 2);
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return {
+        height: data.readUInt16BE(offset + 5),
+        width: data.readUInt16BE(offset + 7)
+      };
+    }
+    offset += 2 + segmentLength;
+  }
+  throw new Error('JPEG dimensions not found');
+}
+
+test('every built-in asset exists and the project-owned head cards are compact 640 square JPEGs', () => {
   const pack = registry.getAssetPack('funny-paper-doll-v1');
   const allItems = Object.values(pack.groups).flat();
 
@@ -222,9 +249,10 @@ test('every built-in asset exists and the project-owned head cards are 640 squar
   pack.groups.head.forEach((item) => {
     const assetPath = path.join(__dirname, '..', 'miniprogram', item.url.replace(/^\//, ''));
     const data = fs.readFileSync(assetPath);
-    assert.deepEqual(Array.from(data.subarray(0, 8)), [137, 80, 78, 71, 13, 10, 26, 10]);
-    assert.equal(data.readUInt32BE(16), 640);
-    assert.equal(data.readUInt32BE(20), 640);
+    assert.match(item.url, /\.jpg$/);
+    assert.deepEqual(Array.from(data.subarray(0, 2)), [0xff, 0xd8]);
+    assert.deepEqual(readJpegDimensions(data), { width: 640, height: 640 });
+    assert.ok(data.length < 150 * 1024, `head asset is too large: ${item.url}`);
   });
 });
 
@@ -283,18 +311,49 @@ test('homepage flagship actions navigate to demo and upload dressup modes', () =
     '/pages/dressup/dressup?mode=demo',
     '/pages/dressup/dressup?mode=upload'
   ]);
-  assert.equal(page.data.comingModules.some(item => item.key === 'suit'), false);
-  assert.equal(page.data.comingModules.some(item => item.key === 'dressup'), false);
+  assert.equal(page.data.homeTools.find(item => item.key === 'ai-outfit').status, 'available');
+  assert.equal(page.data.homeTools.some(item => item.key === 'suit' || item.key === 'dressup'), false);
 });
 
-test('homepage explains the four-stack effect and keeps the existing AI outfit entry', () => {
+test('homepage uses one shared two-play preview and keeps the existing AI outfit entry', () => {
   const markup = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/index/index.wxml'), 'utf8');
 
-  assert.match(markup, /四个部位独立滑动/);
+  assert.match(markup, /今天想做什么/);
+  assert.equal((markup.match(/class="home-shared-preview"/g) || []).length, 1);
+  assert.match(markup, /activeHomePlay === 'layered-dressup'/);
+  assert.match(markup, /activeHomePlay === 'fun-text-stack'/);
   assert.match(markup, /bindtap="onTryLayeredDemo"/);
   assert.match(markup, /bindtap="onCreateLayeredDressup"/);
-  assert.match(markup, /抽象搞怪/);
   assert.match(markup, /bindtap="onChooseMedia"/);
+  assert.doesNotMatch(markup, /layered-stack-edge|hero-card|hot-template-card|guide-card|fun-text-demo-card/);
+});
+
+test('homepage keeps four layered choices independent and updates the current combination', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  const definition = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
+  }, {});
+  const page = instantiatePage(definition);
+
+  assert.equal(page.data.activeHomePlay, 'layered-dressup');
+  assert.deepEqual(plain(page.data.layeredDemoIndices), {
+    head: 0,
+    tops: 0,
+    bottoms: 0,
+    shoes: 0
+  });
+
+  page.onSelectLayeredDemoItem({
+    currentTarget: { dataset: { groupKey: 'tops', index: 2 } }
+  });
+
+  assert.equal(page.data.layeredDemoIndices.tops, 2);
+  assert.equal(page.data.layeredDemoIndices.head, 0);
+  assert.equal(page.data.layeredDemoIndices.bottoms, 0);
+  assert.equal(page.data.layeredDemoIndices.shoes, 0);
+  assert.match(page.data.layeredCurrentItems.find(item => item.key === 'tops').src, /top3\.jpg$/);
 });
 
 test('upload entry ignores a saved demo-only draft', () => {

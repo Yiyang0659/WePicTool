@@ -95,8 +95,32 @@ test('selects the expression mapping in deterministic three-strategy rotations',
     'suspense_reveal', 'visual_pause', 'fake_checklist'
   ]);
   assert.deepEqual(plain(selector.selectStrategyIds('cute-direct', 3)), [
-    'hard_turn', 'suspense_reveal', 'visual_pause'
+    'hard_turn', 'soft_direct', 'repeat_escalate'
   ]);
+});
+
+test('registers eight distinct narrative strategies and can honor a case preference', () => {
+  assert.deepEqual(Object.keys(strategies.STRATEGY_REGISTRY).sort(), [
+    'countdown_reveal', 'fake_checklist', 'hard_turn', 'question_answer',
+    'repeat_escalate', 'soft_direct', 'suspense_reveal', 'visual_pause'
+  ]);
+  const selected = selector.selectStrategyIds('cute-direct', 0, 'soft_direct');
+  assert.equal(selected.length, 3);
+  assert.equal(selected[0], 'soft_direct');
+  assert.equal(new Set(selected).size, 3);
+});
+
+test('new strategies produce valid deterministic cards with one full reveal', () => {
+  ['repeat_escalate', 'soft_direct', 'countdown_reveal', 'question_answer'].forEach((strategyId) => {
+    const strategy = strategies.STRATEGY_REGISTRY[strategyId];
+    const cards = strategy.buildCards('我今天想见你', 1).map((card, index) => ({
+      ...card,
+      order: index + 1
+    }));
+    const candidates = validCandidates();
+    candidates[0] = makeCandidate({ candidateId: `candidate_${strategyId}_1`, strategyId, cards });
+    assert.equal(validator.validateCandidateSet(candidates, brief).valid, true, strategyId);
+  });
 });
 
 test('rejects candidate sets that do not contain exactly three candidates', () => {

@@ -17,12 +17,14 @@ const planner = loadMiniProgramModule('miniprogram/utils/candidatePlanner.js', {
 });
 const stylePacks = loadMiniProgramModule('miniprogram/config/stylePacks.js');
 const assets = loadMiniProgramModule('miniprogram/config/assetRegistry.js');
+const fontFeels = loadMiniProgramModule('miniprogram/config/fontFeels.js');
 const matcher = loadMiniProgramModule('miniprogram/utils/styleMatcher.js', {
   '../config/stylePacks': stylePacks
 });
 const composer = loadMiniProgramModule('miniprogram/utils/sceneComposer.js', {
   '../config/stylePacks': stylePacks,
   '../config/assetRegistry': assets,
+  '../config/fontFeels': fontFeels,
   './candidatePlanner': planner
 });
 const { normalizeCreativeBrief } = loadMiniProgramModule('miniprogram/utils/creativeBrief.js');
@@ -36,13 +38,22 @@ test('matches three different style packs to three candidates', () => {
   assert.equal(new Set(ids).size, 3);
 });
 
-test('exposes the exact phase-one style and procedural asset inventories', () => {
+test('style matching honors a valid case preference without duplicates', () => {
+  const ids = matcher.matchStylePacks([
+    { candidateId: 'a' }, { candidateId: 'b' }, { candidateId: 'c' }
+  ], 0, 'gentle-journal-v1');
+  assert.equal(ids[0], 'gentle-journal-v1');
+  assert.equal(new Set(ids).size, 3);
+});
+
+test('exposes seven style packs and the procedural asset inventories', () => {
   const registered = assets.listAssets();
   const stickers = registered.filter((asset) => asset.type === 'sticker');
   const doodles = registered.filter((asset) => asset.type === 'doodle');
 
   assert.deepEqual(plain(stylePacks.STYLE_PACKS.map((pack) => pack.id)), [
-    'pink-note-v1', 'chalk-chaos-v1', 'paper-collage-v1'
+    'pink-note-v1', 'chalk-chaos-v1', 'paper-collage-v1', 'crazy-grid-v1',
+    'gentle-journal-v1', 'blue-soda-v1', 'retro-ticket-v1'
   ]);
   assert.deepEqual(plain(stylePacks.TEXT_EFFECT_KEYS), [
     'marker-bold', 'chalk-rough', 'collage-cutout', 'stamp-shadow'
@@ -57,6 +68,16 @@ test('exposes the exact phase-one style and procedural asset inventories', () =>
   registered.forEach((asset) => {
     assert.equal(asset.source, 'project-owned');
     assert.equal(asset.renderer, 'procedural-v1');
+  });
+});
+
+test('each style exposes validated background, palette and font-feel choices', () => {
+  stylePacks.STYLE_PACKS.forEach((pack) => {
+    assert.equal(pack.backgroundVariants.length, 3, pack.id);
+    assert.ok(pack.palettes.length >= 2, pack.id);
+    assert.ok(pack.backgroundVariants.some((item) => item.key === pack.defaultBackgroundVariantKey));
+    assert.ok(pack.palettes.some((item) => item.key === pack.defaultPaletteKey));
+    assert.ok(['marker', 'playful', 'headline'].includes(pack.defaultFontFeelKey));
   });
 });
 
@@ -112,6 +133,10 @@ test('composes deterministic editable 1080 square scenes', () => {
 
     assert.equal(scene.width, 1080);
     assert.equal(scene.height, 1080);
+    assert.equal(scene.stylePackId, 'pink-note-v1');
+    assert.equal(typeof scene.backgroundVariantKey, 'string');
+    assert.equal(typeof scene.paletteKey, 'string');
+    assert.equal(typeof scene.fontFeelKey, 'string');
     assert.equal(scene.sceneId, 'scene_' + String(card.order).padStart(2, '0'));
     assert.ok(textLayers.length <= 2);
     assert.ok(decorationLayers.length <= 6);
@@ -121,6 +146,24 @@ test('composes deterministic editable 1080 square scenes', () => {
       assert.ok(layer.x >= 0 && layer.x <= 1080);
       assert.ok(layer.y >= 0 && layer.y <= 1080);
     });
+    assert.equal(composer.validateScene(scene).valid, true);
+  });
+});
+
+test('composes a requested valid background, palette and font feel', () => {
+  const candidate = planner.planRuleCandidates(
+    normalizeCreativeBrief({ sourceText: '我今天想见你' })
+  ).candidates[0];
+  const scenes = composer.composeCandidate(candidate, 'blue-soda-v1', {
+    backgroundVariantKey: 'blue-soda-wave',
+    paletteKey: 'blue-soda-deep',
+    fontFeelKey: 'headline'
+  });
+  scenes.forEach((scene) => {
+    assert.equal(scene.backgroundVariantKey, 'blue-soda-wave');
+    assert.equal(scene.paletteKey, 'blue-soda-deep');
+    assert.equal(scene.fontFeelKey, 'headline');
+    assert.equal(scene.layers.find((layer) => layer.type === 'text').fontKey, 'headline');
     assert.equal(composer.validateScene(scene).valid, true);
   });
 });

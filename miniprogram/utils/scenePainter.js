@@ -1,16 +1,23 @@
 var assetRegistry = require('../config/assetRegistry');
 var stylePacks = require('../config/stylePacks');
+var fontFeels = require('../config/fontFeels');
+var decorationColors = require('../config/decorationColors');
 
 var CANVAS_SIZE = 1080;
-var FONT_FAMILY = 'LXGWMarkerGothic';
 
 function assetIsRegistered(layer) {
   var asset = assetRegistry.getAsset(layer.assetKey);
-  return asset && asset.type === layer.type;
+  var colorIsRegistered = !layer.decorationColorKey || decorationColors.getDecorationColor(layer.decorationColorKey);
+  return asset && asset.type === layer.type && colorIsRegistered;
 }
 
 function effectIsRegistered(layer) {
   return stylePacks.TEXT_EFFECT_KEYS.indexOf(layer.effectKey) >= 0;
+}
+
+function fontIsRegistered(layer) {
+  var feel = fontFeels.getFontFeel(layer.fontKey || 'marker');
+  return feel && (!layer.fontFamily || layer.fontFamily === feel.fontFamily);
 }
 
 function drawHeart(context, paint) {
@@ -151,9 +158,10 @@ var STICKER_DRAWERS = {
 };
 
 function drawProceduralAsset(context, layer) {
+  var paint = decorationColors.getDecorationPaint(layer);
   context.save();
-  context.strokeStyle = '#171717';
-  context.fillStyle = '#F35C8C';
+  context.strokeStyle = paint.stroke;
+  context.fillStyle = paint.fill;
   context.lineWidth = 8;
   if (STICKER_DRAWERS[layer.assetKey]) {
     STICKER_DRAWERS[layer.assetKey](context);
@@ -197,14 +205,15 @@ function drawProceduralAsset(context, layer) {
 }
 
 function paintText(context, layer, ratio) {
-  if (!effectIsRegistered(layer)) return;
+  if (!effectIsRegistered(layer) || !fontIsRegistered(layer)) return;
   var lines = Array.isArray(layer.lines) ? layer.lines : [];
   if (!lines.length) return;
   context.save();
   context.translate(layer.x * ratio, layer.y * ratio);
   context.rotate((layer.rotation || 0) * Math.PI / 180);
   context.scale(layer.scale || 1, layer.scale || 1);
-  context.font = String(layer.fontSize * ratio) + 'px ' + FONT_FAMILY;
+  var feel = fontFeels.getFontFeel(layer.fontKey || 'marker');
+  context.font = String(layer.fontSize * ratio) + 'px ' + feel.fontFamily;
   context.textAlign = layer.align || 'center';
   context.textBaseline = 'middle';
   var offset = (lines.length - 1) * layer.lineHeight * ratio / 2;

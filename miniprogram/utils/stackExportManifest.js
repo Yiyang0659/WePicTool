@@ -55,6 +55,9 @@ function isSupportedSourceUrl(url) {
   var value = url.trim();
   if (/^(cloud|wxfile):\/\//.test(value)) return true;
   if (/^https:\/\//.test(value)) return true;
+  // WeChat DevTools exposes canvasToTempFilePath results through this local
+  // virtual host. It is a generated device-local file, not a network origin.
+  if (/^http:\/\/tmp(?:\/|$)/.test(value)) return true;
   if (/^(\/|[A-Za-z]:[\\/])/.test(value)) return true;
   if (/^http:\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:\/|$)/.test(value)) return true;
   return false;

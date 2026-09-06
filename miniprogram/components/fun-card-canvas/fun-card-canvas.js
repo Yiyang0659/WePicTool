@@ -20,27 +20,30 @@ Component({
 
   observers: {
     'scene, size, revision': function () {
-      this.paintCurrentScene();
+      this.initCanvasAndPaint();
     }
   },
 
   methods: {
     initCanvasAndPaint: function () {
       var component = this;
-      if (!component._fontLoading && !component.fontReady) {
-        component._fontLoading = true;
-        font.loadFunTextFont(wx, env.FUN_CARD_RENDERER_URL).then(function () {
-          component.fontReady = true;
-          component._fontLoading = false;
-          return component.paintCurrentScene();
-        }).catch(function (error) {
-          component._fontLoading = false;
-          // 字体加载失败不中断界面显示，降级使用默认字体绘制
-          return component.paintCurrentScene();
+      var scene = component.properties.scene;
+      var fontKey = scene && scene.fontFeelKey || 'marker';
+      if (component._readyFontKey === fontKey) return component.paintCurrentScene();
+      if (component._fontLoadingKey === fontKey) return component._fontLoadingPromise;
+      component._fontLoadingKey = fontKey;
+      component._fontLoadingPromise = font.loadFunTextFont(wx, env.FUN_CARD_RENDERER_URL, fontKey).then(function () {
+        component._readyFontKey = fontKey;
+        component._fontLoadingKey = '';
+        return component.paintCurrentScene();
+      }).catch(function (error) {
+        component._fontLoadingKey = '';
+        component.triggerEvent('fontunavailable', {
+          fontKey: fontKey,
+          message: (error && error.message) || '字体加载失败'
         });
-      } else {
-        component.paintCurrentScene();
-      }
+      });
+      return component._fontLoadingPromise;
     },
 
     paintCurrentScene: function (retryCount) {

@@ -10,6 +10,9 @@ function loadMiniProgramModule(relativePath, dependencies = {}) {
     if (Object.prototype.hasOwnProperty.call(dependencies, request)) {
       return dependencies[request];
     }
+    if (request.startsWith('.')) {
+      return require(path.resolve(path.dirname(filePath), request));
+    }
     return require(request);
   };
 
@@ -29,6 +32,9 @@ function loadMiniProgramPage(relativePath, dependencies = {}, wxOverrides = {}) 
   const localRequire = (request) => {
     if (Object.prototype.hasOwnProperty.call(dependencies, request)) {
       return dependencies[request];
+    }
+    if (request.startsWith('.')) {
+      return require(path.resolve(path.dirname(filePath), request));
     }
     return require(request);
   };
@@ -64,13 +70,14 @@ function setNestedValue(target, keyPath, value) {
 function instantiatePage(definition) {
   const instance = Object.assign({}, definition);
   instance.data = plain(definition.data || {});
-  instance.setData = function (updates) {
+  instance.setData = function (updates, callback) {
     Object.keys(updates || {}).forEach((key) => {
       instance.data[key] = updates[key];
       if (key.includes('.') || key.includes('[')) {
         setNestedValue(instance.data, key, updates[key]);
       }
     });
+    if (typeof callback === 'function') callback();
   };
   return instance;
 }

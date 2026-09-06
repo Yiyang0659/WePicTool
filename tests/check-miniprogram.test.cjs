@@ -225,6 +225,20 @@ test('release preflight rejects a non-boolean fun text emergency flag', (t) => {
   assert.match(combinedOutput(result), /ENABLE_FUN_TEXT_STACK_ENTRY.*布尔/);
 });
 
+test('preflight rejects a main package source tree above the 2 MiB platform limit', (t) => {
+  const fixtureRoot = makeFixture(t);
+  writeEnv(fixtureRoot);
+  fs.writeFileSync(
+    path.join(fixtureRoot, 'miniprogram/oversized-main-package.bin'),
+    Buffer.alloc(2 * 1024 * 1024)
+  );
+
+  const result = runCheck(fixtureRoot);
+
+  assert.equal(result.status, 1);
+  assert.match(combinedOutput(result), /主包.*2 MiB/);
+});
+
 test('recursive syntax check catches future first-party JS and ignores node_modules', (t) => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wepic-syntax-'));
   t.after(() => fs.rmSync(fixtureRoot, { recursive: true, force: true }));
