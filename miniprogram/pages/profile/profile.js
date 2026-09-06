@@ -192,6 +192,7 @@ Page({
     try {
       // 清理本地存储中的记录和反馈
       wx.removeStorageSync('wepictool_records');
+      wx.removeStorageSync('wepic_history_tasks');
       wx.removeStorageSync('wepictool_feedbacks');
 
       // 清理临时文件

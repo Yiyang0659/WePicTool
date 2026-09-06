@@ -1,0 +1,83 @@
+<view class="dressup-page">
+  <view class="intro-card">
+    <view class="intro-topline">
+      <text class="intro-kicker">{{sourceLabel}}</text>
+      <text class="intro-pack">{{packTitle}}</text>
+    </view>
+    <view class="intro-title">四个部位，各自滑动换装</view>
+    <view class="intro-desc">每组补到 3 张以上，保存后回微信分四次合并发送。系统素材和你的图片可以混着用。</view>
+    <view class="intro-progress">
+      <text class="progress-strong">{{validGroupCount}} / 4</text>
+      <text> 个部位已经可以叠图</text>
+    </view>
+  </view>
+
+  <view class="group-card" wx:for="{{groupList}}" wx:key="key" wx:for-item="g">
+    <view class="group-header">
+      <view class="group-heading">
+        <text class="group-emoji">{{g.emoji}}</text>
+        <view>
+          <view class="group-title">{{g.title}}</view>
+          <view class="group-count">{{g.count}} / {{g.maxCount}} 张</view>
+        </view>
+      </view>
+      <text class="status status-{{g.badgeClass}}">{{g.badgeText}}</text>
+    </view>
+
+    <view class="missing-tip" wx:if="{{g.mode === 'normal'}}">还差 {{g.missing}} 张可形成叠图</view>
+
+    <scroll-view class="items-scroll" scroll-x="true" enhanced="true" show-scrollbar="false" wx:if="{{g.items.length > 0}}">
+      <view class="items-row">
+        <view class="material" wx:for="{{g.items}}" wx:key="id" wx:for-item="it" wx:for-index="i">
+          <view class="material-image-wrap">
+            <image class="material-image" src="{{it.exportUrl || it.displayUrl}}" mode="aspectFit" bindtap="onPreviewItem" data-group="{{g.key}}" data-url="{{it.exportUrl || it.displayUrl}}" />
+            <text class="first-badge" wx:if="{{it.isFirst}}">首图</text>
+            <text class="source-badge">{{it.sourceText}}</text>
+          </view>
+          <view class="material-actions">
+            <view class="icon-action {{!it.canLeft ? 'disabled' : ''}}" bindtap="onMoveItem" data-group="{{g.key}}" data-index="{{i}}" data-direction="-1">←</view>
+            <view class="icon-action {{!it.canRight ? 'disabled' : ''}}" bindtap="onMoveItem" data-group="{{g.key}}" data-index="{{i}}" data-direction="1">→</view>
+            <view class="icon-action danger" bindtap="onRemoveItem" data-group="{{g.key}}" data-id="{{it.id}}">删</view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="empty-group" wx:else>
+      <text class="empty-plus">＋</text>
+      <text>先加入这个部位的素材</text>
+    </view>
+
+    <view class="group-actions">
+      <view class="action-secondary" bindtap="onAddUserItems" data-group="{{g.key}}">上传我的</view>
+      <view class="action-secondary" bindtap="onAddSystemItems" data-group="{{g.key}}">补系统素材</view>
+      <view class="action-primary {{!g.canExport ? 'disabled' : ''}}" bindtap="onSaveGroup" data-group="{{g.key}}">保存此组</view>
+    </view>
+  </view>
+
+  <view class="send-note">
+    <view class="send-note-title">为什么每组至少 3 张？</view>
+    <view class="send-note-text">微信只有在一次选择 3 张以上图片时才会出现「发送后合并展示」。这里不会用说明卡或空白卡帮你凑数。</view>
+  </view>
+
+  <view class="bottom-space"></view>
+
+  <view class="bottom-bar">
+    <view class="preview-button" bindtap="onPreview">微信预览</view>
+    <view class="save-button {{!canExport || saving || exportPreparing ? 'disabled' : ''}}" bindtap="onSaveAll">{{saving ? '保存中…' : (exportPreparing ? '加编号中…' : '保存可用部位组')}}</view>
+  </view>
+
+  <view class="guide-mask" wx:if="{{showGuide}}" bindtap="onCloseGuide">
+    <view class="guide-panel" catchtap="onGuidePanelTap">
+      <view class="guide-title">{{guideTitle}} 🎉</view>
+      <view class="guide-step"><text class="guide-num">1</text><text>每次只发送一叠，四个部位分开发</text></view>
+      <view class="guide-step"><text class="guide-num">2</text><text>打开微信相册，按图片角标 01…勾选</text></view>
+      <view class="guide-step"><text class="guide-num">3</text><text>发送前确认 01 在第一位</text></view>
+      <view class="guide-step"><text class="guide-num">4</text><text>勾选「发送后合并展示」再发送</text></view>
+      <view class="guide-primary" bindtap="onGuidePreview">看看朋友视角</view>
+      <view class="guide-secondary" bindtap="onCloseGuide">我知道了</view>
+    </view>
+  </view>
+
+  <canvas type="2d" id="sequenceBadgeCanvas" class="sequence-badge-canvas"></canvas>
+</view>

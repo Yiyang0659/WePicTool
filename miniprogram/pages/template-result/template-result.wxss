@@ -1,0 +1,238 @@
+/* pages/template-result/template-result.wxss */
+.result-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 32rpx 24rpx 100rpx;
+  background: #fff8f9;
+}
+
+.result-header {
+  text-align: center;
+  margin-bottom: 28rpx;
+}
+
+.result-title {
+  font-size: 38rpx;
+  font-weight: 700;
+  color: #26211f;
+}
+
+.result-source {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  color: #e0447c;
+  font-weight: 500;
+}
+
+.render-loading-box,
+.render-failed-box {
+  background: #ffffff;
+  border: 2rpx solid #ffd3e2;
+  border-radius: 28rpx;
+  padding: 100rpx 40rpx;
+  text-align: center;
+  margin-top: 40rpx;
+  box-shadow: 0 8rpx 24rpx rgba(243, 92, 140, 0.08);
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 6rpx solid #ffe3ec;
+  border-top-color: #f35c8c;
+  border-radius: 999rpx;
+  margin: 0 auto 24rpx;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #8a7f7b;
+}
+
+.failed-text {
+  font-size: 28rpx;
+  color: #e5484d;
+  margin-bottom: 24rpx;
+}
+
+.btn-retry-render {
+  background: #f35c8c;
+  color: #ffffff;
+  font-size: 28rpx;
+  border-radius: 999rpx;
+  padding: 18rpx 48rpx;
+  display: inline-block;
+}
+
+.stage-container {
+  width: 640rpx;
+  height: 640rpx;
+  margin: 0 auto;
+  position: relative;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 12rpx 32rpx rgba(243, 92, 140, 0.14);
+  background: #ffffff;
+}
+
+.stage-step-tag {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  z-index: 10;
+}
+
+.result-swiper {
+  width: 640rpx;
+  height: 640rpx;
+}
+
+.result-swiper-item {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rendered-card-img {
+  width: 640rpx;
+  height: 640rpx;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-top: 40rpx;
+  padding: 0 16rpx;
+}
+
+.btn-preview-dark {
+  background: #2a2a2e;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 600;
+  border-radius: 999rpx;
+  padding: 24rpx 0;
+  box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.15);
+}
+
+.btn-edit-again {
+  background: #ffffff;
+  color: #6d625e;
+  border: 2rpx solid #e2d3d0;
+  font-size: 30rpx;
+  font-weight: 500;
+  border-radius: 999rpx;
+  padding: 22rpx 0;
+}
+
+.btn-save-stack {
+  background: linear-gradient(135deg, #f35c8c, #f07856);
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 700;
+  border-radius: 999rpx;
+  padding: 26rpx 0;
+  box-shadow: 0 10rpx 28rpx rgba(243, 92, 140, 0.3);
+}
+
+/* 引导浮层 */
+.guide-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.guide-dialog {
+  width: 620rpx;
+  background: #ffffff;
+  border-radius: 32rpx;
+  padding: 40rpx 32rpx 32rpx;
+  box-sizing: border-box;
+}
+
+.guide-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #26211f;
+  text-align: center;
+}
+
+.guide-sub {
+  font-size: 24rpx;
+  color: #8a7f7b;
+  text-align: center;
+  margin-top: 8rpx;
+  margin-bottom: 32rpx;
+}
+
+.guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.guide-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.step-num {
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  background: #ffe3ec;
+  color: #f35c8c;
+  font-weight: 700;
+  font-size: 24rpx;
+  border-radius: 999rpx;
+  flex-shrink: 0;
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-bold {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #26211f;
+}
+
+.step-desc {
+  font-size: 22rpx;
+  color: #8a7f7b;
+  margin-top: 4rpx;
+}
+
+.btn-guide-close {
+  margin-top: 36rpx;
+  background: #f35c8c;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 600;
+  border-radius: 999rpx;
+  padding: 22rpx 0;
+}

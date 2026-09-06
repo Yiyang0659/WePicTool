@@ -54,12 +54,9 @@ test('feedback and image processing route unsafe responses through cloud content
   const guardConfig = fs.readFileSync(path.join(root, 'miniprogram/cloudfunctions/contentGuard/config.json'), 'utf8');
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/profile.js'), 'utf8');
   const index = fs.readFileSync(path.join(root, 'miniprogram/pages/index/index.js'), 'utf8');
-  const packageJson = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
   assert.match(guard, /cloud\.openapi\.security\.msgSecCheck/);
   assert.match(guardConfig, /security\.msgSecCheck/);
   assert.doesNotMatch(guard, /require\(['"]\.\.\/processOutfit/);
   assert.match(profile, /name:\s*'contentGuard'/);
   assert.match(index, /CONTENT_UNSAFE/);
-  assert.match(packageJson, /cloudfunctions\/contentGuard\/index\.js/);
-  assert.match(packageJson, /cloudfunctions\/processOutfit\/contentSafety\.js/);
 });

@@ -2,103 +2,152 @@
 <view class="container">
   <!-- ===== 步骤一：首页选图入口 ===== -->
   <block wx:if="{{step === 'home'}}">
-    <!-- 1. 品牌区 -->
-    <view class="brand-section">
-      <view class="brand-logo">
-        <!-- 叠图堆叠小图标：三张卡片扇形叠放，贴合“微信叠图”定位 -->
-        <view class="brand-stack">
-          <view class="brand-stack-card brand-stack-back"></view>
-          <view class="brand-stack-card brand-stack-mid"></view>
-          <view class="brand-stack-card brand-stack-top"></view>
+    <view class="home-question">今天想做什么？</view>
+
+    <view class="home-play-switch" role="tablist">
+      <view
+        class="home-play-option home-play-layered {{activeHomePlay === 'layered-dressup' ? 'home-play-option-active' : ''}}"
+        role="tab"
+        aria-selected="{{activeHomePlay === 'layered-dressup'}}"
+        data-play-id="layered-dressup"
+        bindtap="onSelectHomePlay"
+      >
+        <view class="home-play-icon home-play-icon-layered">👕</view>
+        <view class="home-play-copy">
+          <view class="home-play-title">分层换装</view>
+          <view class="home-play-desc">四个部位自由滑动组合</view>
         </view>
+        <view class="home-play-check" wx:if="{{activeHomePlay === 'layered-dressup'}}">✓</view>
       </view>
-      <view class="brand-info">
-        <view class="brand-name">滑一叠</view>
-        <view class="brand-slogan">一叠图，发得好看 · 微信叠图玩法生成器</view>
+      <view
+        class="home-play-option home-play-funtext {{activeHomePlay === 'fun-text-stack' ? 'home-play-option-active' : ''}}"
+        role="tab"
+        aria-selected="{{activeHomePlay === 'fun-text-stack'}}"
+        data-play-id="fun-text-stack"
+        bindtap="onSelectHomePlay"
+      >
+        <view class="home-play-icon home-play-icon-funtext">✍</view>
+        <view class="home-play-copy">
+          <view class="home-play-title">趣味字画</view>
+          <view class="home-play-desc">一句话变成三套可滑卡片</view>
+        </view>
+        <view class="home-play-check home-play-check-pink" wx:if="{{activeHomePlay === 'fun-text-stack'}}">✓</view>
       </view>
     </view>
 
-    <!-- 2. 朋友视角仿真演示卡：3 秒讲清产品是干嘛的 -->
-    <view class="demo-card">
-      <view class="demo-chat-row">
-        <view class="demo-avatar"></view>
-        <view class="demo-bubble">
-          <swiper class="demo-swiper" autoplay interval="2000" circular indicator-dots="false">
-            <swiper-item wx:for="{{demoSlides}}" wx:key="src">
-              <!-- 白底编号卡样式：白底 + 左上角黑底白字序号角标 -->
-              <view class="demo-slide-card">
-                <view class="demo-slide-num">{{item.num}}</view>
-                <image class="demo-slide-img" src="{{item.src}}" mode="aspectFit" />
+    <view class="home-shared-preview">
+      <block wx:if="{{activeHomePlay === 'layered-dressup'}}">
+        <view class="home-preview-head">
+          <view>
+            <view class="home-preview-title">分层换装</view>
+            <view class="home-preview-sub">四个部位独立滑动，搭配出你的专属风格</view>
+          </view>
+          <view class="home-preview-tag">随心搭配</view>
+        </view>
+
+        <view class="layered-preview-layout">
+          <view class="layered-choice-list">
+            <view class="layered-choice-row" wx:for="{{layeredDemoViewRows}}" wx:key="key" wx:for-item="row">
+              <view class="layered-choice-meta">
+                <view class="layered-choice-name"><text>{{row.emoji}}</text><text>{{row.name}}</text></view>
+                <view class="layered-choice-count">{{row.currentIndex + 1}} / {{row.total}}</view>
               </view>
+              <view class="layered-choice-controls">
+                <view class="layered-choice-arrow" data-group-key="{{row.key}}" data-direction="-1" bindtap="onShiftLayeredDemoItem">‹</view>
+                <view class="layered-thumb-strip">
+                  <view
+                    class="layered-thumb {{image.selected ? 'layered-thumb-active' : ''}}"
+                    wx:for="{{row.images}}"
+                    wx:key="src"
+                    wx:for-item="image"
+                    data-group-key="{{row.key}}"
+                    data-index="{{image.index}}"
+                    bindtap="onSelectLayeredDemoItem"
+                  >
+                    <image src="{{image.src}}" mode="aspectFit" />
+                  </view>
+                </view>
+                <view class="layered-choice-arrow" data-group-key="{{row.key}}" data-direction="1" bindtap="onShiftLayeredDemoItem">›</view>
+              </view>
+            </view>
+          </view>
+
+          <view class="layered-current-panel">
+            <view class="layered-current-title">当前选择</view>
+            <view class="layered-current-grid">
+              <view class="layered-current-cell" wx:for="{{layeredCurrentItems}}" wx:key="key">
+                <image src="{{item.src}}" mode="aspectFit" />
+              </view>
+            </view>
+            <view class="layered-current-note">四组互不影响</view>
+          </view>
+        </view>
+
+        <view class="home-action-row">
+          <view class="home-action-primary" bindtap="onTryLayeredDemo">
+            <view class="home-action-icon">▶</view>
+            <view><view class="home-action-title">直接试玩</view><view class="home-action-sub">随机素材，立即体验</view></view>
+          </view>
+          <view class="home-action-secondary" bindtap="onCreateLayeredDressup">
+            <view class="home-action-icon home-action-icon-upload">↑</view>
+            <view><view class="home-action-title">上传我的素材</view><view class="home-action-sub">用自己的图片创作</view></view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:if="{{activeHomePlay === 'fun-text-stack'}}">
+        <view class="home-preview-head">
+          <view>
+            <view class="home-preview-title">趣味字画</view>
+            <view class="home-preview-sub">先滑完一句话，再决定要不要做自己的</view>
+          </view>
+          <view class="home-preview-tag home-preview-tag-pink">开发中</view>
+        </view>
+        <view class="funtext-preview-layout">
+          <swiper class="fun-text-demo-swiper" current="{{funTextDemoIndex}}" bindchange="onFunTextDemoChange">
+            <swiper-item wx:for="{{funTextDemoSlides}}" wx:key="src" wx:for-item="slide">
+              <image class="funtext-preview-image" src="{{slide.src}}" mode="aspectFit" bindtap="onTryFunTextDemo" />
             </swiper-item>
           </swiper>
+          <view class="funtext-preview-side">
+            <view class="funtext-preview-kicker">滑一下看看</view>
+            <view class="funtext-preview-progress">{{funTextDemoIndex + 1}} / {{funTextDemoSlides.length}}</view>
+            <view class="funtext-preview-copy">每张只说一点，最后一张才落下真正想说的话。</view>
+            <view class="funtext-preview-dots">
+              <view class="funtext-preview-dot {{index === funTextDemoIndex ? 'funtext-preview-dot-active' : ''}}" wx:for="{{funTextDemoSlides}}" wx:key="src"></view>
+            </view>
+          </view>
         </view>
-      </view>
-      <view class="demo-caption">朋友收到就能这样滑着看 👀</view>
+        <view class="home-action-row home-action-row-funtext">
+          <view class="home-action-primary home-action-primary-pink" bindtap="onTryFunTextDemo">
+            <view class="home-action-icon">▶</view>
+            <view><view class="home-action-title">把你的话也变成一叠</view><view class="home-action-sub">先用示例试玩</view></view>
+          </view>
+          <view class="home-action-secondary home-action-secondary-pink" bindtap="onCreateFunText">
+            <view class="home-action-icon home-action-icon-write">✎</view>
+            <view><view class="home-action-title">输入我的一句话</view><view class="home-action-sub">生成三套表达</view></view>
+          </view>
+        </view>
+      </block>
     </view>
 
-    <!-- 3. 旗舰主卡：穿搭叠图（双按钮：示例体验 + 选自己的图走既有 onChooseMedia） -->
-    <view class="hero-card">
-      <view class="hero-icon">📸</view>
-      <view class="hero-title">穿搭叠图</view>
-      <view class="hero-desc">AI 抠图分组 · 白底编号卡 · 回微信合并发送</view>
-      <view class="hero-cta-row">
-        <view class="hero-cta-ghost" catchtap="onChooseMedia">选自己的图</view>
-        <view class="hero-cta" catchtap="onTrySample">用示例试一叠</view>
-      </view>
+    <view class="home-tools-head">
+      <view class="home-tools-title">更多工具</view>
+      <view class="home-tools-side">发现更多有趣玩法 ›</view>
     </view>
-
-    <!-- 4. 玩法模板区 -->
-    <view class="section-head">
-      <view class="section-title-wrap">
-        <view class="section-bar"></view>
-        <view class="section-title">玩法模板</view>
-      </view>
-      <view class="section-side">陆续上线</view>
-    </view>
-    <view class="module-grid">
-      <view class="module-card" wx:for="{{comingModules}}" wx:key="key" bindtap="onComingSoon">
-        <view class="module-badge">即将上线</view>
-        <view class="module-emoji">{{item.emoji}}</view>
-        <view class="module-name">{{item.name}}</view>
-        <view class="module-desc">{{item.desc}}</view>
-      </view>
-    </view>
-
-    <!-- 5. 工具区 -->
-    <view class="tool-card" bindtap="onComingSoon">
-      <view class="tool-emoji">🗂️</view>
-      <view class="tool-info">
-        <view class="tool-name">资料打包</view>
-        <view class="tool-desc">多图分组成叠，不再刷屏</view>
-      </view>
-      <view class="tool-badge">即将上线</view>
-    </view>
-
-    <!-- 6. 操作说明卡 -->
-    <view class="guide-card">
-      <view class="section-title-wrap guide-title-wrap">
-        <view class="section-bar"></view>
-        <view class="section-title">怎么玩</view>
-      </view>
-      <view class="guide-list">
-        <view class="guide-item">
-          <view class="guide-num">1</view>
-          <view class="guide-text">点击「穿搭叠图」卡片的「用示例试一叠」快速体验，或点「选自己的图」选择上衣、裤子、裙子或鞋子的照片（可混选 1-9 张）。</view>
+    <view class="home-tools-grid">
+      <block wx:for="{{homeTools}}" wx:key="key">
+        <view class="home-tool-item" wx:if="{{item.status === 'available'}}" bindtap="onChooseMedia">
+          <view class="home-tool-icon home-tool-icon-{{item.key}}">{{item.emoji}}</view>
+          <view class="home-tool-name">{{item.name}}</view>
+          <view class="home-tool-status">可用</view>
         </view>
-        <view class="guide-item">
-          <view class="guide-num">2</view>
-          <view class="guide-text">确认图片与输出比例后，系统上传至云端进行部件智能分类与整理。</view>
+        <view class="home-tool-item home-tool-item-coming" wx:else bindtap="onComingSoon">
+          <view class="home-tool-icon home-tool-icon-{{item.key}}">{{item.emoji}}</view>
+          <view class="home-tool-name">{{item.name}}</view>
+          <view class="home-tool-status">即将上线</view>
         </view>
-        <view class="guide-item">
-          <view class="guide-num">3</view>
-          <view class="guide-text">在结果页查看自动分出的【上衣组】、【下装组】和【鞋子组】，一键保存到手机相册。</view>
-        </view>
-        <view class="guide-item">
-          <view class="guide-num">4</view>
-          <view class="guide-text">发送到微信群或私聊，利用微信多图合并堆叠效果，让闺蜜/群友左右滑动帮你挑选！</view>
-        </view>
-      </view>
+      </block>
     </view>
   </block>
 

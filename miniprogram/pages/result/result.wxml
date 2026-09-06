@@ -63,14 +63,14 @@
               <view class="pic-wrap">
                 <image
                   class="pic"
-                  src="{{it.displayUrl}}"
+                  src="{{it.exportUrl || it.displayUrl}}"
                   mode="aspectFit"
                   bindtap="onPreviewGroupImage"
                   data-group="{{g.key}}"
                   data-index="{{i}}"
                   lazy-load="true"
                 />
-                <view class="num">{{it.numLabel}}</view>
+                <view class="num" wx:if="{{g.key !== 'others' && !it.exportUrl}}">{{it.numLabel}}</view>
                 <view class="compose-mask" wx:if="{{it.composeStatus === 'composing'}}">
                   <view class="compose-spinner"></view>
                   <text class="compose-mask-text">生成中</text>
@@ -101,7 +101,7 @@
 
         <!-- 穿搭组整组保存；其他素材组仅说明文字 -->
         <view class="group-save" wx:if="{{g.key !== 'others'}}">
-          <view class="btn-grad" bindtap="onSaveGroupByKey" data-group="{{g.key}}">⬇ {{g.saveText}}</view>
+          <view class="btn-grad {{g.canExport ? '' : 'btn-grad-disabled'}}" bindtap="onSaveGroupByKey" data-group="{{g.key}}">⬇ {{g.saveText}}</view>
         </view>
         <view class="group-note" wx:else>人像、风景等不属于穿搭类别的图片，仅支持保存单图；点图片可「改分类」捞回穿搭组。</view>
       </view>
@@ -117,7 +117,7 @@
 
   <!-- 底部固定操作栏 -->
   <view class="result-bar" wx:if="{{!isEmpty}}">
-    <view class="ratio-chip" bindtap="onChangeRatio">{{composing && composeProgress ? '生成中 ' + composeProgress.done + '/' + composeProgress.total : (composing ? '合成中…' : ratio + ' ▸')}}</view>
+    <view class="ratio-chip" bindtap="onChangeRatio">{{composing && composeProgress ? '生成中 ' + composeProgress.done + '/' + composeProgress.total : (exportPreparing ? '加编号中…' : (composing ? '合成中…' : ratio + ' ▸'))}}</view>
     <view class="btn-preview" bindtap="onWechatPreview">💬 微信预览</view>
     <view class="btn-saveall" bindtap="onSaveAllImages">保存全部</view>
   </view>
@@ -147,19 +147,19 @@
       <view class="guide-steps">
         <view class="guide-step">
           <view class="guide-num">1</view>
-          <view class="guide-step-text">图片已按编号顺序保存到相册 ✓</view>
+          <view class="guide-step-text">每次只发送一叠，上衣、下装、鞋子分开发</view>
         </view>
         <view class="guide-step">
           <view class="guide-num">2</view>
-          <view class="guide-step-text">打开微信，进入要发送的聊天窗口</view>
+          <view class="guide-step-text">打开微信相册，按图片角标 01…勾选</view>
         </view>
         <view class="guide-step">
           <view class="guide-num">3</view>
-          <view class="guide-step-text">多选勾选刚保存的图片（按编号顺序选）</view>
+          <view class="guide-step-text">发送前确认 01 在第一位</view>
         </view>
         <view class="guide-step">
           <view class="guide-num">4</view>
-          <view class="guide-step-text">发送时勾选「发送后合并展示」，朋友就能滑着看</view>
+          <view class="guide-step-text">勾选「发送后合并展示」再发送，朋友就能滑着看</view>
         </view>
       </view>
       <view class="guide-btn-primary" bindtap="onSendGuidePreview">去看看朋友视角</view>
@@ -169,4 +169,6 @@
 
   <!-- 隐藏 canvas：用于前端合成白底卡片 -->
   <canvas type="2d" id="cardComposer" class="composer-canvas"></canvas>
+  <!-- 独立隐藏 canvas：只用于把可见顺序号写入最终导出图 -->
+  <canvas type="2d" id="sequenceBadgeCanvas" class="composer-canvas"></canvas>
 </view>

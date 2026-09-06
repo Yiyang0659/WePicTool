@@ -7,26 +7,28 @@ var GROUP_META = taskUtils.GROUP_META;
 var previewLayout = require('../../utils/previewLayout');
 var buildPreviewStage = previewLayout.buildPreviewStage;
 var orderCardsFromFront = previewLayout.orderCardsFromFront;
+var resolveGestureAxis = previewLayout.resolveGestureAxis;
+var resolveSwipeDecision = previewLayout.resolveSwipeDecision;
+var buildStackPositionStyle = previewLayout.buildStackPositionStyle;
+var buildStackMotionStyles = previewLayout.buildStackMotionStyles;
+var stackExportManifest = require('../../utils/stackExportManifest');
 
 var GROUP_ORDER = ['tops', 'bottoms', 'shoes', 'others'];
 var RATIO_CLASS = { '1:1': 'ar11', '4:5': 'ar45', '3:4': 'ar34' };
 var POS_CLASSES = ['pos-front', 'pos-g1', 'pos-g2'];
+var THEME_STORAGE_KEY = 'wepic_preview_theme';
+var GUIDE_STORAGE_KEY = 'wepic_preview_gesture_seen';
 // 位置轮转（固定节点只换位置 class，内容永不变更）
 // 左滑：front→g2、g1→front、g2→g1；右滑反向取回
 var ROTATE_LEFT = { 'pos-front': 'pos-g2', 'pos-g1': 'pos-front', 'pos-g2': 'pos-g1' };
 var ROTATE_RIGHT = { 'pos-front': 'pos-g1', 'pos-g1': 'pos-g2', 'pos-g2': 'pos-front' };
 
 // ---- 手势参数（契约 §12.6）----
-var DIR_LOCK_PX = 8;        // 首次位移超 8px 判定方向
-var ROTATE_PER_PX = 0.025;  // 跟手旋转系数 dx * 0.025°
-var ROTATE_MAX = 6;         // 旋转上限 ±6°
-var FLICK_VELOCITY = 0.28;  // 速度阈值 0.28px/ms（最近 120ms 采样）
-var VELOCITY_WINDOW = 120;  // 速度采样窗口 ms
-var DISTANCE_RATIO = 0.2;   // 位移阈值：卡宽 20%
-var FLY_DURATION = 220;     // 飞出 220ms ease-in
-var FLY_BUFFER = 30;        // 飞出动画落地缓冲
-var FLY_DISTANCE_RATIO = 1.3;
-var FLY_ROTATE = 18;
+var DIR_LOCK_PX = 8;          // 超过 8px 后还需满足横纵意图差，避免斜滑误判
+var VELOCITY_WINDOW = 120;    // 速度采样窗口 ms
+var SETTLE_DURATION = 190;    // 微信式前卡离场 + 后卡同步补位
+var SETTLE_BUFFER = 20;
+var TAIL_FADE_DURATION = 140; // 离场卡回到底层后只淡入露边，避免闪现
 var ENTER_STAGGER = 45;     // 展开 stagger 45ms
 var LEAVE_STAGGER = 30;     // 收起 stagger 30ms 逆序
 var LEAVE_DURATION = 180;   // 收起单行动画 180ms ease-in
@@ -39,17 +41,31 @@ Page({
     groupList: [],
     totalCount: 0,
     isEmpty: false,
+    inputMode: '',
+    inputError: '',
+    manifestFingerprint: '',
     scrollLock: false,      // 判定为横向滑动后锁定聊天纵向滚动
+    viewportStyle: '',
+    navStyle: '',
+    navRowStyle: '',
+    themeToggleStyle: '',
+    themeMode: 'light',
+    themeClass: 'theme-light',
+    themeName: '普通模式',
+    themeToggleLabel: '切换到深色模式',
+    guideVisible: false,
     viewer: { show: false, url: '' }
   },
 
-  _cardW: 200,              // 固定手势舞台宽 px（屏宽 54%，onLoad 标定）
+  _cardW: 143,              // 375px 标定约占屏宽 38%；每组仍以自身舞台宽度为手势阈值
   _windowWidth: 375,
   _gesture: null,           // 当前手势（单指单手势）
   _animating: {},           // gi -> 飞出/补位动画进行中
   _collapseTimers: {},
+  _guideTimer: null,
   _suppressGesture: false,  // 长按已触发，吞掉本次手势
   _lastCardLongPressAt: 0,  // 展开态卡片长按时间戳：微信长按松手会补发一次 tap，用来吞掉它
+  _lastStackMoveAt: 0,
 
   onLoad: function (options) {
     var that = this;
@@ -58,7 +74,7 @@ Page({
     }
     this.setData({ chatTime: this._formatTime(new Date()) });
 
-    // 固定手势舞台 = 屏宽 54%，图片比例变化不改变消息行高度
+    // 使用真实窗口与小程序胶囊位置标定固定视口、自定义导航和图片消息通道。
     var info = null;
     try {
       info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
@@ -67,8 +83,10 @@ Page({
     }
     if (info && info.windowWidth) {
       this._windowWidth = info.windowWidth;
-      this._cardW = info.windowWidth * 0.54;
+      this._cardW = buildPreviewStage({ composedRatio: '1:1' }, '1:1', info.windowWidth).stageWidth;
     }
+    this._applyViewportMetrics(info || {});
+    this._loadTheme(info && info.theme);
 
     var eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
@@ -81,16 +99,104 @@ Page({
   onUnload: function () {
     var timers = this._collapseTimers || {};
     Object.keys(timers).forEach(function (k) { clearTimeout(timers[k]); });
+    if (this._guideTimer) clearTimeout(this._guideTimer);
   },
 
-  // 输入兼容两种形态：
-  // 1) 现有调用方 result.js：{ task: { taskId, groups: { tops: [...] }, ratio } }
-  // 2) 契约 §12.6 直连形态：{ groups: [{ name, cards: [{ url, num }] }], ratio }
+  _applyViewportMetrics: function (info) {
+    var width = Number(info.windowWidth) > 0 ? Number(info.windowWidth) : this._windowWidth;
+    var statusBarHeight = Number(info.statusBarHeight) >= 0
+      ? Number(info.statusBarHeight)
+      : (info.safeArea && Number(info.safeArea.top)) || 20;
+    var menu = null;
+    try {
+      menu = wx.getMenuButtonBoundingClientRect ? wx.getMenuButtonBoundingClientRect() : null;
+    } catch (err) {
+      menu = null;
+    }
+
+    var validMenu = menu && Number(menu.top) >= statusBarHeight && Number(menu.height) > 0 && Number(menu.left) > 0;
+    var menuTop = validMenu ? Number(menu.top) : statusBarHeight + 6;
+    var menuHeight = validMenu ? Number(menu.height) : 32;
+    var navRowHeight = validMenu
+      ? Math.max(44, (menuTop - statusBarHeight) * 2 + menuHeight)
+      : 44;
+    var navHeight = statusBarHeight + navRowHeight;
+    var capsuleRightInset = validMenu ? Math.max(7, width - Number(menu.left)) : 88;
+    var toggleHeight = Math.min(32, menuHeight);
+    var toggleTop = menuTop + Math.max(0, (menuHeight - toggleHeight) / 2);
+
+    this.setData({
+      // fixed + inset:0 直接取渲染视口，避免开发者工具 windowHeight 与模拟器画布不一致。
+      viewportStyle: 'height: 100%;',
+      navStyle: 'height: ' + navHeight + 'px; padding-top: ' + statusBarHeight + 'px;',
+      navRowStyle: 'height: ' + navRowHeight + 'px;',
+      themeToggleStyle: 'right: ' + (capsuleRightInset + 8) + 'px; top: ' + toggleTop + 'px; height: ' + toggleHeight + 'px;'
+    });
+  },
+
+  _loadTheme: function (systemTheme) {
+    var stored = '';
+    try {
+      stored = wx.getStorageSync ? wx.getStorageSync(THEME_STORAGE_KEY) : '';
+    } catch (err) {
+      stored = '';
+    }
+    var mode = stored === 'dark' || stored === 'light'
+      ? stored
+      : (systemTheme === 'dark' ? 'dark' : 'light');
+    this._applyTheme(mode, false);
+  },
+
+  _applyTheme: function (mode, persist) {
+    var next = mode === 'dark' ? 'dark' : 'light';
+    var dark = next === 'dark';
+    this.setData({
+      themeMode: next,
+      themeClass: dark ? 'theme-dark' : 'theme-light',
+      themeName: dark ? '深色模式' : '普通模式',
+      themeToggleLabel: dark ? '切换到普通模式' : '切换到深色模式'
+    });
+    if (persist) {
+      try {
+        if (wx.setStorageSync) wx.setStorageSync(THEME_STORAGE_KEY, next);
+      } catch (err) {
+        // 本地存储失败不阻断预览。
+      }
+    }
+    try {
+      if (wx.setNavigationBarColor) {
+        wx.setNavigationBarColor({
+          frontColor: dark ? '#ffffff' : '#000000',
+          backgroundColor: dark ? '#1e1e1e' : '#f7f7f7',
+          animation: { duration: 180, timingFunc: 'easeIn' }
+        });
+      }
+      if (wx.setBackgroundColor) {
+        wx.setBackgroundColor({
+          backgroundColor: dark ? '#111111' : '#ededed',
+          backgroundColorTop: dark ? '#1e1e1e' : '#f7f7f7',
+          backgroundColorBottom: dark ? '#1e1e1e' : '#f7f7f7'
+        });
+      }
+    } catch (err) {
+      // 系统栏颜色设置失败时页面主题仍可正常切换。
+    }
+  },
+
+  onToggleTheme: function () {
+    this._applyTheme(this.data.themeMode === 'dark' ? 'light' : 'dark', true);
+  },
+
+  // 新调用方只传 materialized manifest；task/groups 保留一个兼容周期。
   _acceptInput: function (data) {
     if (!data) return;
+    if (data.manifest) {
+      this._acceptManifest(data.manifest, data.selectedStackIds, data.ratio);
+      return;
+    }
     if (Object.prototype.toString.call(data.groups) === '[object Array]') {
       if (data.ratio && RATIO_CLASS[data.ratio]) this.setData({ ratio: data.ratio });
-      this._renderGroups(this._normalizeContractGroups(data.groups), data.ratio || this.data.ratio);
+      this._renderGroups(this._normalizeContractGroups(data.groups), data.ratio || this.data.ratio, 'legacy');
       return;
     }
     if (data.task) {
@@ -110,7 +216,56 @@ Page({
           named.push({ name: (GROUP_META[key] || {}).title || key, cards: cards });
         }
       }
-      this._renderGroups(named, task.ratio || this.data.ratio);
+      this._renderGroups(named, task.ratio || this.data.ratio, 'legacy');
+    }
+  },
+
+  _acceptManifest: function (manifest, selectedStackIds, ratio) {
+    try {
+      stackExportManifest.validateManifest(manifest);
+      var selected = null;
+      if (Array.isArray(selectedStackIds) && selectedStackIds.length > 0) {
+        selected = {};
+        selectedStackIds.forEach(function (stackId) { selected[stackId] = true; });
+      }
+      var named = [];
+      for (var stackIndex = 0; stackIndex < manifest.stacks.length; stackIndex++) {
+        var stack = manifest.stacks[stackIndex];
+        if (selected && !selected[stack.stackId]) continue;
+        if (!stack.cards.length) continue;
+        var cards = [];
+        for (var cardIndex = 0; cardIndex < stack.cards.length; cardIndex++) {
+          var card = stack.cards[cardIndex];
+          if (!card.exportUrl) throw new Error('编号图尚未准备好：' + stack.title + ' ' + card.sequenceLabel);
+          cards.push({
+            url: card.exportUrl,
+            num: card.sequenceLabel,
+            sequenceLabel: card.sequenceLabel,
+            isCover: card.isCover,
+            ratio: card.ratio || manifest.ratio,
+            width: card.width,
+            height: card.height
+          });
+        }
+        named.push({ key: stack.stackId, stackId: stack.stackId, name: stack.title, cards: cards });
+      }
+      if (ratio && RATIO_CLASS[ratio]) this.setData({ ratio: ratio });
+      this.setData({ manifestFingerprint: manifest.fingerprint || '', inputError: '' });
+      this._renderGroups(named, ratio || manifest.ratio || this.data.ratio, 'manifest');
+    } catch (error) {
+      var message = (error && error.message) || '编号图预览数据无效';
+      this._gesture = null;
+      this._animating = {};
+      this.setData({
+        groupList: [],
+        totalCount: 0,
+        isEmpty: true,
+        inputMode: 'manifest',
+        inputError: message,
+        manifestFingerprint: '',
+        scrollLock: false
+      });
+      wx.showToast({ title: message, icon: 'none', duration: 2200 });
     }
   },
 
@@ -131,7 +286,7 @@ Page({
   },
 
   // 每组一份独立状态：固定节点 + 位置轮转 + 手势/展开/收起标记
-  _renderGroups: function (namedGroups, fallbackRatio) {
+  _renderGroups: function (namedGroups, fallbackRatio, inputMode) {
     var list = [];
     var total = 0;
     for (var i = 0; i < namedGroups.length; i++) {
@@ -142,9 +297,12 @@ Page({
         var stage = buildPreviewStage(g.cards[j], fallbackRatio || this.data.ratio || '4:5', this._windowWidth);
         cards.push({
           url: g.cards[j].url,
-          num: ('0' + (cards.length + 1)).slice(-2),
+          num: g.cards[j].num || g.cards[j].sequenceLabel || ('0' + (cards.length + 1)).slice(-2),
+          isCover: g.cards[j].isCover === true,
           err: false,
           ratio: stage.ratio,
+          cardWidth: stage.cardWidth,
+          cardHeight: stage.cardHeight,
           cardStyle: stage.cardStyle,
           stageStyle: 'width: ' + stage.stageWidth + 'px; height: ' + stage.stageHeight + 'px;'
         });
@@ -161,7 +319,9 @@ Page({
           num: cards[k].num,
           err: false,
           cardStyle: cards[k].cardStyle,
-          pos: POS_CLASSES[k]
+          pos: POS_CLASSES[k],
+          motionStyle: '',
+          incoming: false
         });
       }
 
@@ -169,19 +329,20 @@ Page({
       var rest = this._buildRest(cards);
 
       list.push({
-        key: 'group_' + i,
+        key: g.key || 'group_' + i,
+        stackId: g.stackId || '',
         name: g.name || '',
         n: cards.length,
         cards: cards,
         nodes: nodes,
         frontIdx: 0,
-        dragStyle: '',
         dragging: false,
-        flying: false,
+        settling: false,
         noanimIdx: -1,
         expanded: false,
         leaving: false,
         rest: rest,
+        stageWidth: cards[0].cardWidth || this._cardW,
         stageStyle: cards[0].stageStyle
       });
     }
@@ -191,8 +352,11 @@ Page({
       groupList: list,
       totalCount: total,
       isEmpty: total === 0,
+      inputMode: inputMode || 'legacy',
+      inputError: '',
       scrollLock: false
     });
+    if (total > 0) this._maybeShowGuide();
   },
 
   _getUrl: function (item) {
@@ -219,7 +383,39 @@ Page({
   },
 
   _formatTime: function () {
-    return '中午12:00';
+    return '刚刚';
+  },
+
+  _maybeShowGuide: function () {
+    var seen = false;
+    try {
+      seen = Boolean(wx.getStorageSync && wx.getStorageSync(GUIDE_STORAGE_KEY));
+    } catch (err) {
+      seen = false;
+    }
+    if (seen || this.data.guideVisible) return;
+    this.setData({ guideVisible: true });
+    var that = this;
+    if (this._guideTimer) clearTimeout(this._guideTimer);
+    this._guideTimer = setTimeout(function () { that._hideGuide(); }, 2200);
+  },
+
+  _hideGuide: function () {
+    if (!this._guideTimer && !this.data.guideVisible) return;
+    if (this._guideTimer) {
+      clearTimeout(this._guideTimer);
+      this._guideTimer = null;
+    }
+    if (this.data.guideVisible) this.setData({ guideVisible: false });
+    try {
+      if (wx.setStorageSync) wx.setStorageSync(GUIDE_STORAGE_KEY, true);
+    } catch (err) {
+      // 手势提示状态不是主流程数据，写入失败可忽略。
+    }
+  },
+
+  onChatScroll: function () {
+    this._hideGuide();
   },
 
   _gi: function (e) {
@@ -257,12 +453,14 @@ Page({
     var mx = t.clientX - gs.startX;
     var my = t.clientY - gs.startY;
 
-    // 方向锁：首次位移超 8px 判定，仅水平位移 > 垂直才接管
+    // 方向锁：超过 8px 后仍需拉开横纵意图差；斜向未明确时继续观察，不抢滚动。
     if (!gs.decided) {
-      if (Math.abs(mx) <= DIR_LOCK_PX && Math.abs(my) <= DIR_LOCK_PX) return;
-      gs.decided = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
+      gs.decided = resolveGestureAxis(mx, my, DIR_LOCK_PX);
+      if (!gs.decided) return;
       if (gs.decided === 'h') {
         gs.dragging = true;
+        this._lastStackMoveAt = Date.now();
+        this._hideGuide();
         var upd = {};
         upd['groupList[' + gs.gi + '].dragging'] = true;
         upd.scrollLock = true; // 判定横向后才禁止聊天纵向滚动（判定前不得锁）
@@ -274,15 +472,11 @@ Page({
     }
     if (!gs.dragging) return;
 
-    // 跟手 translateX + rotate（±6° 上限），拖动中 .dragging 禁用过渡
+    // 微信式牌堆：顶卡严格跟手，后两卡按进度同步向前补位；消息行与头像完全不动。
     gs.dx = mx;
-    var rot = Math.max(-ROTATE_MAX, Math.min(ROTATE_MAX, mx * ROTATE_PER_PX));
-    var style = 'transform: translateX(' + mx + 'px) rotate(' + rot + 'deg);';
-    if (style !== this.data.groupList[gs.gi].dragStyle) {
-      var u = {};
-      u['groupList[' + gs.gi + '].dragStyle'] = style;
-      this.setData(u);
-    }
+    var group = this.data.groupList[gs.gi];
+    var styles = buildStackMotionStyles(group.nodes, group.frontIdx, mx, group.stageWidth || this._cardW, false);
+    this._setStackMotionStyles(gs.gi, styles);
     gs.samples.push({ x: t.clientX, t: e.timeStamp });
     if (gs.samples.length > 6) gs.samples.shift();
   },
@@ -303,15 +497,13 @@ Page({
     this._unlockScroll();
     if (!gs || !gs.dragging) { this._suppressGesture = false; return; }
     // 触摸被打断：按未达阈值处理，回弹
-    var u = {};
-    u['groupList[' + gs.gi + '].dragging'] = false;
-    u['groupList[' + gs.gi + '].dragStyle'] = '';
-    this.setData(u);
+    this._resetStackMotion(gs.gi);
   },
 
   _releaseStack: function (gs) {
     var gi = gs.gi;
-    var W = this._cardW || 200;
+    var group = this.data.groupList[gi];
+    var W = (group && group.stageWidth) || this._cardW || 200;
 
     // 速度：取最近 120ms 采样
     var v = 0;
@@ -327,35 +519,57 @@ Page({
       }
     }
 
-    var dir = 0; // -1 左滑，+1 右滑
-    if (Math.abs(v) > FLICK_VELOCITY) dir = v < 0 ? -1 : 1;
-    else if (Math.abs(gs.dx) > W * DISTANCE_RATIO) dir = gs.dx < 0 ? -1 : 1;
+    var dir = resolveSwipeDecision(gs.dx, v, W); // -1 左滑，+1 右滑
 
     if (dir !== 0) {
-      this._flyOut(gi, dir);
+      this._settleStack(gi, dir);
       return;
     }
-    // 未达阈值：清除内联样式，交还 CSS 过渡回弹（250ms cubic-bezier(.2,.8,.3,1)）
-    var u = {};
-    u['groupList[' + gi + '].dragging'] = false;
-    u['groupList[' + gi + '].dragStyle'] = '';
+    // 未达阈值：所有节点回到各自固定槽位；顶卡回弹，后卡退回露边位置。
+    this._resetStackMotion(gi);
+  },
+
+  _setStackMotionStyles: function (gi, styles, extra) {
+    var u = extra || {};
+    for (var i = 0; i < styles.length; i++) {
+      u['groupList[' + gi + '].nodes[' + i + '].motionStyle'] = styles[i] || '';
+    }
     this.setData(u);
   },
 
-  // 飞出 ±1.3×卡宽 + rotate ±18° + 渐隐，随后循环入尾
-  _flyOut: function (gi, dir) {
+  _resetStackMotion: function (gi) {
+    var g = this.data.groupList[gi];
+    if (!g) return;
+    var u = {};
+    u['groupList[' + gi + '].dragging'] = false;
+    u['groupList[' + gi + '].settling'] = false;
+    for (var i = 0; i < g.nodes.length; i++) {
+      u['groupList[' + gi + '].nodes[' + i + '].motionStyle'] = '';
+      u['groupList[' + gi + '].nodes[' + i + '].incoming'] = false;
+    }
+    this.setData(u);
+  },
+
+  // 松手后前卡只离开约一张卡宽，后卡同时补位；旧前卡从另一侧回到底层形成循环。
+  _settleStack: function (gi, dir) {
     var that = this;
     var g = this.data.groupList[gi];
     if (!g) return;
     this._animating[gi] = true;
-    var W = this._cardW || 200;
-
-    var u = {};
-    u['groupList[' + gi + '].dragging'] = false;
-    u['groupList[' + gi + '].flying'] = true;
-    u['groupList[' + gi + '].dragStyle'] =
-      'transform: translateX(' + dir * FLY_DISTANCE_RATIO * W + 'px) rotate(' + dir * FLY_ROTATE + 'deg); opacity: 0;';
-    this.setData(u);
+    var W = g.stageWidth || this._cardW || 200;
+    var settleStyles = buildStackMotionStyles(g.nodes, g.frontIdx, dir, W, true);
+    var settleUpdate = {};
+    settleUpdate['groupList[' + gi + '].dragging'] = false;
+    settleUpdate['groupList[' + gi + '].settling'] = true;
+    for (var i = 0; i < g.nodes.length; i++) {
+      var node = g.nodes[i];
+      settleUpdate['groupList[' + gi + '].nodes[' + i + '].incoming'] = i !== g.frontIdx && (
+        g.nodes.length === 2 ||
+        (dir < 0 && node.pos === 'pos-g1') ||
+        (dir > 0 && node.pos === 'pos-g2')
+      );
+    }
+    this._setStackMotionStyles(gi, settleStyles, settleUpdate);
 
     setTimeout(function () {
       var cur = that.data.groupList[gi];
@@ -373,30 +587,33 @@ Page({
           num: nd.num,
           err: nd.err,
           cardStyle: nd.cardStyle,
-          pos: pos
+          pos: pos,
+          motionStyle: i === cur.frontIdx ? buildStackPositionStyle(pos, 0) : '',
+          incoming: false
         };
       });
 
-      // 飞出卡瞬移入尾（noanim 关过渡），其余卡由 class 过渡自动补位
+      // 补位完成后只重标固定槽位。旧前卡在目标尾槽以 opacity 0 复位，再淡入露边。
       var u2 = {};
       u2['groupList[' + gi + '].nodes'] = nodes;
       u2['groupList[' + gi + '].frontIdx'] = frontIdx;
-      u2['groupList[' + gi + '].flying'] = false;
-      u2['groupList[' + gi + '].dragStyle'] = '';
+      u2['groupList[' + gi + '].settling'] = false;
       u2['groupList[' + gi + '].noanimIdx'] = cur.frontIdx;
       that.setData(u2, function () {
         setTimeout(function () {
           var u3 = {};
           u3['groupList[' + gi + '].noanimIdx'] = -1;
+          u3['groupList[' + gi + '].nodes[' + cur.frontIdx + '].motionStyle'] = '';
           that.setData(u3);
-          that._animating[gi] = false;
-        }, 50);
+          setTimeout(function () { that._animating[gi] = false; }, TAIL_FADE_DURATION);
+        }, 16);
       });
-    }, FLY_DURATION + FLY_BUFFER);
+    }, SETTLE_DURATION + SETTLE_BUFFER);
   },
 
   // ============ 展开 / 收起 ============
   onToggleCapsule: function (e) {
+    this._hideGuide();
     var gi = this._gi(e);
     var g = this.data.groupList[gi];
     if (!g || g.leaving || this._animating[gi]) return;
@@ -436,6 +653,27 @@ Page({
     this._lastCardLongPressAt = 0;
     var url = e.currentTarget.dataset.url;
     if (!url) return;
+    this._openViewer(this._gi(e), url);
+  },
+
+  onStackTap: function (e) {
+    if (this._suppressGesture) return;
+    if (this._lastStackMoveAt && Date.now() - this._lastStackMoveAt < 350) return;
+    var gi = this._gi(e);
+    var g = this.data.groupList[gi];
+    if (!g) return;
+    var node = g.nodes[g.frontIdx];
+    if (!node || !node.url) return;
+    this._openViewer(gi, node.url);
+  },
+
+  _openViewer: function (gi, url) {
+    var g = this.data.groupList[gi];
+    var urls = g && g.cards ? g.cards.map(function (card) { return card.url; }).filter(Boolean) : [url];
+    if (wx.previewImage) {
+      wx.previewImage({ current: url, urls: urls });
+      return;
+    }
     this.setData({ viewer: { show: true, url: url } });
   },
 
@@ -443,7 +681,7 @@ Page({
     this.setData({ viewer: { show: false, url: '' } });
   },
 
-  // ============ 长按动作面板（两态：保存全部 / 转发）============
+  // ============ 长按动作面板（只提供能够兑现的相册保存）============
   onStackLongPress: function (e) {
     this._suppressGesture = true;
     var gi = this._gi(e);
@@ -466,20 +704,17 @@ Page({
     var that = this;
     var g = this.data.groupList[gi];
     if (!g) return;
-    var items = singleUrl ? ['保存单张', '保存全部', '转发'] : ['保存全部', '转发'];
+    var items = singleUrl ? ['保存这张', '保存这一组'] : ['保存这一组'];
     wx.showActionSheet({
+      alertText: (g.name || '当前图片组') + ' · ' + g.n + ' 张',
       itemList: items,
       success: function (res) {
         if (singleUrl && res.tapIndex === 0) {
           that._saveImagesSequentially([singleUrl], '已保存 1 张');
         } else if (singleUrl && res.tapIndex === 1) {
           that._saveGroup(gi);
-        } else if (singleUrl && res.tapIndex === 2) {
-          that._forwardGroup();
         } else if (!singleUrl && res.tapIndex === 0) {
           that._saveGroup(gi);
-        } else if (!singleUrl && res.tapIndex === 1) {
-          that._forwardGroup();
         }
       }
     });
@@ -494,11 +729,6 @@ Page({
     }
     if (urls.length === 0) return;
     this._saveImagesSequentially(urls, '已保存全部 ' + urls.length + ' 张');
-  },
-
-  _forwardGroup: function () {
-    wx.showShareMenu({ withShareTicket: true, menus: ['shareAppMessage', 'shareTimeline'] });
-    wx.showToast({ title: '点右上角「···」发送给朋友', icon: 'none', duration: 2200 });
   },
 
   // ============ 保存到相册（与 result.js 同一实现口径）============
@@ -616,6 +846,10 @@ Page({
     else if (d.kind === 'card') u['groupList[' + gi + '].cards[' + parseInt(d.ci, 10) + '].err'] = true;
     else return;
     this.setData(u);
+  },
+
+  onInputHint: function () {
+    wx.showToast({ title: '这是效果预览，保存后回微信发送', icon: 'none', duration: 2200 });
   },
 
   onBack: function () {

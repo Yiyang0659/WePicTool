@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "自己改改",
+  "usingComponents": {
+    "fun-card-canvas": "../../components/fun-card-canvas/fun-card-canvas"
+  }
+}

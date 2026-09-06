@@ -1,138 +1,186 @@
 /* pages/preview/preview.wxss */
-/* 白底微信发送预演：固定手势舞台让不同图片比例不改变消息流高度 */
+/* 固定一屏微信外壳；中间 scroll-view 是唯一纵向滚动区域。 */
 
 page {
   height: 100%;
-  background-color: #ffffff;
+  overflow: hidden;
+  background-color: #ededed;
 }
 
 .wx {
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  background-color: #ffffff;
-}
-
-.wx-status {
-  flex: none;
-  height: 44px;
-  padding: 0 16px;
-  padding-top: constant(safe-area-inset-top);
-  padding-top: env(safe-area-inset-top);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-sizing: border-box;
-  color: #111111;
-  font-size: 12px;
-  font-weight: 600;
+  min-height: 0;
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.9);
+  background-color: #ededed;
 }
 
 .wx-nav {
+  position: relative;
+  z-index: 20;
   flex: none;
-  height: 46px;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: #f7f7f7;
+}
+
+.wx-nav-row {
+  position: relative;
   display: flex;
   align-items: center;
-  background-color: #ffffff;
-  border-bottom: 1px solid #eeeeee;
+  box-sizing: border-box;
   padding: 0 10px;
 }
 
-.wx-nav .back,
-.wx-nav .dots {
-  flex: none;
+.back {
+  position: relative;
+  z-index: 2;
+  display: flex;
   width: 44px;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  color: #111111;
-}
-
-.wx-nav .back {
-  font-size: 28px;
-  padding-left: 2px;
-  box-sizing: border-box;
-}
-
-.wx-nav .name {
-  flex: 1;
-  text-align: center;
-  color: #111111;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.wx-nav .dots {
-  justify-content: flex-end;
-  font-size: 16px;
-  letter-spacing: 1px;
-}
-
-.wx-body {
-  flex: 1;
-  background-color: #ffffff;
-}
-
-.wx-body-inner {
-  padding: 12px 10px;
-  box-sizing: border-box;
-}
-
-.wx-time {
-  margin: 2px 0 12px;
-  text-align: center;
-  color: rgba(0, 0, 0, 0.32);
-  font-size: 11px;
-}
-
-.msg {
-  display: flex;
-  align-items: flex-start;
-  min-height: 164px;
-  margin-bottom: 4px;
-}
-
-.msg.me {
-  flex-direction: row-reverse;
-}
-
-.avatar {
+  height: 100%;
   flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 5px;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 0 2px 2px;
+  color: rgba(0, 0, 0, 0.9);
+  font-size: 34px;
+  font-weight: 300;
+}
+
+.name {
+  position: absolute;
+  left: 50%;
+  width: 120px;
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.9);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* 用户参考中的太阳/月亮被合并为一颗二态分段按钮。 */
+.theme-toggle {
+  position: absolute;
+  z-index: 5;
   display: flex;
+  width: 68px;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  font-size: 18px;
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.56);
+}
+
+.theme-segment {
+  position: relative;
+  display: flex;
+  width: 33px;
+  height: calc(100% - 4px);
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: rgba(0, 0, 0, 0.48);
+  transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.theme-segment.active {
+  color: rgba(0, 0, 0, 0.82);
+  background-color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.theme-divider {
+  width: 1px;
+  height: 17px;
+  flex: none;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.theme-symbol {
+  display: block;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-weight: 400;
+  line-height: 1;
+  text-align: center;
+}
+
+.theme-sun { padding-bottom: 1px; font-size: 23px; }
+.theme-moon { padding-bottom: 2px; font-size: 22px; transform: rotate(-12deg); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.wx-body {
+  height: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background-color: #ededed;
+}
+
+.wx-body-inner {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 14px 10px 28px;
+}
+
+.wx-time {
+  margin: 0 0 18px;
+  color: rgba(0, 0, 0, 0.3);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.msg {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.msg.me { flex-direction: row-reverse; }
+
+.avatar {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 5px;
+  font-size: 20px;
 }
 
 .msg.me .avatar {
   margin-left: 8px;
-  margin-top: 12px;
-  background-color: #9ed97a;
-}
-
-.stackmsg {
-  position: relative;
+  background-color: #95ec69;
 }
 
 .stackmsg-content {
   display: flex;
-  flex-direction: column;
   min-width: 0;
+  flex: none;
+  flex-direction: column;
 }
 
-.group-label {
-  height: 12px;
-  margin-bottom: 2px;
-  text-align: right;
-  color: rgba(0, 0, 0, 0.45);
-  font-size: 10px;
-}
-
-/* 稳定舞台由内联 stageStyle 注入：图片再高也不推挤下一组 */
 .stackwrap,
 .xcard {
   position: relative;
@@ -140,32 +188,34 @@ page {
   overflow: visible;
 }
 
-/* 节点占满稳定舞台；节点只用 transform 补位，内部卡片独立等比居中 */
 .stk {
   position: absolute;
   inset: 0;
-  transition: transform 240ms cubic-bezier(.18, .82, .2, 1), opacity 210ms ease;
+  transition: transform 220ms cubic-bezier(.18, .82, .2, 1), opacity 150ms ease;
   will-change: transform, opacity;
 }
 
-.stk.pos-front { transform: none; z-index: 3; }
-.stk.pos-g1 { transform: translateX(-8px) rotate(-0.7deg) scale(0.97); z-index: 2; }
-.stk.pos-g2 { transform: translateX(13px) rotate(1.1deg) scale(0.94); z-index: 1; }
-.stk.dragging { transition: none; z-index: 5; }
-.stk.flying { transition: transform 220ms cubic-bezier(.3, 0, .8, .2), opacity 180ms ease; z-index: 5; }
+.stk.pos-front { z-index: 3; transform: none; }
+.stk.pos-g1 { z-index: 2; transform: translateX(-8px) rotate(-0.7deg) scale(0.97); }
+.stk.pos-g2 { z-index: 1; transform: translateX(10px) rotate(1deg) scale(0.94); }
+.stk.tracking { transition: none; }
+.stk.tracking.front-active { z-index: 5; }
+.stk.settling { transition: transform 190ms cubic-bezier(.18, .78, .2, 1), opacity 150ms ease; }
+.stk.settling.incoming { z-index: 4; }
+.stk.settling.front-active { z-index: 5; transition: transform 190ms cubic-bezier(.3, 0, .72, 1), opacity 140ms ease; }
 .stk.noanim { transition: none !important; }
 
 .stack-card {
   position: absolute;
-  left: 50%;
   top: 50%;
+  left: 50%;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 7px;
-  background-color: #fafafa;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  transform: translate(-50%, -50%);
   box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 7px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  transform: translate(-50%, -50%);
 }
 
 .card-img {
@@ -174,24 +224,39 @@ page {
   height: 100%;
 }
 
-/* 胶囊紧贴牌堆左侧，但保留 16px 防止与图片重叠 */
 .expand-cap {
-  position: absolute;
-  left: 24px;
-  top: 75px;
   z-index: 6;
-  border-radius: 99px;
-  padding: 6px 11px;
-  background-color: rgba(0, 0, 0, 0.62);
-  color: #ffffff;
+  flex: none;
+  margin-right: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 999px;
+  color: rgba(0, 0, 0, 0.72);
+  background-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   font-size: 11px;
   font-weight: 500;
+  line-height: 20px;
   white-space: nowrap;
 }
 
-.expand-cap:active { background-color: rgba(0, 0, 0, 0.76); }
+.expand-cap:active { background-color: rgba(255, 255, 255, 0.92); }
 
-/* 展开态沿用同一固定舞台，避免不同来源图比例改变聊天流宽高 */
+.gesture-tip {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 8;
+  max-width: 150px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(0, 0, 0, 0.68);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  font-size: 10px;
+  line-height: 16px;
+}
+
 .xrow.enter { animation: xin 220ms cubic-bezier(.2, .8, .2, 1) both; }
 .xrow.leave { animation: xout 180ms ease-in both; }
 
@@ -212,42 +277,55 @@ page {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  color: rgba(0, 0, 0, 0.45);
   background-color: #f0f0f2;
-  color: #9a9aa0;
   font-size: 11px;
 }
 
-.img-fallback .ic { margin-bottom: 4px; font-size: 26px; }
+.fallback-icon { margin-bottom: 5px; font-size: 28px; }
 
 .wx-inputbar {
-  flex: none;
+  z-index: 20;
   display: flex;
+  flex: none;
   align-items: center;
+  box-sizing: border-box;
   padding: 8px 10px calc(8px + constant(safe-area-inset-bottom));
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-  border-top: 1px solid #eeeeee;
-  background-color: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: #f7f7f7;
 }
 
-.wx-inputbar .ic {
-  width: 26px;
-  height: 26px;
+.input-icon {
+  display: block;
+  width: 27px;
+  height: 30px;
   flex: none;
-  margin-right: 9px;
-  color: #3b3b3b;
-  font-size: 22px;
-  line-height: 26px;
+  margin-right: 8px;
+  color: rgba(0, 0, 0, 0.78);
+  font-size: 23px;
+  line-height: 30px;
   text-align: center;
 }
 
-.wx-inputbar .ic:last-child { margin-right: 0; }
+.input-plus {
+  margin-right: 0;
+  font-size: 29px;
+  font-weight: 300;
+}
 
-.wx-inputbar .field {
+.field {
+  display: flex;
+  height: 36px;
   flex: 1;
-  height: 34px;
-  margin-right: 9px;
+  align-items: center;
+  box-sizing: border-box;
+  margin-right: 8px;
+  padding: 0 12px;
   border-radius: 5px;
-  background-color: #f3f3f3;
+  color: rgba(0, 0, 0, 0.3);
+  background-color: #ffffff;
+  font-size: 14px;
 }
 
 .viewer {
@@ -260,12 +338,12 @@ page {
   background-color: #000000;
 }
 
-.vimg { max-width: 82vw; max-height: 78vh; }
+.vimg { max-width: 92vw; max-height: 84vh; }
 
 .vtip {
   position: absolute;
   right: 0;
-  bottom: 40px;
+  bottom: calc(30px + env(safe-area-inset-bottom));
   left: 0;
   color: rgba(255, 255, 255, 0.5);
   font-size: 11px;
@@ -274,11 +352,35 @@ page {
 
 .empty-state {
   display: flex;
+  min-height: 320px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 40px 20px;
 }
 
-.empty-icon { margin-bottom: 15px; font-size: 50px; }
-.empty-text { color: #999999; font-size: 14px; }
+.empty-icon { margin-bottom: 14px; color: rgba(0, 0, 0, 0.3); font-size: 48px; }
+.empty-text { max-width: 260px; color: rgba(0, 0, 0, 0.5); font-size: 14px; line-height: 21px; text-align: center; }
+.empty-action { margin-top: 18px; padding: 8px 16px; border-radius: 6px; color: #576b95; background-color: #ffffff; font-size: 14px; }
+
+/* Tencent WeUI dark theme: BG-0 #111, BG-1 #1e1e1e, BG-2 #191919. */
+.theme-dark { color: rgba(255, 255, 255, 0.8); background-color: #111111; }
+.theme-dark .wx-nav,
+.theme-dark .wx-inputbar { border-color: rgba(255, 255, 255, 0.05); background-color: #1e1e1e; }
+.theme-dark .wx-body { background-color: #111111; }
+.theme-dark .back,
+.theme-dark .name { color: rgba(255, 255, 255, 0.8); }
+.theme-dark .wx-time { color: rgba(255, 255, 255, 0.3); }
+.theme-dark .theme-toggle { border-color: rgba(255, 255, 255, 0.15); background-color: rgba(0, 0, 0, 0.16); }
+.theme-dark .theme-segment { color: rgba(255, 255, 255, 0.46); }
+.theme-dark .theme-segment.active { color: rgba(255, 255, 255, 0.86); background-color: #404040; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
+.theme-dark .theme-divider { background-color: rgba(255, 255, 255, 0.12); }
+.theme-dark .stack-card { border-color: rgba(255, 255, 255, 0.1); background-color: #191919; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45); }
+.theme-dark .expand-cap { border-color: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.72); background-color: rgba(64, 64, 64, 0.82); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }
+.theme-dark .expand-cap:active { background-color: rgba(80, 80, 80, 0.95); }
+.theme-dark .img-fallback { color: rgba(255, 255, 255, 0.46); background-color: #202020; }
+.theme-dark .input-icon { color: rgba(255, 255, 255, 0.76); }
+.theme-dark .field { color: rgba(255, 255, 255, 0.3); background-color: #2c2c2c; }
+.theme-dark .empty-icon { color: rgba(255, 255, 255, 0.3); }
+.theme-dark .empty-text { color: rgba(255, 255, 255, 0.5); }
+.theme-dark .empty-action { color: #7d90a9; background-color: #191919; }

@@ -1,8 +1,29 @@
 // pages/record/record.js
 const { normalizeTaskGroups, buildSendability, createMockTask } = require('../../utils/task');
+const funTextProject = require('../../utils/funTextProject');
+const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 
 const RECORDS_KEY = 'wepictool_records';
 const MAX_RECORDS = 20;
+
+function projectFingerprint(project) {
+  if (!project || project.version !== 1) return '';
+  try {
+    return funTextProject.createRenderFingerprint(project);
+  } catch (error) {
+    return '';
+  }
+}
+
+function isValidFunTextTask(task) {
+  if (!task || task.type !== 'funtext' || !Array.isArray(task.cards)) return false;
+  const project = task.projectSnapshot;
+  return Boolean(
+    projectFingerprint(project)
+    && typeof task.taskId === 'string'
+    && task.taskId === project.projectId
+  );
+}
 
 Page({
   data: {
@@ -15,14 +36,16 @@ Page({
     // 玩法类型元信息：未来新玩法写入带 type 的记录后，分类 tab 自动点亮
     TYPE_META: {
       outfit: { label: '穿搭叠图', emoji: '👕' },
+      funtext: { label: '趣味字画', emoji: '🎨' },
+      dressup: { label: '滑滑换装', emoji: '👠' },
+      'layered-dressup': { label: '分层换装', emoji: '👠' },
       bigtext: { label: '大字滑卡', emoji: '🔤' },
       story: { label: '剧情滑卡', emoji: '🎬' },
       blindbox: { label: '盲盒抽卡', emoji: '🎁' },
       puzzle: { label: '拼图揭秘', emoji: '🧩' },
       pack: { label: '资料打包', emoji: '🗂️' },
       animate: { label: '翻页动画', emoji: '🎞️' },
-      combo: { label: '成套搭配', emoji: '🧥' },
-      dressup: { label: '滑滑换装', emoji: '👠' }
+      combo: { label: '成套搭配', emoji: '🧥' }
     },
     typeTabs: [{ type: 'all', label: '全部', emoji: '' }],
     activeType: 'all',
@@ -190,7 +213,73 @@ Page({
   onViewRecord: function (e) {
     const recordId = e.currentTarget.dataset.recordid;
     const record = this.data.records.find(r => r.recordId === recordId);
-    if (!record || !record.taskSnapshot) {
+    if (!record) {
+      wx.showToast({ title: '记录未找到', icon: 'none' });
+      return;
+    }
+
+    if ((record.recordType === 'funtext' || record.recordType === 'bigtext')
+        && ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
+      wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+      return;
+    }
+
+    if (record.recordType === 'funtext') {
+      const project = record.projectSnapshot;
+      const fingerprint = projectFingerprint(project);
+      if (!fingerprint) {
+        wx.showToast({ title: '该记录版本暂不支持', icon: 'none' });
+        return;
+      }
+      const task = record.taskSnapshot;
+      const canRestoreTask = isValidFunTextTask(task)
+        && projectFingerprint(task.projectSnapshot) === fingerprint
+        && record.renderFingerprint === fingerprint
+        && task.renderFingerprint === fingerprint
+        && task.cards.every(function (card) {
+          return card && card.renderFingerprint === fingerprint;
+        });
+      wx.navigateTo({
+        url: '/pages/template-result/template-result',
+        success: function (navRes) {
+          if (canRestoreTask) {
+            navRes.eventChannel.emit('acceptTaskData', { task: task });
+          } else {
+            navRes.eventChannel.emit('funTextProject', { project: project });
+          }
+        }
+      });
+      return;
+    }
+
+    if (record.recordType === 'bigtext') {
+      wx.showModal({
+        title: '旧版记录提示',
+        content: '旧大字滑卡记录暂不支持直接打开，请重新制作',
+        confirmText: '重新制作',
+        cancelText: '取消',
+        success: function (res) {
+          if (res.confirm) {
+            wx.navigateTo({ url: '/pages/fun-text/fun-text' });
+          }
+        }
+      });
+      return;
+    }
+
+    if (record.recordType === 'dressup' || record.recordType === 'layered-dressup') {
+      wx.navigateTo({
+        url: '/pages/dressup/dressup?mode=edit'
+      });
+      return;
+    }
+
+    if (record.recordType !== 'outfit') {
+      wx.showToast({ title: '该记录版本暂不支持', icon: 'none' });
+      return;
+    }
+
+    if (!record.taskSnapshot) {
       wx.showToast({ title: '记录数据不完整', icon: 'none' });
       return;
     }
@@ -209,7 +298,28 @@ Page({
   onRegenerate: function (e) {
     const recordId = e.currentTarget.dataset.recordid;
     const record = this.data.records.find(r => r.recordId === recordId);
-    if (!record || !record.sourceImages || record.sourceImages.length === 0) {
+    if (!record) return;
+
+    if (record.recordType === 'funtext' || record.recordType === 'bigtext') {
+      if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
+        wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+        return;
+      }
+      wx.navigateTo({ url: '/pages/fun-text/fun-text' });
+      return;
+    }
+
+    if (record.recordType === 'dressup' || record.recordType === 'layered-dressup') {
+      wx.navigateTo({ url: '/pages/dressup/dressup?mode=demo' });
+      return;
+    }
+
+    if (record.recordType !== 'outfit') {
+      wx.showToast({ title: '该记录版本暂不支持', icon: 'none' });
+      return;
+    }
+
+    if (!record.sourceImages || record.sourceImages.length === 0) {
       wx.showToast({ title: '原图信息已丢失', icon: 'none' });
       return;
     }
@@ -218,9 +328,10 @@ Page({
       url: `/pages/result/result?taskId=${record.taskSnapshot.taskId || 'regenerate'}`,
       success: function (navRes) {
         // 使用原始图片重新生成 mock 任务
-        const task = createMockTask(record.sourceImages);
+        const mockTask = createMockTask(record.sourceImages);
         navRes.eventChannel.emit('acceptTaskData', {
-          task: task
+          task: mockTask,
+          isLocalMock: true
         });
       }
     });

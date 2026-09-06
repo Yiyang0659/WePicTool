@@ -1,5 +1,7 @@
 // pages/index/index.js
 const { createMockTask, isCloudPermissionError } = require('../../utils/task');
+const funTextProject = require('../../utils/funTextProject');
+const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
 
 // 确认页输出比例选项（与结果页 RATIO_OPTIONS 保持一致）
 const CONFIRM_RATIO_OPTIONS = [
@@ -25,13 +27,83 @@ const SAMPLE_FILES = [
   { name: 'shoe3.jpg', width: 640, height: 640, size: 18615 }
 ];
 
-// 首屏「朋友视角」演示卡轮播内容：直接复用包内示例图前 4 张（含上/下/鞋三类）
-const DEMO_SLIDES = [
-  { src: '/assets/samples/top1.jpg', num: '01' },
-  { src: '/assets/samples/bottom1.jpg', num: '02' },
-  { src: '/assets/samples/shoe1.jpg', num: '03' },
-  { src: '/assets/samples/top2.jpg', num: '04' }
+const LAYERED_DEMO_ROWS = [
+  {
+    key: 'head',
+    emoji: '🙂',
+    name: '头像 / 发型',
+    images: ['/assets/samples/head1.jpg', '/assets/samples/head2.jpg', '/assets/samples/head3.jpg']
+  },
+  {
+    key: 'tops',
+    emoji: '👕',
+    name: '上衣',
+    images: ['/assets/samples/top1.jpg', '/assets/samples/top2.jpg', '/assets/samples/top3.jpg']
+  },
+  {
+    key: 'bottoms',
+    emoji: '👖',
+    name: '下装',
+    images: ['/assets/samples/bottom1.jpg', '/assets/samples/bottom2.jpg', '/assets/samples/bottom3.jpg']
+  },
+  {
+    key: 'shoes',
+    emoji: '👟',
+    name: '鞋子',
+    images: ['/assets/samples/shoe1.jpg', '/assets/samples/shoe2.jpg', '/assets/samples/shoe3.jpg']
+  }
 ];
+
+// 趣味字画首页示例：五张由 render-demo.js 用授权字体渲染的真实 PNG，
+// 顺序即「搞怪反转」pink-note-v1 候选的 hook → misdirect → pause → reveal → ending。
+const FUN_TEXT_DEMO_SLIDES = [
+  { src: '/assets/fun-text/demo/01.png' },
+  { src: '/assets/fun-text/demo/02.png' },
+  { src: '/assets/fun-text/demo/03.png' },
+  { src: '/assets/fun-text/demo/04.png' },
+  { src: '/assets/fun-text/demo/05.png' }
+];
+
+const INITIAL_LAYERED_DEMO_INDICES = {
+  head: 0,
+  tops: 0,
+  bottoms: 0,
+  shoes: 0
+};
+
+function buildLayeredDemoState(indices) {
+  const normalizedIndices = Object.assign({}, INITIAL_LAYERED_DEMO_INDICES, indices || {});
+  const viewRows = LAYERED_DEMO_ROWS.map(function (row) {
+    const rawIndex = Number(normalizedIndices[row.key]);
+    const currentIndex = Number.isInteger(rawIndex) && rawIndex >= 0 && rawIndex < row.images.length
+      ? rawIndex
+      : 0;
+    normalizedIndices[row.key] = currentIndex;
+    return {
+      key: row.key,
+      emoji: row.emoji,
+      name: row.name,
+      currentIndex: currentIndex,
+      total: row.images.length,
+      images: row.images.map(function (src, index) {
+        return { src: src, index: index, selected: index === currentIndex };
+      })
+    };
+  });
+  return {
+    indices: normalizedIndices,
+    viewRows: viewRows,
+    currentItems: viewRows.map(function (row) {
+      return {
+        key: row.key,
+        name: row.name,
+        src: row.images[row.currentIndex].src
+      };
+    })
+  };
+}
+
+const INITIAL_LAYERED_DEMO_STATE = buildLayeredDemoState(INITIAL_LAYERED_DEMO_INDICES);
 
 Page({
   data: {
@@ -43,18 +115,98 @@ Page({
     pickedImages: [],
     confirmRatio: '4:5',
     ratioOptions: CONFIRM_RATIO_OPTIONS,
-    // 首屏「朋友视角」仿真演示卡的轮播数据
-    demoSlides: DEMO_SLIDES,
-    // 玩法模板（即将上线）：数据驱动渲染，点击统一走 onComingSoon
-    comingModules: [
-      { key: 'bigtext', name: '大字滑卡', emoji: '🔤', desc: '一张一个大字，滑出惊喜' },
-      { key: 'drama', name: '剧情滑卡', emoji: '🎬', desc: '多图连播，讲出你的剧情' },
-      { key: 'blindbox', name: '盲盒抽卡', emoji: '🎁', desc: '抽到哪张看哪张，惊喜拉满' },
-      { key: 'puzzle', name: '拼图揭秘', emoji: '🧩', desc: '一块一块，拼出完整答案' },
-      { key: 'flipbook', name: '翻页动画', emoji: '🎞️', desc: '多图连翻，让照片动起来' },
-      { key: 'suit', name: '成套搭配', emoji: '🧥', desc: '一整套穿搭，一图看懂' },
-      { key: 'dressup', name: '滑滑换装', emoji: '👠', desc: '左右滑一滑，换装挑不停' }
+    activeHomePlay: 'layered-dressup',
+    layeredDemoIndices: INITIAL_LAYERED_DEMO_STATE.indices,
+    layeredDemoViewRows: INITIAL_LAYERED_DEMO_STATE.viewRows,
+    layeredCurrentItems: INITIAL_LAYERED_DEMO_STATE.currentItems,
+    // 趣味字画真实示例（开发中）：可滑五张，滑到末张展示 CTA
+    funTextDemoSlides: FUN_TEXT_DEMO_SLIDES,
+    funTextDemoIndex: 0,
+    funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY === true,
+    homeTools: [
+      { key: 'ai-outfit', name: 'AI 穿搭整理', emoji: '📸', status: 'available' },
+      { key: 'film', name: '胶片相册', emoji: '🎞️', status: 'coming' },
+      { key: 'beforeafter', name: '前后对比', emoji: '↔️', status: 'coming' },
+      { key: 'more', name: '更多玩法', emoji: '•••', status: 'coming' }
     ]
+  },
+
+  onSelectHomePlay: function (event) {
+    const playId = event && event.currentTarget && event.currentTarget.dataset
+      ? event.currentTarget.dataset.playId
+      : '';
+    if (playId !== 'layered-dressup' && playId !== 'fun-text-stack') return;
+    if (playId === this.data.activeHomePlay) return;
+    this.setData({ activeHomePlay: playId });
+  },
+
+  onSelectLayeredDemoItem: function (event) {
+    const dataset = event && event.currentTarget ? event.currentTarget.dataset || {} : {};
+    const groupKey = dataset.groupKey;
+    const index = Number(dataset.index);
+    const row = LAYERED_DEMO_ROWS.find(function (item) { return item.key === groupKey; });
+    if (!row || !Number.isInteger(index) || index < 0 || index >= row.images.length) return;
+    const nextIndices = Object.assign({}, this.data.layeredDemoIndices, { [groupKey]: index });
+    const nextState = buildLayeredDemoState(nextIndices);
+    this.setData({
+      layeredDemoIndices: nextState.indices,
+      layeredDemoViewRows: nextState.viewRows,
+      layeredCurrentItems: nextState.currentItems
+    });
+  },
+
+  onShiftLayeredDemoItem: function (event) {
+    const dataset = event && event.currentTarget ? event.currentTarget.dataset || {} : {};
+    const groupKey = dataset.groupKey;
+    const direction = Number(dataset.direction);
+    const row = LAYERED_DEMO_ROWS.find(function (item) { return item.key === groupKey; });
+    if (!row || (direction !== -1 && direction !== 1)) return;
+    const current = Number(this.data.layeredDemoIndices[groupKey]) || 0;
+    const nextIndex = (current + direction + row.images.length) % row.images.length;
+    this.onSelectLayeredDemoItem({ currentTarget: { dataset: { groupKey: groupKey, index: nextIndex } } });
+  },
+
+  onTryLayeredDemo: function () {
+    wx.navigateTo({ url: '/pages/dressup/dressup?mode=demo' });
+  },
+
+  onCreateLayeredDressup: function () {
+    wx.navigateTo({ url: '/pages/dressup/dressup?mode=upload' });
+  },
+
+  // 趣味字画示例滑动进度：滑到最后一张后展示 CTA
+  onFunTextDemoChange: function (event) {
+    const current = Number(event.detail && event.detail.current);
+    if (Number.isFinite(current)) {
+      this.setData({ funTextDemoIndex: current });
+    }
+  },
+
+  // 趣味字画内置示例：固定已审核文案，不调用云函数，直接带入候选页
+  onTryFunTextDemo: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
+      wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+      return;
+    }
+    const project = funTextProject.createFunTextProject({
+      sourceText: '我今天想见你',
+      expressionKey: 'funny-reversal',
+      now: Date.now()
+    });
+    wx.navigateTo({
+      url: '/pages/fun-text-candidates/fun-text-candidates',
+      success: function (navRes) {
+        navRes.eventChannel.emit('funTextProject', { project: project });
+      }
+    });
+  },
+
+  onCreateFunText: function () {
+    if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) {
+      wx.showToast({ title: '趣味字画暂不可用', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: '/pages/fun-text/fun-text' });
   },
 
   // 即将上线模块统一提示

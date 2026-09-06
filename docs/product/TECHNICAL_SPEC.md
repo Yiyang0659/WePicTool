@@ -1,8 +1,8 @@
 # WePicTool 技术方案设计
 
-**版本：** v2.1
-**日期：** 2026-07-18
-**状态：** 覆盖阶段一到阶段三已有接口与实现；新增第 12 节叠图玩法管线技术规格（定位升级）
+**版本：** v2.4
+**日期：** 2026-09-05
+**状态：** 记录 `codex/unified-stack-export` 当前代码与工作树契约。首页、统一导出和预览改版均未合并或发布；趣味字画 P2.2 仍是计划外实验；生产与双端证据边界以 `../current.md` 为准。
 
 ---
 
@@ -12,6 +12,8 @@
 |------|------|------|
 | 前端 | 原生微信小程序 | 无需框架，直接调用微信原生 API |
 | 后端 | CloudBase 云函数 | `processOutfit` 处理图片审核与 AI 链路，`contentGuard` 审核用户反馈文本 |
+| 趣味字画渲染 | CloudBase 云托管，Node 20 bookworm-slim + `node:http` | 授权字体、低清预览、1080 PNG 与二次文字审核；尚未部署验证 |
+| 故事规划实验 | `planFunTextStory` 云函数 | P2.2 计划外实验代码；发布范围、部署和模型 API key 未确认 |
 | 云存储 | CloudBase 云存储 | 原图临时文件、结果图临时文件 |
 | AI 分类 | DashScope qwen-vl-plus | 多模态模型识别穿搭部件 |
 | AI 抠图 | DashScope `qwen-image-edit-plus`（默认，可由环境变量覆盖） | 去除背景替换为纯白 |
@@ -33,7 +35,7 @@
 }
 ```
 
-环境变量：`DASHSCOPE_API_KEY`（阿里云 DashScope API 密钥）
+环境变量：穿搭链路使用 `DASHSCOPE_API_KEY`。P2.2 实验另读取服务端 `LLM_API_KEY`（可回退 `DASHSCOPE_API_KEY`）、`LLM_BASE_URL` 和 `LLM_MODEL`；这些值不得进入小程序包，线上尚未配置验证。
 
 ---
 
@@ -42,73 +44,61 @@
 ### 2.1 总体架构
 
 ```text
-微信小程序前端
-  -> 选图、压缩、上传、任务创建、进度展示、分组预览、轻编辑、保存/分享引导
+微信小程序产品外壳
+  -> 首页任务选择 / 记录 / 我的
+  -> 分层云换装 | 趣味字画 | AI 穿搭整理
 
-CloudBase 云函数 (processOutfit)
-  -> 内容安全门禁：全部图片 2 并发审核通过后才继续
-  -> 阶段一：mock 分组（DASHSCOPE_API_KEY 未配置时）
-  -> 阶段二：图片部件识别（DashScope qwen-vl-plus）
-  -> 阶段三：抠图（DashScope，默认 qwen-image-edit-plus）
+玩法层
+  -> 玩法注册与素材包
+  -> 项目/任务模型
+  -> 各玩法输入、候选、轻编辑与卡片生成
 
-AI / 图像服务
-  -> 多模态分类、抠图 API、主体检测
+共享叠图层
+  -> StackExportManifest（叠、顺序、封面、指纹）
+  -> SequenceBadgeComposer（01…N 最终图片物化）
+  -> 微信效果预览（只读 exportUrl）
+  -> ImageExporter（串行保存、进度、失败续存）
 
-云存储
-  -> 原图临时文件、结果图临时文件、任务记录
+云端增强
+  -> processOutfit：图片审核、分类、抠图
+  -> contentGuard：用户/模型文字审核
+  -> fun-card-renderer：授权字体预览与 1080 PNG（未部署验证）
+  -> planFunTextStory：P2.2 结构化故事规划实验（未纳入发布）
+
+存储
+  -> 小程序本地 Storage：项目与轻量记录
+  -> CloudBase 临时对象：上传图、抠图和趣味字画结果
 ```
 
 ### 2.2 系统模块拆分
 
 ```mermaid
-flowchart LR
-    subgraph MiniApp["微信小程序前端"]
-        A1["图片选择"]
-        A2["图片压缩"]
-        A3["上传管理"]
-        A4["任务进度"]
-        A5["分组预览"]
-        A6["微信叠图效果模拟"]
-        A7["轻编辑"]
-        A8["按组保存/发送引导"]
-    end
+flowchart TD
+    HOME["首页任务选择"] --> DRESS["分层云换装"]
+    HOME --> FUN["趣味字画"]
+    HOME --> OUTFIT["AI 穿搭整理"]
 
-    subgraph Cloud["云函数/业务后端"]
-        B1["任务创建"]
-        B2["任务调度"]
-        B3["部件识别"]
-        B4["抠图处理"]
-        B5["结果分组"]
-        B6["失败兜底"]
-    end
+    DRESS --> PROJECT["玩法项目 / 任务模型"]
+    FUN --> PROJECT
+    OUTFIT --> PROJECT
 
-    subgraph AI["AI/图像服务"]
-        C1["多模态分类"]
-        C2["抠图 API"]
-        C3["主体检测"]
-    end
+    OUTFIT --> PO["processOutfit\n图片审核 / 分类 / 抠图"]
+    FUN --> CG["contentGuard\n输入文字审核"]
+    FUN -.实验.-> PLAN["planFunTextStory"]
+    FUN -.未部署.-> RENDER["fun-card-renderer"]
 
-    subgraph Storage["云存储"]
-        D1["原图临时文件"]
-        D2["结果图临时文件"]
-    end
+    PROJECT --> MANIFEST["StackExportManifest"]
+    PO --> MANIFEST
+    RENDER --> MANIFEST
+    MANIFEST --> BADGE["可见序号物化"]
+    BADGE --> PREVIEW["微信效果预览"]
+    BADGE --> SAVE["串行保存 / 失败续存"]
+    PREVIEW --> GUIDE["真实发送引导"]
+    SAVE --> GUIDE
 
-    A1 --> A2 --> A3 --> B1
-    A3 --> D1
-    B1 --> B2
-    B2 --> B3
-    B3 --> C1
-    B3 --> B4
-    B4 --> C2
-    B4 --> C3
-    B4 --> B5
-    B5 --> D2
-    B6 --> D2
-    A4 --> B2
-    A5 --> D2
-    A6 --> D2
-    A7 --> B4
-    A8 --> D2
+    PROJECT --> LOCAL["本地 Storage"]
+    PO --> CLOUD["CloudBase 临时对象"]
+    RENDER --> CLOUD
 ```
 
 ---
@@ -117,16 +107,22 @@ flowchart LR
 
 | 目录 | 职责 |
 | --- | --- |
-| `miniprogram/pages/index/` | 首页 Tab：选图、压缩、上传、创建任务 |
+| `miniprogram/pages/index/` | 首页 Tab：双玩法选择、单一共享预览、分层/趣味字画入口，以及次级 AI 穿搭选图确认流程 |
 | `miniprogram/pages/record/` | 记录 Tab：本地历史任务列表、查看、再次生成 |
 | `miniprogram/pages/profile/` | 我的 Tab：相册权限、反馈、分享、缓存清理 |
 | `miniprogram/pages/result/` | 结果页（非 Tab）：白色聊天风格，分组展示、保存、改分类、发送引导 |
-| `miniprogram/pages/preview/` | 微信预览页（非 Tab）：白色微信聊天风格，比例安全的堆叠卡片、展开/收起、滑动切换 |
+| `miniprogram/pages/preview/` | 微信效果预览页（非 Tab）：固定会话壳层、普通/深色主题、唯一聊天滚动区、独立牌堆滑动/展开/保存 |
+| `miniprogram/pages/fun-text*/`、`template-result/` | 趣味字画输入、三候选、聚焦编辑与高清结果页 |
+| `miniprogram/config/funTextCases.js`、`funTextStrategies.js` | 12 个结构化案例与 8 种规则叙事玩法；案例只引用白名单键，不携带大图 |
+| `miniprogram/config/stylePacks.js`、`fontFeels.js` | 7 套视觉包的背景/配色注册表与 3 种字体字感 |
+| `miniprogram/utils/funTextProject.js`、`funTextTransform.js` | 不可变项目编辑、20 步历史、恢复操作，以及装饰拖动/缩放/旋转的纯计算 |
 | `miniprogram/app.json` | 全局页面路由与底部 Tab（首页 / 记录 / 我的）配置 |
-| `miniprogram/config/env.js` | CloudBase 环境 ID 和本地预览开关 |
+| `miniprogram/config/env.js` | CloudBase 环境 ID、renderer 服务名/字体地址、本地预览与趣味字画入口开关 |
 | `miniprogram/utils/task.js` | 任务规则、mock 分组、发送能力判断、图片尺寸计算 |
 | `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 AI 分类 + 阶段三抠图 |
 | `miniprogram/cloudfunctions/contentGuard/` | 云函数：使用微信内容安全接口审核用户反馈文本 |
+| `miniprogram/cloudfunctions/planFunTextStory/` | P2.2 实验云函数：结构化故事规划、单次修复和候选文字复核；未部署 |
+| `miniprogram/cloudhosting/fun-card-renderer/` | 独立 Node 20 渲染器：字体、360 预览、1080 成品、审核与云存储；未部署 |
 
 ---
 
@@ -216,6 +212,39 @@ others
 ```text
 当前更适合普通发送；想要叠图效果，建议每组补到 3 张以上
 ```
+
+### 4.4 趣味字画场景与编辑历史
+
+趣味字画继续使用 version 1 项目外壳，以附加可选字段兼容已有本地记录；不把仅增加白名单样式元数据误判为不兼容协议升级。新建场景稳定记录：
+
+```js
+{
+  sceneId: 'scene_01',
+  order: 1,
+  role: 'hook',
+  width: 1080,
+  height: 1080,
+  stylePackId: 'pink-note-v1',
+  backgroundVariantKey: 'pink-note-soft',
+  paletteKey: 'pink-note-rose',
+  fontFeelKey: 'marker',
+  background: { assetKey: 'pink-note-01', color: '#FCE4EC' },
+  layers: [
+    {
+      id: 'text_main',
+      type: 'text',
+      fontKey: 'marker',
+      fontFamily: 'LXGWMarkerGothic'
+    }
+  ]
+}
+```
+
+- 背景变体、配色、字体和装饰均由客户端与 renderer 双端白名单校验；带 `paletteKey` 的场景不接受配色表以外的文字颜色。
+- 编辑历史只快照 `candidates` 与当前选择，不递归保存历史本身，最多保留 20 步；无实际变化的操作不创建历史。
+- 装饰手势移动时只更新页面预览，`touchend` 才把最终坐标、缩放和旋转提交为一步历史。
+- 任意有效编辑都会清空旧 `renderedCards` 并把项目恢复为 `draft`；后续 fingerprint、manifest 和保存续传游标必须重新生成。
+- 当前不支持用户照片层；每卡一张照片及其裁切能力留到单独的阶段 C。
 
 ---
 
@@ -524,7 +553,7 @@ cloud://cloud1-d0g1blfsde474b168/
 | 后端合成 | 放弃 | 已验证 CloudBase 错误码 145，不可行 |
 | 抠图 | DashScope `qwen-image-edit-plus`（默认） | 已接入，去除背景替换为纯白；部署环境变量可覆盖 |
 | 分类 | DashScope qwen-vl-plus | 已接入，支持置信度输出 |
-| 存储 | 临时存储 24-72 小时 | 无账号体系下更安全 |
+| 存储 | 穿搭上传/抠图沿用 24–72 小时产品策略；趣味字画 `funtext/` 固定为 2 天（48 小时目标） | 无账号体系下更安全；renderer 回滚失败由生命周期和残留扫描补偿 |
 | 任务模式 | 同步云函数调用 | 当前阶段处理量可控，60s 超时足够 |
 | 导出 | 先下载到本地临时路径 | 微信保存/分享依赖本地路径 |
 | 分享 | 保存 + 发送引导 | 小程序无法直接发送图片到微信聊天 |
@@ -538,30 +567,30 @@ cloud://cloud1-d0g1blfsde474b168/
 | 弱网/无网络 | 未专门处理 | 前端检测网络状态，无网时提前提示 |
 | 云函数冷启动慢 | 用户可能等待较久 | 添加加载进度提示 |
 | 大图片上传慢 | 无进度提示 | 分片上传或进度回调 |
-| 图片清理策略 | 云存储文件无自动过期 | 配置 CloudBase 过期规则（24-72 小时） |
+| 趣味字画渲染图清理 | 代码回滚为 best-effort，云端规则尚未配置验证 | 对 `funtext/` 固定配置 2 天（48 小时目标）过期，并监控/补偿超期残留 |
 | 前端 Canvas 大图内存 | 待验证 | 监控 iOS/Android 内存占用，必要时降级 |
 
 ---
 
 ## 12. 叠图玩法管线技术规格
 
-> 2026-07-18 定位升级新增。本节定义统一叠图管线的技术契约，玩法实现口径见 `PLAYBOOK.md` 第 3、4 章。以下能力除已标注"已有"的组件外均为待实现。
+> 2026-07-18 定位升级新增，2026-09-04 按统一导出实现校准。本节定义统一叠图管线的技术契约，玩法实现口径见 `PLAYBOOK.md` 第 3、4 章。P2.1 对应代码与自动化已存在，但外部部署/设备证据仍缺失；P2.2 是未纳入阶段一计划的实验代码。
 
 ### 12.1 玩法模板注册表
 
 每个玩法是一个注册项，新玩法 = 新增注册项并接入管线既有组件：
 
 ```js
-// miniprogram/utils/playTemplates.js（待新增）
+// miniprogram/config/playRegistry.js（当前版本 1 注册项）
 {
-  id: 'big-text',              // 玩法唯一 ID，同时作为埋点 moduleId
-  name: '大字滑卡',
-  inputType: 'text',           // text | images | template-params | mixed
-  composeFn: 'composeBigText', // 卡片生成函数名（前端 Canvas）
-  cardCountRule: '每张 1 个字',
-  minCards: 3,                 // ≥3 张硬约束（微信合并展示触发下限）
-  fallbackStrategy: 'padCoverGuide', // 不足 minCards 时自动补封面卡 + 引导卡
-  trackDimension: { moduleId: 'big-text', templateId: null }
+  id: 'fun-text-stack',        // 玩法唯一 ID，同时作为埋点 moduleId
+  version: 1,
+  title: '趣味字画',
+  status: 'available',         // 仅代码注册状态，不等于已发布
+  inputType: 'text',
+  renderer: 'fun-card-scene',
+  preview: 'single-stack',
+  exporter: 'ordered-sequence'
 }
 ```
 
@@ -569,12 +598,12 @@ cloud://cloud1-d0g1blfsde474b168/
 
 | 管线段 | 职责 | 对应代码 / 复用情况 |
 | --- | --- | --- |
-| 1. 输入器 | 选图 / 文字 / 模板参数 | 各玩法页面新增；图片输入复用 `pages/index` 的 `wx.chooseMedia` + 压缩链路 |
-| 2. 卡片生成器 | 前端 Canvas 批量渲染卡片 | 复用 `miniprogram/utils/cardComposer.js`（导出 `composeCard`、`RATIO_MAP`、`GROUP_ANCHOR`、`DEFAULT_OPTIONS`）；文字类玩法按同一模式新增 compose 函数 |
-| 3. 叠图预览 | 微信聊天效果预览 | 复用 `pages/preview`（白色微信聊天风格：比例安全堆叠卡片、展开/收起、滑动切换），通过 `eventChannel` 传入图组数据 |
-| 4. 编号保存 | 文件名 01、02…… 控制发送顺序 | 复用 `pages/result` 的 `saveImagesSequentially(urls, successTitle)`，需抽为通用组件并叠加文件名编号 |
-| 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 在现有发送引导（`pages/result` 保存完成后的引导）基础上改版为通用浮层组件 |
-| 6. 回流引导卡 | 末卡"用 WePicTool 做同款"，可开关 | 新增回流卡生成器（Canvas 模板），开关状态本地存储，埋点单独统计 |
+| 1. 输入器 | 选图 / 文字 / 模板参数 | 图片输入复用 `pages/index`；趣味字画使用 `pages/fun-text`，入口可由 `ENABLE_FUN_TEXT_STACK_ENTRY` 关闭 |
+| 2. 卡片生成器 | 把玩法计划转为可编辑场景并批量渲染 | 图片玩法复用 `cardComposer.js`；趣味字画已有规则策略、候选校验、`sceneComposer` 和小程序/云托管双渲染适配器。P2.2 AI 调度仅为实验 |
+| 3. 叠图预览 | 微信聊天效果预览 | `pages/preview` 优先接收已物化 manifest，只读取 `exportUrl`；旧 `{task}` / `{groups}` 输入保留一个兼容周期；真实微信表现未验证 |
+| 4. 编号保存 | 让用户识别并按正确顺序选择图片 | `stackExportManifest.js` 提供顺序事实源，`sequenceBadgeComposer.js` 把 `01…N` 写入最终图片，`imageExporter.js` 按 manifest 串行保存并支持带组身份的断点续存。`wx.saveImageToPhotosAlbum` 不能指定目标文件名或系统相册排序，因此不作相册顺序保证 |
+| 5. 发送引导 | 教用户按编号勾选 + 勾选「发送后合并展示」 | 三个结果页统一提示“每次只发送一叠、按图片角标勾选、确认 01 在第一位、勾选发送后合并展示”；真实聊天未验证 |
+| 6. 回流引导卡 | 末卡"用 WePicTool 做同款"，可开关 | 尚未实现；不在当前统一导出设计范围内 |
 
 ### 12.3 用户生成内容安全门禁
 
@@ -583,7 +612,8 @@ cloud://cloud1-d0g1blfsde474b168/
 - 图片违规或审核服务异常时，云函数返回 `CONTENT_UNSAFE` 或 `SAFETY_UNAVAILABLE`，前端停留在当前页并显示非技术性提示；违规任务的 `cloud://` 源图片会尽力删除，删除失败仅记录日志且不影响拦截。
 - 意见反馈文本由独立 `contentGuard` 云函数调用 `security.msgSecCheck`；仅 `ok === true` 时才允许写入本地 `wepictool_feedbacks`，违规或安全服务异常均不保存。
 - `processOutfit/config.json` 必须声明 `security.imgSecCheck`，`contentGuard/config.json` 必须声明 `security.msgSecCheck`；客户端不得保存 AppSecret，也不得绕过云函数直连安全接口。
-- 后续新增的大字滑卡、剧情滑卡和盲盒自定义文本同样必须先走 `contentGuard`，检测不通过不得渲染、落盘或生成卡片。
+- 趣味字画用户输入先走 `contentGuard`；`fun-card-renderer` 在绘制/上传前再次聚合审核 `sourceText` 与全部可见文字。小程序 POST 始终只经 `wx.cloud.callContainer`，服务端要求非空 `x-cloudbase-context` + `x-wx-openid`，客户端不得传身份/context/秘密。头部不是独立公网鉴权：生产部署必须关闭并验证服务公网访问、限制字体网关精确路径；非模拟运行及启用入口的发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only` 声明，但声明不能证明平台配置。审核缺失、异常或未知响应均不得渲染。flag=false 同时关闭输入/候选/编辑、记录恢复和结果渲染/保存，静态回滚包免 renderer 配置；部署边界未验证前保持 NOT READY。
+- P2.2 的模型新增文字必须在场景合成前复查；但该云函数目前只是计划外实验代码，未完成发布范围确认、线上权限/模型配置或真机验证，不能据此声明生产门禁已验收。
 
 ### 12.4 翻页动画云托管 ffmpeg 备注
 
@@ -592,9 +622,11 @@ cloud://cloud1-d0g1blfsde474b168/
 - 帧数甜点区间 8–12 帧，上限 24 帧。
 - 路线②上线前必须完成一次云托管抽帧验证（耗时 / 回传体积 / 费用），验证结论记录到当天 `docs/iterations/` 日志，并同步必要的当前状态或路线图。
 
-### 12.5 埋点事件总表
+### 12.5 埋点事件规划
 
-已有 8 个事件（阶段五口径）：
+当前功能分支尚未建立统一事件上报模块，以下事件是既有规划口径，不代表代码中已经完成采集或上报。
+
+原规划的 8 个事件（阶段五口径）：
 
 | 事件 | 说明 |
 | --- | --- |
@@ -607,7 +639,7 @@ cloud://cloud1-d0g1blfsde474b168/
 | `share_guide_clicked` | 点击分享/发送引导 |
 | `retry_triggered` | 触发重试/重做 |
 
-定位升级新增 6 个事件：
+定位升级计划增加 6 个事件：
 
 | 事件 | 说明 |
 | --- | --- |
@@ -620,51 +652,69 @@ cloud://cloud1-d0g1blfsde474b168/
 
 玩法漏斗：`module_entered` → `template_used` → `stack_saved` → `send_guide_completed` → 分享转化。
 
-### 12.6 叠图预览组件技术契约（1:1 还原）
+### 12.6 叠图预览组件技术契约（微信会话仿真）
 
-> 2026-07-18 依据真机暗色模式录屏（`ui-reference/wx-merge-real-demo.mp4`）标定，高保真原型见 Blueprint Widget「WePicTool 三屏原型」（widget_7a0db4d4，其 `index.html` 为参考实现）。产品口径见 `PLAYBOOK.md` §3.4。`pages/preview` 按本节重写。
+> 2026-09-05 依据用户真机截图、项目内微信录屏和 `docs/superpowers/specs/2026-09-05-wechat-preview-simulation-redesign.md` 重新标定。页面只模拟发送后的观看与滑动效果，不声明已进入微信或可以直发指定好友。
 
 **组件输入（eventChannel 传入）：**
 
 ```js
 {
-  groups: [{ name: '上衣组', cards: [{ url, num: '01' }, ...] }, ...],
-  theme: 'dark' | 'light',   // 为兼容旧调用方继续接收；页面固定渲染白色主题
+  manifest: {
+    version: 1,
+    badgeStyleVersion: 1,
+    fingerprint,
+    ratio,
+    stacks: [{
+      stackId,
+      title,
+      canExport,
+      cards: [{ cardId, sequence: 1, sequenceLabel: '01', isCover: true, sourceUrl, exportUrl }]
+    }]
+  },
+  selectedStackIds: ['tops'],
   ratio: '1:1' | '4:5' | '3:4'
 }
 ```
+
+- manifest 模式只读取 `exportUrl`，选中叠任一卡片缺少 `exportUrl` 时 fail closed，不回退到 `sourceUrl`。
+- 预览保持 manifest 叠顺序和组内顺序；`sequenceLabel='01'` 与 `isCover=true` 是封面身份，不由预览页重排。
+- 旧 `{ task }` 与 `{ groups, ratio }` 输入保留一个兼容周期并标记为 legacy；它们可继续打开历史记录，但不被宣称为带可见编号的最终导出。
+- 图片内角标属于导出层，不进入玩法 scene JSON、远端 render fingerprint 或长期记录缓存；记录重开时从原始项目与渲染卡片重建。
 
 **状态机：**
 
 ```text
 folded ⇄ folded（滑动循环翻页）
 folded → expanded（点「展开 N」）→ folded（点「收起」）
-folded / expanded --长按--> actionSheet（保存全部 / 转发）
-expanded --点单张--> viewer（黑底大图，点任意处关闭）
+folded / expanded --长按--> actionSheet（保存这张 / 保存这一组）
+folded / expanded --点单张--> wx.previewImage（当前组黑底大图浏览；不可用时回退内置 viewer）
+light ⇄ dark（太阳/月亮合并按钮即时切换并本地保存）
 ```
 
 **折叠态结构参数：**
 
 | 项 | 值 |
 | --- | --- |
-| 手势舞台 | 屏宽 54%，最大视觉高度 150px；组消息行固定 164px，比例变化不改变聊天流高度 |
-| 图片比例 | 优先 `composedRatio`，再任务 `ratio`，再源图宽高；在舞台内 `aspectFit`，不拉伸、不裁切 |
-| 头像 | 32px 方形、圆角 5px，与卡片顶部对齐，间距 8px |
-| 牌堆露边 | 后卡 `translateX(-8px) rotate(-.7deg) scale(.97)` 与 `translateX(+13px) rotate(1.1deg) scale(.94)`，z-index 3/2/1，左右均可见卡角 |
-| 展开胶囊 | 紧贴牌堆左侧（距消息行左缘 24px）、相对消息行垂直居中；文字「展开 N」/「收起」；`rgba(0,0,0,.62)`，圆角 99px |
+| 图片消息通道 | 从屏宽扣除 20px 边距、36px 头像、8px 头像间距、58px 展开胶囊、10px 胶囊间距和 10px 露边；舞台宽 `min(38vw, 164px, 剩余通道)` |
+| 图片比例 | 优先 `composedRatio`，再任务 `ratio`，再源图宽高；穿搭 4:5 输出在折叠叠图中使用接近微信的 3:4 缩略框并居中裁切，点击大图仍展示完整原图；最大高为 `min(51vw, 219px)` |
+| 375px 标定 | 1:1 为 143×143px，穿搭 4:5 缩略框为 143×191px，3:4 为 143×191px；320px 宽设备的穿搭缩略框为 122×163px |
+| 头像 | 36px 方形、圆角 5px，与图片消息垂直居中，间距 8px |
+| 牌堆露边 | 后卡 `translateX(-8px) rotate(-.7deg) scale(.97)` 与 `translateX(+10px) rotate(1deg) scale(.94)`，z-index 3/2/1，左右均可见卡角 |
+| 展开胶囊 | 作为消息行内的正常 flex 项紧贴牌堆左侧 10px；浅色/深色主题分别使用半透明浅灰/深灰底；文字「展开 N」/「收起」 |
 | 禁用元素 | 无层叠角标、无页码（早期原型误加，已删） |
 
 **手势参数（折叠态）：**
 
 | 阶段 | 参数 |
 | --- | --- |
-| 方向锁 | 首次位移超 8px 时判定：`abs(dx) > abs(dy)` 才接管；否则交还聊天纵向滚动 |
-| 跟手 | `translateX(dx)` + `rotate(dx * 0.025°)`，clamp ±6°；拖动中禁用过渡 |
-| 翻页阈值 | `abs(dx) > 卡宽 * 0.2` 或最近 120ms 采样速度 `abs(v) > 0.28px/ms` |
-| 回弹 | 未达阈值：240ms `cubic-bezier(.18,.82,.2,1)` 回 identity |
-| 飞出 | `translateX(±1.3 * 卡宽)` + `rotate(±18°)` + opacity→0，220ms `cubic-bezier(.3,0,.8,.2)` |
-| 补位 | 固定节点轮转；后卡从左右露角平滑补位，240ms `cubic-bezier(.18,.82,.2,1)` |
-| 循环 | 左滑 front→g2、g1→front、g2→g1；右滑反向；飞出卡瞬移入尾（`transition: none` 复位后恢复） |
+| 方向锁 | 首次位移超 8px 后继续判断意图：横向需 `abs(dx) > abs(dy) * 1.15`，纵向需 `abs(dy) > abs(dx) * 1.05`；模糊斜滑暂不接管 |
+| 跟手 | 顶卡 `translateX(dx)` + `rotate(dx * 0.025°)`，clamp ±5°；后两卡按 `abs(dx)/(卡宽*0.75)` 的进度同步向下一槽补位；拖动中全部禁用过渡 |
+| 翻页阈值 | `abs(dx) > 卡宽 * 0.2`，或最近 120ms 速度 `abs(v) > 0.32px/ms` 且已移动至少 10px；用 `dx + v*90ms` 判断最终方向 |
+| 回弹 | 未达阈值：220ms `cubic-bezier(.18,.82,.2,1)`，顶卡与后卡一起回各自固定槽位 |
+| 离场 | 顶卡 `translateX(±1.12 * 卡宽)` + `rotate(±9°)` + opacity→0，190ms `cubic-bezier(.3,0,.72,1)` |
+| 补位 | 离场同时，后两张向前一槽过渡，190ms `cubic-bezier(.18,.78,.2,1)`，不再等顶卡完全消失后突然换 class |
+| 循环 | 左滑 front→g2、g1→front、g2→g1；右滑反向；旧前卡在尾槽以 opacity 0 复位，再用 140ms 轻淡入露边 |
 
 **展开/收起参数：**
 
@@ -674,17 +724,33 @@ expanded --点单张--> viewer（黑底大图，点任意处关闭）
 
 **页面外壳：**
 
-- 聊天背景、导航与输入栏均为 `#FFF`，细分隔线 `#EEE`；会话名固定「分享给好友」。
-- 状态栏固定 `12:00`，消息时间固定「中午12:00」；不展示提示条、主题切换或模拟对话气泡。
+- 根节点 `position: fixed; inset: 0; height: 100%; overflow: hidden`，直接占满渲染视口，不采用开发者工具可能返回失真的数值 `windowHeight`。
+- 自定义会话导航和底部“预览模式”输入栏为固定的 flex 非收缩区域；中间 `scroll-view` 使用 `flex:1; height:0; min-height:0`，是唯一纵向滚动容器。
+- 不绘制模拟状态栏或第二套省略号；使用真实系统状态栏和小程序胶囊。导航高度与主题按钮位置根据 `statusBarHeight` 和 `getMenuButtonBoundingClientRect()` 动态计算，会话名为「好友」。
+- 普通模式使用 WeUI `BG-0 #EDEDED / BG-1 #F7F7F7 / BG-2 #FFFFFF`；深色模式使用 `BG-0 #111111 / BG-1 #1E1E1E / BG-2 #191919`。
+- 太阳/月亮位于同一颗分段胶囊中，整颗按钮只有一个 `bindtap`；名称为“普通模式/深色模式”，默认采用系统主题，之后读取 `wepic_preview_theme` 本地选择。系统栏前景色同步切换。
+- 消息时间显示“刚刚”；首次提示“左右滑动切换 · 点展开查看全部”保存为本地已读状态；聊天流不展示悬浮组名。
 
 **小程序实现口径：**
 
 - 动画只用 `transform` / `opacity`（GPU 合成层），禁止改 `width/height/top/left` 触发重排；牌堆卡 `will-change: transform`。
-- 手势用 `bindtouchstart/move/end` + 在卡片节点 `catchtouchmove` 仅在判定为横向后阻止冒泡（判定前不得 catch，否则聊天区无法纵向滚动）；或用 `movable-view` 以外的自定义实现时同此原则。
+- 手势用 `bindtouchstart/move/end` 做 8px 横纵方向锁与斜滑迟滞；判为纵向时不写卡片 transform 并交还中间聊天区，判为横向时把 `scroll-y` 暂时关闭。顶卡写完整跟手位移，后两卡只在原舞台内按进度补位；消息行、头像、展开胶囊、导航与输入栏不参与横移。
 - 三张牌堆卡为**固定节点**（不随翻页重建），只轮转位置 class（front/g1/g2），卡片内容永不变更——天然循环、补位动画由 class 过渡自动完成。
-- 展开消息行始终保留 WXML 图片节点，以 `hidden` + CSS animation（stagger 用内联 `animation-delay`）切换；viewer 用全屏 `position: fixed` 黑底容器。
-- 每叠一个组件实例；页面接收多组时纵向排列多个固定高度折叠卡消息，典型 375px 视口须同时露出上衣、下装、鞋子与输入栏。
-- 真机验收对照清单：白色外壳、12:00、54% 舞台、左右露角、比例安全适配、胶囊近牌堆、滑动跟手旋转、阈值/回弹手感、飞出渐隐、循环翻页、展开时无白屏重载与 stagger——与用户提供的真实微信视频并排逐项对比。
+- 展开消息行始终保留 WXML 图片节点，以 `hidden` + CSS animation（stagger 用内联 `animation-delay`）切换；大图优先使用原生 `wx.previewImage` 浏览当前组。
+- 每叠一个组件实例，消息区自然纵向排列；典型 375px 视口的穿搭缩略卡约 143×191px，首屏通常可见约三条消息，继续在中间聊天区滚动。
+- 真机验收对照清单：唯一系统状态栏、固定导航/输入栏、唯一聊天滚动区、普通/深色主题、合并主题按钮、38vw/3:4 穿搭缩略框、胶囊近牌堆、横向仅顶卡跟手、阈值/回弹、循环翻页、展开无白屏及滚动锚点——与真实微信并排逐项对比。
+
+### 12.7 页面与视觉层边界
+
+当前页面样式仍分散在各页面 WXSS 中，存在重复色值、近似字号和近似圆角；这属于可维护性问题，不改变上述业务契约。`DESIGN_SYSTEM.md` 已提出页面骨架、语义令牌和共享组件的 Draft v1.0：
+
+- 页面业务代码继续只消费玩法注册、项目模型、manifest、安全和环境配置；
+- 页面视觉不得反向决定叠图门槛、顺序、封面、审核或发布开关；
+- 设计系统确认后先进行“无有意视觉变化”的令牌归并，再提取复用至少两次的组件；
+- 微信效果预览使用独立仿真主题，不强行继承普通产品页的蓝紫/粉色视觉；
+- 确认前不建立新的共享 WXSS/自定义组件契约，不把草案描述成已实现。
+
+详细草案见 [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md)。
 
 ---
 
