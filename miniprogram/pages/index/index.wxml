@@ -58,8 +58,10 @@
                   class="layered-single-swiper"
                   current="{{row.currentIndex}}"
                   circular="true"
-                  duration="260"
+                  duration="360"
+                  easing-function="easeOutCubic"
                   data-group-key="{{row.key}}"
+                  bindtouchstart="onLayeredDemoTouchStart"
                   bindchange="onLayeredDemoSwiperChange"
                 >
                   <swiper-item

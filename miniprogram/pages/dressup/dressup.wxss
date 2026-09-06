@@ -383,6 +383,12 @@ page {
   font-size: 42rpx;
 }
 
+.empty-group-active {
+  border-color: #8f87f5;
+  color: #5b50e5;
+  background: #f4f2ff;
+}
+
 .group-actions {
   gap: 12rpx;
   margin-top: 22rpx;

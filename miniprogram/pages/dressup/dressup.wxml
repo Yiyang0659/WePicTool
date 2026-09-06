@@ -86,7 +86,7 @@
       </view>
     </scroll-view>
 
-    <view class="empty-group" wx:else>
+    <view class="empty-group" wx:else bindtap="onAddUserItems" data-group="{{g.key}}" hover-class="empty-group-active">
       <text class="empty-plus">＋</text>
       <text>先加入这个部位的素材</text>
     </view>

@@ -54,10 +54,11 @@ function loadMiniProgramPage(relativePath, dependencies = {}, wxOverrides = {}) 
 function instantiatePage(definition) {
   const instance = Object.assign({}, definition);
   instance.data = plain(definition.data || {});
-  instance.setData = function (updates) {
+  instance.setData = function (updates, callback) {
     Object.keys(updates || {}).forEach((key) => {
       instance.data[key] = updates[key];
     });
+    if (typeof callback === 'function') callback();
   };
   return instance;
 }
@@ -336,6 +337,7 @@ test('declares a complete layered dressup page and its editing actions', () => {
   assert.match(markup, /自己分层/);
   assert.match(markup, /AI 帮我整理/);
   assert.match(markup, /待确认素材/);
+  assert.match(markup, /class="empty-group"[^>]*bindtap="onAddUserItems"[^>]*data-group="\{\{g\.key\}\}"/);
   assert.match(markup, /首图/);
   assert.match(markup, /还差 \{\{g\.missing\}\} 张可形成叠图/);
 });
@@ -545,11 +547,72 @@ test('homepage layered rows respond to native swiper changes without resetting o
   assert.deepEqual(plain(page.data.layeredCurrentItems.map(item => item.key)), ['head', 'tops', 'bottoms', 'shoes']);
 });
 
+test('homepage idle demo advances only one randomly selected outfit group', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  const definition = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
+  }, {});
+  const page = instantiatePage(definition);
+  const before = plain(page.data.layeredDemoIndices);
+
+  const advanced = page.advanceLayeredDemoAutoplay(0.3);
+
+  assert.deepEqual(plain(advanced), { groupKey: 'tops', index: 1 });
+  assert.equal(page.data.layeredDemoIndices.tops, 1);
+  assert.equal(page.data.layeredDemoIndices.head, before.head);
+  assert.equal(page.data.layeredDemoIndices.bottoms, before.bottoms);
+  assert.equal(page.data.layeredDemoIndices.shoes, before.shoes);
+  assert.equal(page._layeredDemoAutoTarget, 'tops:1');
+});
+
+test('homepage manual arrows and touch gestures pause idle outfit motion', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  const definition = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
+  }, {});
+  const page = instantiatePage(definition);
+  let pauseCount = 0;
+  page.pauseLayeredDemoAutoplay = function () { pauseCount += 1; };
+
+  page.onShiftLayeredDemoItem({ currentTarget: { dataset: { groupKey: 'shoes', direction: 1 } } });
+  page.onLayeredDemoTouchStart();
+
+  assert.equal(pauseCount, 2);
+  assert.equal(page.data.layeredDemoIndices.shoes, 1);
+});
+
+test('homepage stops idle outfit motion when switching away or hiding', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  const definition = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
+  }, {});
+  const page = instantiatePage(definition);
+  const calls = [];
+  page.startLayeredDemoAutoplay = function () { calls.push('start'); };
+  page.stopLayeredDemoAutoplay = function (includeResume) { calls.push('stop:' + includeResume); };
+  page._layeredDemoPageVisible = true;
+
+  page.onSelectHomePlay({ currentTarget: { dataset: { playId: 'fun-text-stack' } } });
+  page.onHide();
+
+  assert.deepEqual(calls, ['stop:true', 'stop:true']);
+  assert.equal(page._layeredDemoPageVisible, false);
+});
+
 test('homepage layered preview uses one circular swiper per group and a vertical current list', () => {
   const markup = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/index/index.wxml'), 'utf8');
 
   assert.match(markup, /class="layered-single-swiper"/);
   assert.match(markup, /circular="true"/);
+  assert.match(markup, /duration="360"/);
+  assert.match(markup, /easing-function="easeOutCubic"/);
+  assert.match(markup, /bindtouchstart="onLayeredDemoTouchStart"/);
   assert.match(markup, /bindchange="onLayeredDemoSwiperChange"/);
   assert.match(markup, /class="layered-current-list"/);
   assert.doesNotMatch(markup, /class="layered-thumb-strip"/);

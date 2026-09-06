@@ -118,3 +118,11 @@ git diff --check
 - 老草稿没有 `pendingItems` 时按空数组读取；
 - AI 发布开关关闭时隐藏 AI 入口，手动工作台完整可用；
 - 回滚时恢复首页入口和移除 AI 子页面即可，分层项目已有四组结构、manifest 和历史记录不需要回滚。
+
+## 4. 2026-09-06 已确认交互跟进
+
+1. 在 `pages/dressup/dressup.wxml` 给空部位区域绑定该组现有 `onAddUserItems`，不新增第二套选图逻辑；
+2. 在 `pages/index/index.js` 增加单定时器的随机组空闲轮播、页面生命周期清理和用户操作暂停恢复；
+3. 在 `pages/index/index.wxml` 调整原生 `swiper` 动画时长与缓动参数，继续复用现有索引和右侧组合摘要；
+4. 在 `tests/layered-dressup.test.cjs` 覆盖空卡热区、一次只推进一组、用户操作暂停、玩法切换/页面隐藏停止；
+5. 更新 PRD、关键决策、当前状态与当日验证记录，复跑完整治理检查。

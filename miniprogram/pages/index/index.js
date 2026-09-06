@@ -71,6 +71,10 @@ const INITIAL_LAYERED_DEMO_INDICES = {
   shoes: 0
 };
 
+const LAYERED_DEMO_AUTO_MIN_DELAY = 3200;
+const LAYERED_DEMO_AUTO_DELAY_RANGE = 1800;
+const LAYERED_DEMO_USER_PAUSE = 6000;
+
 function buildLayeredDemoState(indices) {
   const normalizedIndices = Object.assign({}, INITIAL_LAYERED_DEMO_INDICES, indices || {});
   const viewRows = LAYERED_DEMO_ROWS.map(function (row) {
@@ -106,6 +110,11 @@ function buildLayeredDemoState(indices) {
 const INITIAL_LAYERED_DEMO_STATE = buildLayeredDemoState(INITIAL_LAYERED_DEMO_INDICES);
 
 Page({
+  _layeredDemoPageVisible: false,
+  _layeredDemoAutoTimer: null,
+  _layeredDemoResumeTimer: null,
+  _layeredDemoAutoTarget: '',
+
   data: {
     loading: false,
     loadingText: '开始处理...',
@@ -130,13 +139,85 @@ Page({
     ]
   },
 
+  onShow: function () {
+    this._layeredDemoPageVisible = true;
+    this.startLayeredDemoAutoplay();
+  },
+
+  onHide: function () {
+    this._layeredDemoPageVisible = false;
+    this.stopLayeredDemoAutoplay(true);
+  },
+
+  onUnload: function () {
+    this._layeredDemoPageVisible = false;
+    this.stopLayeredDemoAutoplay(true);
+  },
+
+  startLayeredDemoAutoplay: function () {
+    if (
+      !this._layeredDemoPageVisible ||
+      this.data.activeHomePlay !== 'layered-dressup' ||
+      this._layeredDemoAutoTimer
+    ) return;
+    var that = this;
+    var delay = LAYERED_DEMO_AUTO_MIN_DELAY + Math.floor(Math.random() * LAYERED_DEMO_AUTO_DELAY_RANGE);
+    this._layeredDemoAutoTimer = setTimeout(function () {
+      that._layeredDemoAutoTimer = null;
+      if (!that._layeredDemoPageVisible || that.data.activeHomePlay !== 'layered-dressup') return;
+      that.advanceLayeredDemoAutoplay();
+      that.startLayeredDemoAutoplay();
+    }, delay);
+  },
+
+  stopLayeredDemoAutoplay: function (includeResume) {
+    if (this._layeredDemoAutoTimer) clearTimeout(this._layeredDemoAutoTimer);
+    this._layeredDemoAutoTimer = null;
+    this._layeredDemoAutoTarget = '';
+    if (includeResume && this._layeredDemoResumeTimer) {
+      clearTimeout(this._layeredDemoResumeTimer);
+      this._layeredDemoResumeTimer = null;
+    }
+  },
+
+  pauseLayeredDemoAutoplay: function () {
+    this.stopLayeredDemoAutoplay(false);
+    if (this._layeredDemoResumeTimer) clearTimeout(this._layeredDemoResumeTimer);
+    this._layeredDemoResumeTimer = null;
+    if (!this._layeredDemoPageVisible || this.data.activeHomePlay !== 'layered-dressup') return;
+    var that = this;
+    this._layeredDemoResumeTimer = setTimeout(function () {
+      that._layeredDemoResumeTimer = null;
+      that.startLayeredDemoAutoplay();
+    }, LAYERED_DEMO_USER_PAUSE);
+  },
+
+  advanceLayeredDemoAutoplay: function (randomValue) {
+    var rawRandom = Number(randomValue);
+    var normalizedRandom = Number.isFinite(rawRandom) && rawRandom >= 0 && rawRandom < 1
+      ? rawRandom
+      : Math.random();
+    var rowIndex = Math.min(LAYERED_DEMO_ROWS.length - 1, Math.floor(normalizedRandom * LAYERED_DEMO_ROWS.length));
+    var row = LAYERED_DEMO_ROWS[rowIndex];
+    if (!row || row.images.length < 2) return null;
+    var current = Number(this.data.layeredDemoIndices[row.key]) || 0;
+    var nextIndex = (current + 1) % row.images.length;
+    this._layeredDemoAutoTarget = row.key + ':' + nextIndex;
+    this.onSelectLayeredDemoItem({ currentTarget: { dataset: { groupKey: row.key, index: nextIndex } } });
+    return { groupKey: row.key, index: nextIndex };
+  },
+
   onSelectHomePlay: function (event) {
     const playId = event && event.currentTarget && event.currentTarget.dataset
       ? event.currentTarget.dataset.playId
       : '';
     if (playId !== 'layered-dressup' && playId !== 'fun-text-stack') return;
     if (playId === this.data.activeHomePlay) return;
-    this.setData({ activeHomePlay: playId });
+    var that = this;
+    this.setData({ activeHomePlay: playId }, function () {
+      if (playId === 'layered-dressup') that.startLayeredDemoAutoplay();
+      else that.stopLayeredDemoAutoplay(true);
+    });
   },
 
   onSelectLayeredDemoItem: function (event) {
@@ -160,6 +241,7 @@ Page({
     const direction = Number(dataset.direction);
     const row = LAYERED_DEMO_ROWS.find(function (item) { return item.key === groupKey; });
     if (!row || (direction !== -1 && direction !== 1)) return;
+    this.pauseLayeredDemoAutoplay();
     const current = Number(this.data.layeredDemoIndices[groupKey]) || 0;
     const nextIndex = (current + direction + row.images.length) % row.images.length;
     this.onSelectLayeredDemoItem({ currentTarget: { dataset: { groupKey: groupKey, index: nextIndex } } });
@@ -169,6 +251,9 @@ Page({
     const dataset = event && event.currentTarget ? event.currentTarget.dataset || {} : {};
     const current = Number(event && event.detail ? event.detail.current : NaN);
     if (!Number.isInteger(current)) return;
+    var transitionKey = dataset.groupKey + ':' + current;
+    if (this._layeredDemoAutoTarget === transitionKey) this._layeredDemoAutoTarget = '';
+    else this.pauseLayeredDemoAutoplay();
     this.onSelectLayeredDemoItem({
       currentTarget: {
         dataset: {
@@ -177,6 +262,10 @@ Page({
         }
       }
     });
+  },
+
+  onLayeredDemoTouchStart: function () {
+    this.pauseLayeredDemoAutoplay();
   },
 
   onTryLayeredDemo: function () {
