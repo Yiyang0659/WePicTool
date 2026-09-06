@@ -166,6 +166,20 @@ Page({
     this.onSelectLayeredDemoItem({ currentTarget: { dataset: { groupKey: groupKey, index: nextIndex } } });
   },
 
+  onLayeredDemoSwiperChange: function (event) {
+    const dataset = event && event.currentTarget ? event.currentTarget.dataset || {} : {};
+    const current = Number(event && event.detail ? event.detail.current : NaN);
+    if (!Number.isInteger(current)) return;
+    this.onSelectLayeredDemoItem({
+      currentTarget: {
+        dataset: {
+          groupKey: dataset.groupKey,
+          index: current
+        }
+      }
+    });
+  },
+
   onTryLayeredDemo: function () {
     wx.navigateTo({ url: '/pages/dressup/dressup?mode=demo' });
   },
@@ -214,25 +228,12 @@ Page({
     wx.showToast({ title: '敬请期待，即将上线', icon: 'none' });
   },
 
-  // 选择穿搭图片：先进入确认环节，不直接上传
-  onChooseMedia: function () {
-    const that = this;
-    wx.chooseMedia({
-      count: 9,
-      mediaType: ['image'],
-      sourceType: ['album', 'camera'],
-      success: function (res) {
-        const tempFiles = res.tempFiles;
-        if (tempFiles.length === 0) return;
-
-        that.setData({
-          step: 'confirm',
-          pickedImages: tempFiles
-        });
-      },
-      fail: function (err) {
-        console.log('选择图片失败:', err);
-      }
+  // AI 穿搭整理入口：先让用户理解选图页，再由空状态的添加按钮主动调起相册。
+  onOpenOutfitPicker: function () {
+    this.setData({
+      step: 'confirm',
+      pickedImages: [],
+      confirmRatio: '4:5'
     });
   },
 
@@ -374,15 +375,15 @@ Page({
     if (index === undefined || index === null) return;
     const pickedImages = this.data.pickedImages.slice();
     pickedImages.splice(Number(index), 1);
-    // 删空则回退到首页步骤
-    if (pickedImages.length === 0) {
-      this.setData({ step: 'home', pickedImages: [] });
-      return;
-    }
     this.setData({ pickedImages: pickedImages });
   },
 
-  // 确认页：返回重新选择图片
+  // 确认页：清空所有图片，但保留当前选图页面和比例。
+  onResetPickedImages: function () {
+    this.setData({ pickedImages: [] });
+  },
+
+  // 确认页：退出本次临时选择并回到首页。
   onBackToHome: function () {
     this.setData({ step: 'home', pickedImages: [] });
   },

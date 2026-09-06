@@ -709,22 +709,43 @@
 }
 
 .confirm-head-row {
-  display: flex;
+  display: grid;
   align-items: center;
-  justify-content: space-between;
+  grid-template-columns: 112rpx minmax(0, 1fr) 112rpx;
   margin: 4rpx 4rpx 20rpx;
 }
 
 .confirm-head {
+  text-align: center;
   font-size: 28rpx;
   font-weight: 600;
   color: #111111;
 }
 
+.confirm-back {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 88rpx;
+  min-height: 88rpx;
+  color: #1c1d22;
+  font-size: 54rpx;
+  line-height: 1;
+}
+
 .confirm-repick {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 88rpx;
   font-size: 24rpx;
   color: #4f6bf5;
-  padding: 8rpx 4rpx;
+  white-space: nowrap;
+}
+
+.confirm-head-spacer {
+  width: 112rpx;
+  min-height: 88rpx;
 }
 
 /* 已选图片缩略图网格（4 列，白卡容器） */
@@ -733,6 +754,43 @@
   border-radius: 24rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   padding: 24rpx;
+}
+
+.picked-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 360rpx;
+  border: 2rpx dashed #ccd0e0;
+  border-radius: 20rpx;
+  box-sizing: border-box;
+  flex-direction: column;
+  color: #8d92a5;
+  background: #fafaff;
+}
+
+.picked-empty:active {
+  border-color: #7d82f7;
+  background: #f2f3ff;
+}
+
+.picked-empty-plus {
+  color: #6b72f4;
+  font-size: 68rpx;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.picked-empty-title {
+  margin-top: 18rpx;
+  color: #3b3f59;
+  font-size: 28rpx;
+  font-weight: 650;
+}
+
+.picked-empty-sub {
+  margin-top: 10rpx;
+  font-size: 21rpx;
 }
 
 .picked-grid {
@@ -1149,15 +1207,15 @@
 .layered-choice-row {
   display: flex;
   align-items: center;
-  min-height: 88rpx;
-  padding: 8rpx 10rpx;
+  min-height: 126rpx;
+  padding: 10rpx;
   border-radius: 18rpx;
   box-sizing: border-box;
   background: #fafaff;
 }
 
 .layered-choice-meta {
-  width: 112rpx;
+  width: 108rpx;
   flex-shrink: 0;
 }
 
@@ -1190,38 +1248,32 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24rpx;
-  height: 58rpx;
+  width: 34rpx;
+  height: 88rpx;
   flex-shrink: 0;
   color: #7c829c;
-  font-size: 32rpx;
+  font-size: 38rpx;
 }
 
-.layered-thumb-strip {
-  display: flex;
-  justify-content: center;
+.layered-single-swiper {
   min-width: 0;
+  height: 104rpx;
   flex: 1;
-  gap: 6rpx;
 }
 
-.layered-thumb {
-  width: 66rpx;
-  height: 66rpx;
+.layered-single-frame {
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  border: 3rpx solid transparent;
-  border-radius: 14rpx;
+  border: 3rpx solid #6670f6;
+  border-radius: 18rpx;
   box-sizing: border-box;
-  background: #f0f1f7;
-}
-
-.layered-thumb-active {
-  border-color: #6670f6;
   background: #ffffff;
-  box-shadow: 0 4rpx 12rpx rgba(102, 112, 246, 0.2);
+  box-shadow: 0 5rpx 14rpx rgba(102, 112, 246, 0.16);
 }
 
-.layered-thumb image {
+.layered-single-image {
+  display: block;
   width: 100%;
   height: 100%;
 }
@@ -1245,19 +1297,39 @@
   text-align: center;
 }
 
-.layered-current-grid {
+.layered-current-list {
   display: flex;
   flex: 1;
-  align-content: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 7rpx;
-  margin: 10rpx 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8rpx;
+  margin: 12rpx 0;
+  flex-direction: column;
+}
+
+.layered-current-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  flex: 1;
+  flex-direction: column;
+}
+
+.layered-current-label {
+  overflow: hidden;
+  width: 100%;
+  color: #777da1;
+  font-size: 15rpx;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .layered-current-cell {
-  width: 65rpx;
-  height: 65rpx;
+  width: 108rpx;
+  height: 80rpx;
+  margin-top: 4rpx;
   overflow: hidden;
   border-radius: 13rpx;
   background: rgba(255, 255, 255, 0.8);
@@ -1518,7 +1590,7 @@
 }
 
 .home-play-option:active,
-.layered-thumb:active,
+.layered-single-frame:active,
 .layered-choice-arrow:active,
 .home-action-primary:active,
 .home-action-secondary:active,
@@ -1540,11 +1612,26 @@
   }
 
   .layered-current-panel {
-    width: 150rpx;
+    width: 142rpx;
   }
 
-  .layered-thumb {
-    width: 60rpx;
-    height: 60rpx;
+  .layered-choice-meta {
+    width: 94rpx;
+  }
+
+  .layered-choice-name {
+    font-size: 16rpx;
+  }
+
+  .layered-choice-count {
+    padding-left: 22rpx;
+  }
+
+  .layered-choice-arrow {
+    width: 28rpx;
+  }
+
+  .layered-current-cell {
+    width: 92rpx;
   }
 }

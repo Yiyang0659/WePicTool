@@ -54,19 +54,24 @@
               </view>
               <view class="layered-choice-controls">
                 <view class="layered-choice-arrow" data-group-key="{{row.key}}" data-direction="-1" bindtap="onShiftLayeredDemoItem">‹</view>
-                <view class="layered-thumb-strip">
-                  <view
-                    class="layered-thumb {{image.selected ? 'layered-thumb-active' : ''}}"
+                <swiper
+                  class="layered-single-swiper"
+                  current="{{row.currentIndex}}"
+                  circular="true"
+                  duration="260"
+                  data-group-key="{{row.key}}"
+                  bindchange="onLayeredDemoSwiperChange"
+                >
+                  <swiper-item
                     wx:for="{{row.images}}"
                     wx:key="src"
                     wx:for-item="image"
-                    data-group-key="{{row.key}}"
-                    data-index="{{image.index}}"
-                    bindtap="onSelectLayeredDemoItem"
                   >
-                    <image src="{{image.src}}" mode="aspectFit" />
-                  </view>
-                </view>
+                    <view class="layered-single-frame">
+                      <image class="layered-single-image" src="{{image.src}}" mode="aspectFit" />
+                    </view>
+                  </swiper-item>
+                </swiper>
                 <view class="layered-choice-arrow" data-group-key="{{row.key}}" data-direction="1" bindtap="onShiftLayeredDemoItem">›</view>
               </view>
             </view>
@@ -74,12 +79,15 @@
 
           <view class="layered-current-panel">
             <view class="layered-current-title">当前选择</view>
-            <view class="layered-current-grid">
-              <view class="layered-current-cell" wx:for="{{layeredCurrentItems}}" wx:key="key">
-                <image src="{{item.src}}" mode="aspectFit" />
+            <view class="layered-current-list">
+              <view class="layered-current-item" wx:for="{{layeredCurrentItems}}" wx:key="key">
+                <view class="layered-current-label">{{item.name}}</view>
+                <view class="layered-current-cell">
+                  <image src="{{item.src}}" mode="aspectFit" />
+                </view>
               </view>
             </view>
-            <view class="layered-current-note">四组互不影响</view>
+            <view class="layered-current-note">按顺序搭配</view>
           </view>
         </view>
 
@@ -137,7 +145,7 @@
     </view>
     <view class="home-tools-grid">
       <block wx:for="{{homeTools}}" wx:key="key">
-        <view class="home-tool-item" wx:if="{{item.status === 'available'}}" bindtap="onChooseMedia">
+        <view class="home-tool-item" wx:if="{{item.status === 'available'}}" bindtap="onOpenOutfitPicker">
           <view class="home-tool-icon home-tool-icon-{{item.key}}">{{item.emoji}}</view>
           <view class="home-tool-name">{{item.name}}</view>
           <view class="home-tool-status">可用</view>
@@ -151,16 +159,24 @@
     </view>
   </block>
 
-  <!-- ===== 步骤二：处理前确认（缩略图 + 输出比例，逻辑原样保留） ===== -->
+  <!-- ===== 步骤二：AI 穿搭整理选图与处理前确认 ===== -->
   <view class="confirm-section" wx:if="{{step === 'confirm'}}">
     <view class="confirm-head-row">
-      <view class="confirm-head">已选 {{pickedImages.length}} 张图片</view>
-      <view class="confirm-repick" bindtap="onBackToHome">‹ 重新选择</view>
+      <view class="confirm-back" bindtap="onBackToHome" aria-label="返回首页">‹</view>
+      <view class="confirm-head" wx:if="{{pickedImages.length === 0}}">还未选择图片</view>
+      <view class="confirm-head" wx:else>已选 {{pickedImages.length}} 张图片</view>
+      <view class="confirm-repick" wx:if="{{pickedImages.length > 0}}" bindtap="onResetPickedImages">重新选择</view>
+      <view class="confirm-head-spacer" wx:else></view>
     </view>
 
-    <!-- 已选图片缩略图网格（4 列，白卡容器） -->
+    <!-- 空状态先解释任务，用户主动点击后才调起系统图片选择器。 -->
     <view class="picked-card">
-      <view class="picked-grid">
+      <view class="picked-empty" wx:if="{{pickedImages.length === 0}}" bindtap="onAddMedia">
+        <view class="picked-empty-plus">＋</view>
+        <view class="picked-empty-title">添加图片</view>
+        <view class="picked-empty-sub">从相册选择或拍摄，最多 9 张</view>
+      </view>
+      <view class="picked-grid" wx:else>
         <view class="picked-item" wx:for="{{pickedImages}}" wx:key="tempFilePath" bindtap="onPreviewConfirmImage" data-index="{{index}}">
           <image class="picked-img" src="{{item.tempFilePath}}" mode="aspectFill" lazy-load="true" />
           <!-- 单张移除：catchtap 阻止冒泡，避免同时触发预览 -->
@@ -188,7 +204,7 @@
     <view class="ratio-note">比例只影响白底卡片合成，不重新抠图；结果页可随时修改。</view>
 
     <!-- 开始处理主按钮 -->
-    <view class="confirm-cta {{processing ? 'confirm-cta-disabled' : ''}}" bindtap="onStartProcess">
+    <view class="confirm-cta {{pickedImages.length === 0 ? 'confirm-cta-disabled' : ''}} {{processing ? 'confirm-cta-disabled' : ''}}" bindtap="onStartProcess">
       <view class="btn-grad">{{processing ? '处理中...' : '开始处理'}}</view>
     </view>
     <view class="confirm-hint">若包含人像、风景等非穿搭图片，将自动归入「其他素材」</view>

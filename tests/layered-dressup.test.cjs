@@ -315,7 +315,7 @@ test('homepage flagship actions navigate to demo and upload dressup modes', () =
   assert.equal(page.data.homeTools.some(item => item.key === 'suit' || item.key === 'dressup'), false);
 });
 
-test('homepage uses one shared two-play preview and keeps the existing AI outfit entry', () => {
+test('homepage uses one shared two-play preview and keeps the AI outfit picker entry', () => {
   const markup = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/index/index.wxml'), 'utf8');
 
   assert.match(markup, /今天想做什么/);
@@ -324,8 +324,75 @@ test('homepage uses one shared two-play preview and keeps the existing AI outfit
   assert.match(markup, /activeHomePlay === 'fun-text-stack'/);
   assert.match(markup, /bindtap="onTryLayeredDemo"/);
   assert.match(markup, /bindtap="onCreateLayeredDressup"/);
-  assert.match(markup, /bindtap="onChooseMedia"/);
+  assert.match(markup, /bindtap="onOpenOutfitPicker"/);
   assert.doesNotMatch(markup, /layered-stack-edge|hero-card|hot-template-card|guide-card|fun-text-demo-card/);
+});
+
+test('AI outfit entry opens an empty picker before requesting media', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  let chooseCount = 0;
+  const definition = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
+  }, {
+    chooseMedia() { chooseCount += 1; }
+  });
+  const page = instantiatePage(definition);
+
+  page.onOpenOutfitPicker();
+
+  assert.equal(page.data.step, 'confirm');
+  assert.deepEqual(plain(page.data.pickedImages), []);
+  assert.equal(chooseCount, 0);
+});
+
+test('AI outfit picker adds, resets and exits without mixing those actions', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  let chooseCount = 0;
+  const picked = [{ tempFilePath: 'wxfile://picked-one.jpg' }];
+  const definition = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
+  }, {
+    chooseMedia(options) {
+      chooseCount += 1;
+      options.success({ tempFiles: picked });
+    }
+  });
+  const page = instantiatePage(definition);
+
+  page.onOpenOutfitPicker();
+  page.onAddMedia();
+  assert.equal(chooseCount, 1);
+  assert.deepEqual(plain(page.data.pickedImages), picked);
+
+  page.onResetPickedImages();
+  assert.equal(page.data.step, 'confirm');
+  assert.deepEqual(plain(page.data.pickedImages), []);
+  assert.equal(chooseCount, 1);
+
+  page.data.pickedImages = picked.slice();
+  page.onRemoveImage({ currentTarget: { dataset: { index: 0 } } });
+  assert.equal(page.data.step, 'confirm');
+  assert.deepEqual(plain(page.data.pickedImages), []);
+
+  page.data.pickedImages = picked.slice();
+  page.onBackToHome();
+  assert.equal(page.data.step, 'home');
+  assert.deepEqual(plain(page.data.pickedImages), []);
+});
+
+test('AI outfit picker renders a centered empty state and disables processing without images', () => {
+  const markup = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/index/index.wxml'), 'utf8');
+
+  assert.match(markup, /class="confirm-back"[^>]*bindtap="onBackToHome"/);
+  assert.match(markup, /wx:if="\{\{pickedImages\.length === 0\}\}"/);
+  assert.match(markup, /class="picked-empty"/);
+  assert.match(markup, /添加图片/);
+  assert.match(markup, /bindtap="onResetPickedImages"/);
+  assert.match(markup, /pickedImages\.length === 0 \? 'confirm-cta-disabled'/);
 });
 
 test('homepage keeps four layered choices independent and updates the current combination', () => {
@@ -356,6 +423,38 @@ test('homepage keeps four layered choices independent and updates the current co
   assert.match(page.data.layeredCurrentItems.find(item => item.key === 'tops').src, /top3\.jpg$/);
 });
 
+test('homepage layered rows respond to native swiper changes without resetting other groups', () => {
+  const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
+  const definition = loadMiniProgramPage('miniprogram/pages/index/index.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
+    '../../utils/task': taskUtils,
+    '../../utils/funTextProject': require('../miniprogram/utils/funTextProject.js')
+  }, {});
+  const page = instantiatePage(definition);
+
+  page.onLayeredDemoSwiperChange({
+    currentTarget: { dataset: { groupKey: 'bottoms' } },
+    detail: { current: 2 }
+  });
+
+  assert.equal(page.data.layeredDemoIndices.bottoms, 2);
+  assert.equal(page.data.layeredDemoIndices.head, 0);
+  assert.equal(page.data.layeredDemoIndices.tops, 0);
+  assert.equal(page.data.layeredDemoIndices.shoes, 0);
+  assert.deepEqual(plain(page.data.layeredCurrentItems.map(item => item.key)), ['head', 'tops', 'bottoms', 'shoes']);
+});
+
+test('homepage layered preview uses one circular swiper per group and a vertical current list', () => {
+  const markup = fs.readFileSync(path.join(__dirname, '..', 'miniprogram/pages/index/index.wxml'), 'utf8');
+
+  assert.match(markup, /class="layered-single-swiper"/);
+  assert.match(markup, /circular="true"/);
+  assert.match(markup, /bindchange="onLayeredDemoSwiperChange"/);
+  assert.match(markup, /class="layered-current-list"/);
+  assert.doesNotMatch(markup, /class="layered-thumb-strip"/);
+  assert.doesNotMatch(markup, /class="layered-current-grid"/);
+});
+
 test('upload entry ignores a saved demo-only draft', () => {
   const demoDraft = dressup.createProject({
     sourceMode: 'demo',
@@ -377,6 +476,45 @@ test('upload entry ignores a saved demo-only draft', () => {
 
   assert.equal(page.data.project.sourceMode, 'upload');
   assert.equal(page.data.groupList.every(group => group.count === 0), true);
+});
+
+test('upload mode can add user images independently to every dressup group', async () => {
+  const groupKeys = ['head', 'tops', 'bottoms', 'shoes'];
+
+  for (const groupKey of groupKeys) {
+    const definition = loadMiniProgramPage('miniprogram/pages/dressup/dressup.js', {
+      '../../config/playRegistry': registry,
+      '../../utils/layeredDressup': dressup,
+      '../../utils/imageExporter': require('../miniprogram/utils/imageExporter.js'),
+      '../../utils/stackExportManifest': require('../miniprogram/utils/stackExportManifest.js'),
+      '../../utils/sequenceBadgeComposer': require('../miniprogram/utils/sequenceBadgeComposer.js')
+    }, {
+      chooseMedia(options) {
+        options.success({ tempFiles: [{ tempFilePath: `wxfile://${groupKey}.jpg` }] });
+      },
+      showLoading() {},
+      hideLoading() {},
+      setStorageSync() {},
+      showToast() {}
+    });
+    const page = instantiatePage(definition);
+    page.data.project = dressup.createProject({ sourceMode: 'upload', now: 4000 });
+    page.prepareUserFiles = function () {
+      return Promise.resolve([{
+        id: `user_${groupKey}`,
+        localPath: `wxfile://${groupKey}.jpg`,
+        url: `wxfile://${groupKey}.jpg`
+      }]);
+    };
+
+    page.onAddUserItems({ currentTarget: { dataset: { group: groupKey } } });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    assert.equal(page.data.project.groups[groupKey].length, 1, `${groupKey} should receive its image`);
+    groupKeys.filter(key => key !== groupKey).forEach((otherKey) => {
+      assert.equal(page.data.project.groups[otherKey].length, 0, `${otherKey} should stay unchanged`);
+    });
+  }
 });
 
 test('saving a built-in dressup asset copies it into USER_DATA_PATH before album save', async () => {
