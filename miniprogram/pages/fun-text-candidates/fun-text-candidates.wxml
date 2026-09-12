@@ -15,6 +15,14 @@
       wx:for="{{candidates}}"
       wx:key="candidateId"
       class="candidate-card"
+      hover-class="candidate-card-pressed"
+      hover-stay-time="80"
+      data-index="{{index}}"
+      data-candidate-id="{{item.candidateId}}"
+      bindtap="onCardTap"
+      bindtouchstart="onCardTouchStart"
+      bindtouchmove="onCardTouchMove"
+      bindtouchcancel="onCardTouchCancel"
     >
       <view class="candidate-meta">
         <view class="candidate-title-wrap">
@@ -39,14 +47,16 @@
             wx:key="sceneId"
             class="swiper-card-item"
           >
+            <fun-live-preview class="local-card-preview" wx:if="{{localEditorEnabled && sceneIdx === item.currentIndex}}"
+              scene="{{scene}}" project-id="{{project.projectId}}" candidate-id="{{item.candidateId}}" />
             <image
-              wx:if="{{item.fallbackImages && item.fallbackImages[sceneIdx]}}"
+              wx:elif="{{!localEditorEnabled && item.fallbackImages && item.fallbackImages[sceneIdx]}}"
               class="card-preview-image"
               src="{{item.fallbackImages[sceneIdx]}}"
               mode="aspectFit"
             />
             <fun-card-canvas
-              wx:elif="{{sceneIdx >= item.currentIndex - 1 && sceneIdx <= item.currentIndex + 1}}"
+              wx:elif="{{!localEditorEnabled && sceneIdx >= item.currentIndex - 1 && sceneIdx <= item.currentIndex + 1}}"
               scene="{{scene}}"
               size="{{300}}"
               bindfontunavailable="onCanvasError"
@@ -62,13 +72,13 @@
           class="btn-use"
           data-candidate-id="{{item.candidateId}}"
           data-index="{{index}}"
-          bindtap="onUseCandidate"
+          catchtap="onUseCandidate"
         >用这套</button>
         <button
           class="btn-edit"
           data-candidate-id="{{item.candidateId}}"
           data-index="{{index}}"
-          bindtap="onEditCandidate"
+          catchtap="onEditCandidate"
         >自己改改</button>
       </view>
     </view>

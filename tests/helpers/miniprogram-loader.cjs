@@ -20,7 +20,9 @@ function loadMiniProgramModule(relativePath, dependencies = {}) {
     module,
     exports: module.exports,
     require: localRequire,
-    console
+    console,
+    setTimeout,
+    clearTimeout
   }, { filename: filePath });
   return module.exports;
 }

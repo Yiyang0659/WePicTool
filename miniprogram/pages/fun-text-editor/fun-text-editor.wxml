@@ -6,15 +6,21 @@
     <view class="history-action {{canRedo ? '' : 'history-action-disabled'}}" bindtap="onRedo">重做 ↷</view>
   </view>
 
-  <view class="editor-stage">
+  <view class="editor-stage" wx:if="{{!handwritingVisible}}">
+    <!-- Native canvases must be unmounted while the ordinary-view progress dialog is visible. -->
+    <fun-live-preview class="local-editor-preview" wx:if="{{localEditorEnabled && currentScene && !editingTextModalVisible && !exportProgress.visible}}"
+      scene="{{currentScene}}" project-id="{{project.projectId}}" candidate-id="{{selectedCandidate.candidateId}}"
+      drawing="{{drawingMode && activeEditorTab === 'decoration'}}" brush-key="{{brushKey}}" color-key="{{inkColor}}" pen-width="{{penWidth}}"
+      bindinkchange="onInkChange" bindinklimit="onInkLimit"
+      bindgeometry="onPreviewGeometry" bindtap="onPreviewTap" />
     <image
-      wx:if="{{currentFallbackImage && !editingTextModalVisible}}"
+      wx:elif="{{currentFallbackImage && !editingTextModalVisible}}"
       class="editor-stage-fallback"
       src="{{currentFallbackImage}}"
       mode="aspectFit"
     />
     <fun-card-canvas
-      wx:elif="{{currentScene && !editingTextModalVisible}}"
+      wx:elif="{{!localEditorEnabled && currentScene && !editingTextModalVisible && !exportProgress.visible}}"
       scene="{{currentScene}}"
       size="{{320}}"
       revision="{{canvasRevision}}"
@@ -30,12 +36,12 @@
       <view class="editor-preview-status-text">你的文字和编辑已保留</view>
       <button class="editor-preview-retry" bindtap="onRetryEditorPreview">重新加载</button>
     </view>
-    <view wx:if="{{activeEditorTab === 'decoration' && !editingTextModalVisible}}" class="decoration-overlay">
+    <view wx:if="{{activeEditorTab === 'decoration' && !drawingMode && !editingTextModalVisible}}" class="decoration-overlay">
       <view
         wx:for="{{decorationHandles}}"
         wx:key="id"
         class="decoration-handle {{item.selected ? 'decoration-handle-selected' : ''}}"
-        style="left: {{item.left}}px; top: {{item.top}}px; width: {{item.size}}px; height: {{item.size}}px; color: {{item.color}}; transform: rotate({{item.rotation}}deg);"
+        style="left: {{item.leftPercent}}%; top: {{item.topPercent}}%; width: {{item.size}}px; height: {{item.size}}px; color: {{localEditorEnabled ? 'transparent' : item.color}}; transform: translate(-50%, -50%) rotate({{item.rotation}}deg);"
         data-layer-id="{{item.id}}"
         bindtap="onSelectDecoration"
         catchtouchstart="onDecorationTouchStart"
@@ -44,7 +50,17 @@
         catchtouchcancel="onDecorationTouchEnd"
       >{{item.label}}</view>
     </view>
+    <view wx:if="{{activeEditorTab === 'decoration'}}" class="ink-sticker-overlay">
+      <view wx:for="{{currentScene.inkStickers}}" wx:key="id" data-id="{{item.id}}"
+        class="ink-sticker-handle {{selectedInkId === item.id ? 'ink-sticker-selected' : ''}}"
+        style="left:{{item.x / 10.8}}%;top:{{item.y / 10.8}}%;width:{{item.scale * 100}}%;height:{{item.scale * 100}}%;transform:translate(-50%,-50%) rotate({{item.rotation}}deg);"
+        catchtap="onSelectInkSticker" catchtouchstart="onInkStickerStart" catchtouchmove="onInkStickerMove" catchtouchend="onInkStickerEnd" catchtouchcancel="onInkStickerCancel">
+        <text wx:if="{{selectedInkId === item.id}}" class="ink-sticker-label">手写贴纸 · 拖动 / 双指调整</text>
+      </view>
+    </view>
   </view>
+
+  <view class="editor-save-actions"><button class="editor-secondary" disabled="{{editorExportBusy}}" bindtap="onSaveCurrentPage">↓ 保存当前页</button><button class="editor-primary" disabled="{{editorExportBusy}}" bindtap="onSaveAllPages">保存整组图片</button></view>
 
   <view class="editor-section cards-section">
     <view class="section-header compact-header">
@@ -157,7 +173,28 @@
     </view>
   </view>
 
-  <view wx:if="{{activeEditorTab === 'decoration'}}" class="editor-panel">
+  <view wx:if="{{activeEditorTab === 'decoration' && localEditorEnabled}}" class="editor-panel handwriting-card">
+    <view class="handwriting-heading">
+      <view class="pen-tile"><view class="pen-icon"></view></view>
+      <view class="handwriting-intro"><view class="handwriting-title">自由手写 <text class="help-icon" bindtap="onHandwritingHelp">?</text></view><text class="handwriting-subtitle">在画布上手写文字、涂鸦，生成贴纸</text></view>
+      <button class="handwriting-start" hover-class="button-pressed" bindtap="onStartHandwriting">开始手写 →</button>
+    </view>
+    <view class="draft-library">
+      <view class="draft-heading"><text class="draft-title">◷ 最近本机草稿</text><view class="draft-actions"><text>仅保存在本机</text><text class="draft-clear" bindtap="onClearHandwritingDrafts">清空</text></view></view>
+      <scroll-view scroll-x="true" enable-flex class="draft-scroll">
+        <view class="draft-row">
+          <view class="draft-tile draft-new" hover-class="button-pressed" bindtap="onStartHandwriting"><text class="draft-plus">＋</text><text>新建手写</text></view>
+          <view wx:for="{{handwritingDrafts}}" wx:key="id" class="draft-tile" data-id="{{item.id}}" bindtap="onStartHandwriting" bindlongpress="onDeleteHandwritingDraft" hover-class="button-pressed">
+            <view class="draft-image"><fun-live-preview wx:if="{{!handwritingVisible && !exportProgress.visible}}" local-only="{{true}}" scene="{{item.scene}}" /></view><text class="draft-date">{{item.timeLabel}}</text>
+          </view>
+          <view wx:if="{{!handwritingDrafts.length}}" class="draft-empty">你的手写作品会显示在这里<text>点击新建，写下第一笔</text></view>
+        </view>
+      </scroll-view>
+    </view>
+    <view wx:if="{{handwritingStatus && !handwritingVisible}}" class="handwriting-save-status">{{handwritingStatus}}</view>
+  </view>
+
+  <view wx:if="{{activeEditorTab === 'decoration'}}" class="editor-panel stickers-card">
     <view class="section-header">
       <text class="section-title">贴纸和涂鸦</text>
       <text class="section-hint">点素材添加，直接在画面拖动</text>
@@ -213,16 +250,64 @@
       <view wx:else class="decoration-color-empty">请先点击画面里的装饰，再选择颜色</view>
     </view>
     <view wx:if="{{selectedDecorationId}}" class="selected-decoration-tools">
-      <view class="decoration-tool {{decorationLayerState.canMoveBackward ? '' : 'decoration-tool-disabled'}}" data-direction="backward" bindtap="onMoveDecorationLayer">往后显示</view>
-      <view class="decoration-tool {{decorationLayerState.canMoveForward ? '' : 'decoration-tool-disabled'}}" data-direction="forward" bindtap="onMoveDecorationLayer">往前显示</view>
+      <view class="decoration-tool {{decorationLayerState.canMoveBackward ? '' : 'decoration-tool-disabled'}}" data-direction="backward" bindtap="onMoveDecorationLayer">置底</view>
+      <view class="decoration-tool {{decorationLayerState.canMoveForward ? '' : 'decoration-tool-disabled'}}" data-direction="forward" bindtap="onMoveDecorationLayer">置顶</view>
       <view class="decoration-tool delete-decoration" bindtap="onDeleteDecoration">删除</view>
     </view>
     <view wx:if="{{selectedDecorationId}}" class="layer-help">只在装饰互相重叠时改变遮挡顺序；删除只移除当前选中的装饰</view>
     <view wx:else class="decoration-tip">选择画面里的装饰后，可以双指缩放和旋转</view>
+    <view wx:if="{{selectedInkId}}" class="selected-decoration-tools">
+      <button class="decoration-tool" bindtap="onEditInkSticker">编辑手写贴纸</button>
+      <button class="decoration-tool delete-decoration" bindtap="onDeleteInkSticker">删除手写贴纸</button>
+    </view>
   </view>
 
-  <view class="editor-footer">
-    <button class="btn-confirm-edits" bindtap="onConfirmEdits">完成，制作这叠</button>
+  <view wx:if="{{localEditorEnabled}}" class="project-draft-link" bindtap="onRestoreLocalDraft">恢复最近整套项目草稿 ›</view>
+
+  <view wx:if="{{!handwritingVisible && !editingTextModalVisible}}" class="editor-footer editor-fixed-footer">
+    <button class="editor-secondary" disabled="{{editorExportBusy}}" hover-class="button-pressed" bindtap="onWechatPreview">微信预览</button>
+    <button class="btn-confirm-edits" disabled="{{editorExportBusy}}" hover-class="button-pressed" bindtap="onConfirmEdits">完成，制作这叠</button>
+  </view>
+  <canvas type="2d" id="editorExportCanvas" class="editor-export-canvas" />
+
+  <view wx:if="{{exportProgress.visible}}" class="export-progress-mask" catchtouchmove="onExportMaskTouch" catchtap="onExportMaskTouch">
+    <view class="export-progress-dialog" role="alert" aria-label="{{exportProgress.stage === 'saving' ? '正在保存图片' : '正在审核并准备图片'}}">
+      <view class="export-progress-icon"><view class="export-progress-ring"></view><text>{{exportProgress.stage === 'saving' ? '↓' : '✦'}}</text></view>
+      <view class="export-progress-title">{{exportProgress.stage === 'audit' ? '正在审核并生成' : exportProgress.stage === 'preparing' ? '正在准备图片' : '正在保存第 ' + exportProgress.current + ' / ' + exportProgress.total + ' 张'}}</view>
+      <view class="export-progress-subtitle">{{exportProgress.stage === 'audit' ? '正在检查内容并生成高清图片' : exportProgress.stage === 'preparing' ? '审核已通过，正在整理高清图片' : '审核已通过，正在保存到相册'}}</view>
+      <view class="export-progress-track">
+        <view wx:if="{{exportProgress.stage === 'saving'}}" class="export-progress-fill" style="width:{{exportProgress.percent}}%;"></view>
+        <view wx:else class="export-progress-indeterminate"></view>
+      </view>
+      <view class="export-progress-steps">
+        <view class="export-progress-step {{exportProgress.stage === 'audit' ? 'export-step-active' : 'export-step-done'}}"><view class="export-step-dot">{{exportProgress.stage === 'audit' ? '' : '✓'}}</view><text>审核与成图</text></view>
+        <view class="export-step-line"></view>
+        <view class="export-progress-step {{exportProgress.stage === 'preparing' ? 'export-step-active' : exportProgress.stage === 'saving' ? 'export-step-done' : ''}}"><view class="export-step-dot">{{exportProgress.stage === 'saving' ? '✓' : ''}}</view><text>准备图片</text></view>
+        <view class="export-step-line"></view>
+        <view class="export-progress-step {{exportProgress.stage === 'saving' ? 'export-step-active' : ''}}"><view class="export-step-dot"></view><text>保存相册</text></view>
+      </view>
+      <view class="export-progress-hint">{{exportProgress.stage === 'saving' ? '已保存 ' + exportProgress.completed + ' / ' + exportProgress.total + ' 张 · 请保持页面打开' : '请稍候，完成后自动继续'}}<text class="export-progress-dots">···</text></view>
+    </view>
+  </view>
+
+  <view wx:if="{{handwritingVisible}}" class="handwriting-mask" catchtouchmove="true">
+    <view class="handwriting-sheet">
+      <view class="handwriting-sheet-heading"><text>自由手写</text><button bindtap="onCancelHandwriting">关闭</button></view>
+      <view class="handwriting-canvas"><fun-live-preview wx:if="{{!exportProgress.visible}}" local-only="{{true}}" scene="{{handwritingScene}}" drawing="{{true}}" pan-mode="{{handwritingPanMode}}" brush-key="{{brushKey}}" color-key="{{inkColor}}" pen-width="{{penWidth}}" bindinkchange="onHandwritingChange" bindviewportchange="onHandwritingViewport" bindinklimit="onInkLimit" /></view>
+      <scroll-view scroll-y="true" class="handwriting-tools-scroll">
+      <view class="handwriting-toolbar">
+        <view class="ink-options"><button data-mode="draw" bindtap="onHandwritingMode" class="{{!handwritingPanMode ? 'ink-selected' : ''}}">写画</button><button data-mode="pan" bindtap="onHandwritingMode" class="{{handwritingPanMode ? 'ink-selected' : ''}}">移动画布</button></view>
+        <view class="handwriting-save-status">{{handwritingPanMode ? '拖动纸面查看其他位置；切回写画继续落笔' : '单指写画；需要更多空间时切换移动画布'}} · 保存完整作品</view>
+        <view class="ink-options"><button disabled="{{!handwritingCanUndo}}" bindtap="onHandwritingUndo">↶ 撤销</button><button disabled="{{!handwritingCanRedo}}" bindtap="onHandwritingRedo">重做 ↷</button></view>
+        <view class="ink-options"><button data-key="pen" bindtap="onInkBrush" class="{{brushKey === 'pen' ? 'ink-selected' : ''}}">实线笔</button><button data-key="highlighter" bindtap="onInkBrush" class="{{brushKey === 'highlighter' ? 'ink-selected' : ''}}">荧光笔</button><button data-key="eraser" bindtap="onInkBrush" class="{{brushKey === 'eraser' ? 'ink-selected' : ''}}">擦除</button></view>
+        <view class="handwriting-save-status">{{brushKey === 'eraser' ? '橡皮大小' : '笔画粗细'}} · 左右滑动选择</view>
+        <scroll-view scroll-x="true" class="ink-width-scroll"><view class="ink-width-row"><button wx:for="{{inkWidths}}" wx:key="*this" data-width="{{item}}" bindtap="onInkWidth" class="{{penWidth === item ? 'ink-selected' : ''}}">{{item}}</button></view></scroll-view>
+        <view class="ink-options"><view wx:for="{{inkColors}}" wx:key="key" data-key="{{item.key}}" bindtap="onInkColor" class="ink-color {{inkColor === item.key ? 'ink-selected' : ''}}" style="background:{{item.color}};"></view></view>
+        <view class="handwriting-save-status">{{handwritingStatus || '笔迹仅在本机编辑，完成后统一审核成图'}}</view>
+        <view class="ink-options"><button bindtap="onSaveHandwriting">保存草稿</button><button class="handwriting-start" bindtap="onAddHandwritingSticker">作为贴纸添加 →</button></view>
+      </view>
+      </scroll-view>
+    </view>
   </view>
 
   <view wx:if="{{editingTextModalVisible}}" class="modal-mask" catchtouchmove="true">

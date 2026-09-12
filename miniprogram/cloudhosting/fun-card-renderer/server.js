@@ -3,25 +3,49 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const {
   validateRenderPayload,
   validatePreviewPayload,
+  validateScene,
   collectAuditText
 } = require('./sceneValidator');
 
-const DEFAULT_FONT_PATH = path.join(__dirname, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
+const BUNDLED_FONT_ROOT = path.join(__dirname, 'assets', 'fonts');
+const DEFAULT_FONT_PATH = path.join(BUNDLED_FONT_ROOT, 'LXGWMarkerGothic-Regular.ttf');
 const DEFAULT_FONT_PATHS = Object.freeze({
   'LXGWMarkerGothic-Regular.ttf': DEFAULT_FONT_PATH,
-  'SmileySans-Oblique.ttf': path.join(__dirname, 'fonts', 'SmileySans-Oblique.ttf'),
-  'MaShanZheng-Regular.ttf': path.join(__dirname, 'fonts', 'MaShanZheng-Regular.ttf')
+  'SmileySans-Oblique.ttf': path.join(BUNDLED_FONT_ROOT, 'SmileySans-Oblique.ttf'),
+  'MaShanZheng-Regular.ttf': path.join(BUNDLED_FONT_ROOT, 'MaShanZheng-Regular.ttf')
 });
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const DEFAULT_RATE_LIMIT = 30;
 const DEFAULT_RATE_WINDOW_MS = 60 * 1000;
 const DEFAULT_MAX_CALLERS = 10000;
+const DEFAULT_AUDIT_TIMEOUT_MS = 6000;
+const DEFAULT_RENDER_TIMEOUT_MS = 20000;
 
 function failure(statusCode, code) {
   return { statusCode, body: { ok: false, code } };
+}
+
+function hasUnverifiedInk(scene) {
+  return scene && scene.strokes !== undefined && (!Array.isArray(scene.strokes) || scene.strokes.length > 0);
+}
+
+function withDeadline(operation, timeoutMs, fallbackMs, timeoutCode) {
+  const deadline = Number.isInteger(timeoutMs) && timeoutMs > 0 ? timeoutMs : fallbackMs;
+  let timer;
+  return Promise.race([
+    Promise.resolve().then(operation),
+    new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error(timeoutCode);
+        error.code = timeoutCode;
+        reject(error);
+      }, deadline);
+    })
+  ]).finally(() => clearTimeout(timer));
 }
 
 function assessSecurityResponse(response) {
@@ -45,11 +69,16 @@ function createContentChecker(msgSecCheck, onError) {
   };
 }
 
-async function auditPayload(checkContent, payload) {
+async function auditPayload(checkContent, payload, timeoutMs, context) {
   if (typeof checkContent !== 'function') return failure(503, 'SAFETY_UNAVAILABLE');
   let audit;
   try {
-    audit = await checkContent(collectAuditText(payload));
+    audit = await withDeadline(
+      () => checkContent(collectAuditText(payload), context),
+      timeoutMs,
+      DEFAULT_AUDIT_TIMEOUT_MS,
+      'AUDIT_TIMEOUT'
+    );
   } catch (error) {
     return failure(503, 'SAFETY_UNAVAILABLE');
   }
@@ -80,18 +109,37 @@ async function rollbackRequestCards(rollbackCards, cards) {
 
 function createRenderStackHandler(dependencies) {
   const deps = dependencies || {};
-  return async function renderStack(input) {
+  return async function renderStack(input, context) {
     if (!validateRenderPayload(input).valid) return failure(400, 'INVALID_REQUEST');
-    const blocked = await auditPayload(deps.checkContent, input);
-    if (blocked) return blocked;
+    if (input.scenes.some(hasUnverifiedInk) && !deps.imageSafetyEnabled) return failure(503, 'IMAGE_SAFETY_UNAVAILABLE');
+    const startedAt = Date.now();
+    if (typeof deps.logStage === 'function') deps.logStage('audit-start', 'kind=final');
+    const blocked = await auditPayload(deps.checkContent, input, deps.auditTimeoutMs, context);
+    if (blocked) {
+      if (typeof deps.logStage === 'function') {
+        deps.logStage('audit-end', 'kind=final status=' + blocked.statusCode + ' elapsedMs=' + (Date.now() - startedAt));
+      }
+      return blocked;
+    }
+    if (typeof deps.logStage === 'function') {
+      deps.logStage('render-start', 'kind=final elapsedMs=' + (Date.now() - startedAt));
+    }
     try {
-      const cards = await deps.renderScenes(input.scenes, {
-        projectId: input.projectId,
-        candidateId: input.candidateId,
-        kind: 'final',
-        size: 1080
-      });
+      const cards = await withDeadline(
+        () => deps.renderScenes(input.scenes, {
+          projectId: input.projectId,
+          candidateId: input.candidateId,
+          kind: 'final',
+          size: 1080
+        }),
+        deps.renderTimeoutMs,
+        DEFAULT_RENDER_TIMEOUT_MS,
+        'RENDER_TIMEOUT'
+      );
       if (!cardsMatchScenes(cards, input.scenes)) return failure(500, 'RENDER_FAILED');
+      if (typeof deps.logStage === 'function') {
+        deps.logStage('render-end', 'kind=final status=200 elapsedMs=' + (Date.now() - startedAt));
+      }
       return {
         statusCode: 200,
         body: {
@@ -102,16 +150,25 @@ function createRenderStackHandler(dependencies) {
         }
       };
     } catch (error) {
-      return failure(500, 'RENDER_FAILED');
+      if (typeof deps.logStage === 'function') {
+        const code = error && error.code ? error.code : 'RENDER_FAILED';
+        deps.logStage('render-end', 'kind=final status=error code=' + code + ' elapsedMs=' + (Date.now() - startedAt));
+      }
+      if (error && error.code==='CONTENT_UNSAFE') return failure(403,'CONTENT_UNSAFE');
+      if (error && error.code==='IMAGE_SAFETY_UNAVAILABLE') return failure(503,'IMAGE_SAFETY_UNAVAILABLE');
+      return error && error.code === 'RENDER_TIMEOUT'
+        ? failure(504, 'RENDER_TIMEOUT')
+        : failure(500, 'RENDER_FAILED');
     }
   };
 }
 
 function createPreviewStackHandler(dependencies) {
   const deps = dependencies || {};
-  return async function previewStack(input) {
+  return async function previewStack(input, context) {
     if (!validatePreviewPayload(input).valid) return failure(400, 'INVALID_REQUEST');
-    const blocked = await auditPayload(deps.checkContent, input);
+    if (input.candidates.some(candidate => candidate.scenes.some(hasUnverifiedInk))) return failure(503, 'IMAGE_SAFETY_UNAVAILABLE');
+    const blocked = await auditPayload(deps.checkContent, input, deps.auditTimeoutMs, context);
     if (blocked) return blocked;
     const requestCards = [];
     try {
@@ -145,6 +202,33 @@ function createPreviewStackHandler(dependencies) {
   };
 }
 
+function createPreviewSceneHandler(dependencies) {
+  const deps = dependencies || {};
+  return async function previewScene(input, context) {
+    if (!input || !/^funtext_[A-Za-z0-9_-]{1,90}$/.test(input.projectId || '') ||
+        !/^candidate_[A-Za-z0-9_-]{1,90}$/.test(input.candidateId || '') ||
+        !input.scene || !Number.isInteger(input.scene.order) || input.scene.order < 1 || input.scene.order > 8 ||
+        !validateScene(input.scene, input.scene.order).valid) return failure(400, 'INVALID_REQUEST');
+    const blocked = await auditPayload(deps.checkContent, { scenes: [input.scene] }, deps.auditTimeoutMs, context);
+    if (blocked) return blocked;
+    const scene = Object.assign({}, input.scene, {
+      layers: input.scene.layers.filter(layer => layer.type === 'text')
+    });
+    delete scene.strokes;
+    try {
+      const cards = await withDeadline(() => deps.renderScenes([scene], {
+        projectId: input.projectId, candidateId: input.candidateId,
+        kind: 'preview', size: 360, revision: randomUUID()
+      }), deps.renderTimeoutMs, DEFAULT_RENDER_TIMEOUT_MS, 'RENDER_TIMEOUT');
+      if (!cardsMatchScenes(cards, [scene])) return failure(500, 'RENDER_FAILED');
+      return { statusCode: 200, body: { ok: true, projectId: input.projectId,
+        candidateId: input.candidateId, card: cards[0] } };
+    } catch (error) {
+      return failure(error && error.code === 'RENDER_TIMEOUT' ? 504 : 500, 'RENDER_FAILED');
+    }
+  };
+}
+
 function writeJson(response, statusCode, body) {
   response.writeHead(statusCode, {
     'content-type': 'application/json; charset=utf-8',
@@ -157,6 +241,21 @@ function normalizeCallerId(value) {
   if (typeof value !== 'string') return '';
   const callerId = value.trim();
   return callerId && callerId.length <= 128 ? callerId : '';
+}
+
+function normalizeTraceId(value) {
+  if (Array.isArray(value)) value = value[0];
+  if (typeof value !== 'string') return '';
+  const traceId = value.trim().split('/')[0];
+  return /^[A-Za-z0-9._:-]{1,128}$/.test(traceId) ? traceId : '';
+}
+
+function requestTraceId(request) {
+  const headers = request && request.headers || {};
+  return normalizeTraceId(headers['x-request-id'])
+    || normalizeTraceId(headers['x-cloud-trace-context'])
+    || normalizeTraceId(headers.traceparent)
+    || randomUUID();
 }
 
 function createCallerRateLimiter(options) {
@@ -256,17 +355,34 @@ function createHttpServer(options) {
     }
     const handlers = {
       '/render-stack': config.renderStackHandler,
-      '/preview-stack': config.previewStackHandler
+      '/preview-stack': config.previewStackHandler,
+      '/preview-scene': config.previewSceneHandler
     };
     if (request.method === 'POST' && handlers[url.pathname]) {
+      const traceId = requestTraceId(request);
+      let callerId = normalizeCallerId(request.headers['x-wx-openid']);
       if (!devMode) {
-        const callerId = normalizeCallerId(request.headers['x-wx-openid']);
+        if (config.verifyCaller) {
+          let identity;
+          try {
+            identity = await config.verifyCaller(request.headers['x-wepic-login-code']);
+          } catch (_) {
+            identity = { statusCode: 503, code: 'CALLER_AUTH_UNAVAILABLE' };
+          }
+          callerId = normalizeCallerId(identity && identity.openid);
+          if (!callerId) {
+            writeJson(response, identity && identity.statusCode || 403,
+              { ok: false, code: identity && identity.code || 'CALLER_UNAUTHORIZED' });
+            return;
+          }
+        } else {
         const cloudContext = request.headers['x-cloudbase-context'];
         // Presence checks only: headers are NOT public-endpoint authentication.
         // Deployment must disable public service access and expose only the font gateway path.
         if (!callerId || typeof cloudContext !== 'string' || !cloudContext.trim()) {
           writeJson(response, 403, { ok: false, code: 'CALLER_UNAUTHORIZED' });
           return;
+        }
         }
         if (!rateLimiter(callerId)) {
           writeJson(response, 429, { ok: false, code: 'RATE_LIMITED' });
@@ -280,8 +396,16 @@ function createHttpServer(options) {
         if (!response.writableEnded) writeJson(response, 400, { ok: false, code: 'INVALID_REQUEST' });
         return;
       }
-      const result = await handlers[url.pathname](input);
-      writeJson(response, result.statusCode, result.body);
+      try {
+        const result = await handlers[url.pathname](input, {
+          openid: callerId,
+          traceId,
+          requestPath: url.pathname
+        });
+        writeJson(response, result.statusCode, result.body);
+      } catch (error) {
+        if (!response.writableEnded) writeJson(response, 500, { ok: false, code: 'INTERNAL_ERROR' });
+      }
       return;
     }
     writeJson(response, 404, { ok: false, code: 'NOT_FOUND' });
@@ -294,5 +418,6 @@ module.exports = {
   createContentChecker,
   createRenderStackHandler,
   createPreviewStackHandler,
+  createPreviewSceneHandler,
   createHttpServer
 };

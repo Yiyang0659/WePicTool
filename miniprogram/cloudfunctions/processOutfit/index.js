@@ -258,7 +258,7 @@ function parseClassificationResponse(text) {
 
 function extractDashScopeText(responseData) {
   const output = responseData && responseData.output;
-  const choices = output && output.choices;
+  const choices = (output && output.choices) || (responseData && responseData.choices);
 
   if (!Array.isArray(choices) || choices.length === 0) {
     throw new Error('DashScope 返回结构异常');
@@ -282,21 +282,20 @@ function extractDashScopeText(responseData) {
 }
 
 async function classifyImageWithDashScope(imageInput, apiKey) {
+  // qwen3.8-flash 走 OpenAI 兼容端点（compatible-mode），图片用 image_url 传入
   const response = await axios.post(
-    'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+    'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
     {
-      model: 'qwen-vl-plus',
-      input: {
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { image: imageInput },
-              { text: CLASSIFICATION_PROMPT }
-            ]
-          }
-        ]
-      }
+      model: 'qwen3.8-flash',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: CLASSIFICATION_PROMPT },
+            { type: 'image_url', image_url: { url: imageInput } }
+          ]
+        }
+      ]
     },
     {
       headers: {
@@ -316,12 +315,13 @@ async function classifyImageWithDashScope(imageInput, apiKey) {
 
 const MATTING_PROMPT = '对这张图片进行抠图，去除原背景，将背景替换为纯白色，保留主体的完整轮廓，确保边缘干净';
 
-// 抠图模型：默认 qwen-image-edit-plus（2026-07-19 本地批量实测：qwen-image-edit / qwen-image-edit-plus /
-// qwen-image-2.0 / qwen-image-2.0-pro 均可用，edit-plus 速度最快约 7s/张 且免费额度充足；
-// wanx-v1 是文生图模型，与本端点不兼容，已弃用）。
+// 抠图模型：默认 qwen-image-2.0-pro-2026-06-22（2026-09-07 改用用户百炼账号免费额度内的
+// qwen-image-2.0-pro 定版；历史实测 qwen-image-edit / qwen-image-edit-plus / qwen-image-2.0 /
+// qwen-image-2.0-pro 均可用，edit-plus 速度最快约 7s/张）。
+// wanx-v1 是文生图模型，与本端点不兼容，已弃用。
 // 可在云函数环境变量 DASHSCOPE_MATTING_MODEL 中覆盖——注意该变量优先级最高，
 // 若被设成 wanx-v1 等不兼容模型，改代码默认值也不会生效
-const MATTING_MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'qwen-image-edit-plus';
+const MATTING_MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'qwen-image-2.0-pro-2026-06-22';
 
 async function mattingImageWithDashScope(imageInput, apiKey) {
   const maxRetries = 1;

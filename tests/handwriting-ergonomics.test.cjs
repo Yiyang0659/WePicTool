@@ -1,0 +1,50 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const ink=require('../miniprogram/utils/funStrokes');
+const lib=require('../miniprogram/utils/handwritingLibrary');
+const groups=require('../miniprogram/utils/inkStickers');
+const model=require('../miniprogram/utils/funTextProject');
+const stroke={id:'stroke_test',brushKey:'highlighter',colorKey:'purple',width:8,points:[{x:100,y:500},{x:900,y:500}]};
+test('local eraser splits a long segment without removing the remaining line or reconnecting gap',()=>{
+  const original=JSON.stringify(stroke);
+  const cut=ink.erasePartial([stroke],{x:500,y:500},{x:500,y:500},20);
+  assert.equal(cut.length,2);assert.ok(ink.valid(cut));
+  assert.equal(cut[0].points[0].x,100);assert.equal(cut[1].points.at(-1).x,900);
+  assert.ok(cut[0].points.at(-1).x<480);assert.ok(cut[1].points[0].x>520);
+  assert.ok(cut.every(s=>s.brushKey==='highlighter'));
+  assert.equal(JSON.stringify(stroke),original);
+  const missed=ink.erasePartial([stroke],{x:500,y:100},{x:500,y:100},20);
+  assert.equal(missed[0],stroke);
+});
+test('eraser sweeps between events, removes dots, and retains bounded unique fragment IDs',()=>{
+  const dot={...stroke,id:'stroke_dot',points:[{x:500,y:500}]};
+  const cut=ink.erasePartial([stroke,dot],{x:500,y:100},{x:500,y:900},20);
+  assert.ok(!cut.some(s=>s.id===dot.id));assert.equal(cut.length,2);
+  const again=ink.erasePartial(cut,{x:250,y:500},{x:250,y:500},10);
+  assert.ok(ink.valid(again));assert.equal(again.length,3);
+});
+test('new widths and large local workspace save while renderer protocol remains 1080 bounded',()=>{
+  assert.deepEqual(ink.WIDTHS,[4,8,12,16,24,28,40,56,72,96]);
+  const strokes=[{...stroke,width:96,points:[{x:1600,y:1600},{x:2000,y:2000}]}];
+  assert.ok(!ink.valid(strokes));assert.ok(ink.valid(strokes,2160));
+  let data;const store={getStorageSync:()=>data,setStorageSync:(k,v)=>data=v};
+  lib.save(store,{id:'hw_big',updatedAt:1,strokes,workspaceSize:2160,viewport:{x:1080,y:1080}});
+  const restored=lib.read(store)[0];assert.equal(restored.viewport.x,1080);
+  const rendered=groups.flatten({inkStickers:[{...restored,x:540,y:540,scale:1,rotation:0}]});
+  assert.ok(ink.valid(rendered));assert.equal(rendered[0].points.at(-1).x,1000);
+  assert.equal(lib.scene([stroke]).workspaceSize,1080);
+  assert.throws(()=>lib.save(store,{...restored,viewport:{x:3000,y:0}}));
+});
+test('layer buttons move to ends in one edit and preserve text slots, undo and redo',()=>{
+  let p=model.createFunTextProject({sourceText:'今天真开心',now:1});p=model.selectCandidate(p,p.candidates[0].candidateId);
+  const c=p.candidates[0],scene=c.editedScenes[0];
+  const base=scene.layers.find(l=>l.type!=='text');
+  const text=scene.layers.find(l=>l.type==='text');
+  scene.layers=[{...base,id:'d1'},text,{...base,id:'d2'},{...base,id:'d3'},{...base,id:'d4'}];
+  const front=model.moveDecorationLayer(p,c.candidateId,scene.sceneId,'d1','forward');
+  const layers=front.candidates[0].editedScenes[0].layers;
+  assert.equal(layers.at(-1).id,'d1');assert.equal(layers[1].id,text.id);
+  const back=model.moveDecorationLayer(front,c.candidateId,scene.sceneId,'d1','backward');
+  assert.equal(back.candidates[0].editedScenes[0].layers[0].id,'d1');
+  assert.equal(model.undoEdit(back).candidates[0].editedScenes[0].layers.at(-1).id,'d1');
+});

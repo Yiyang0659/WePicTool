@@ -175,3 +175,7 @@
   padding: 24rpx 0;
   box-shadow: 0 6rpx 16rpx rgba(243, 92, 140, 0.12);
 }
+.candidate-card-pressed {
+  opacity: .88;
+  transform: scale(.995);
+}

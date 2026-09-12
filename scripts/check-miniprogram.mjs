@@ -111,6 +111,25 @@ function measureMainPackageSource() {
 }
 
 const mainPackageSourceBytes = measureMainPackageSource();
+// Resource subpackages must fit too; main-package exclusion must not hide oversize fonts.
+let combinedPackageSourceBytes = mainPackageSourceBytes;
+for (const pkg of (appConfig && (appConfig.subPackages || appConfig.subpackages)) || []) {
+  const normalized = normalizePackageRoot(pkg.root);
+  const directory = path.resolve(miniprogramRoot, normalized);
+  if (!normalized || !directory.startsWith(miniprogramRoot + path.sep) || !fs.existsSync(directory)) {
+    errors.push(`无效分包目录: ${pkg.root}`); continue;
+  }
+  function sizeOf(dir) {
+    return fs.readdirSync(dir,{withFileTypes:true}).reduce((sum,e)=>{
+      const file=path.join(dir,e.name);
+      return sum+(e.isDirectory()?sizeOf(file):e.isFile()?fs.statSync(file).size:0);
+    },0);
+  }
+  const bytes=sizeOf(directory);combinedPackageSourceBytes+=bytes;
+  if(bytes>MAIN_PACKAGE_LIMIT_BYTES)errors.push(`分包 ${pkg.root} 超过 2 MiB 限制。`);
+}
+// Conservative 20MiB baseline, including service-provider deployments.
+if(combinedPackageSourceBytes>20*1024*1024)errors.push('小程序总包体超过本项目 20 MiB 保守发布预算。');
 if (mainPackageSourceBytes > MAIN_PACKAGE_LIMIT_BYTES) {
   errors.push(
     `小程序主包源码约 ${(mainPackageSourceBytes / 1024).toFixed(1)} KiB，超过微信单个主包 2 MiB 限制。`
@@ -247,7 +266,9 @@ const requiredRendererFiles = [
   'sceneValidator.js',
   'drawAssets.js',
   'runtimeConfig.js',
-  'fonts/LXGWMarkerGothic-Regular.ttf',
+  'assets/fonts/LXGWMarkerGothic-Regular.ttf',
+  'assets/fonts/SmileySans-Oblique.ttf',
+  'assets/fonts/MaShanZheng-Regular.ttf',
   'LICENSES/OFL-LXGWMarkerGothic.txt'
 ];
 for (const file of requiredRendererFiles) {
@@ -265,8 +286,14 @@ if (exists(rendererServer) && !/require\(['"]node:http['"]\)/.test(readText(rend
   errors.push(`${rendererServer} 必须使用 Node.js 内置 node:http 实现 HTTP 服务。`);
 }
 
-const fontRelativePath = `${rendererRoot}/fonts/LXGWMarkerGothic-Regular.ttf`;
-if (exists(fontRelativePath)) {
+const bundledFonts = [
+  'LXGWMarkerGothic-Regular.ttf',
+  'SmileySans-Oblique.ttf',
+  'MaShanZheng-Regular.ttf'
+];
+for (const fontFileName of bundledFonts) {
+  const fontRelativePath = `${rendererRoot}/assets/fonts/${fontFileName}`;
+  if (!exists(fontRelativePath)) continue;
   const font = fs.readFileSync(path.join(root, fontRelativePath));
   const ttfMagic = font.length >= 4
     && font[0] === 0x00 && font[1] === 0x01 && font[2] === 0x00 && font[3] === 0x00;

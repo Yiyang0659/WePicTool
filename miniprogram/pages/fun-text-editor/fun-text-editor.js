@@ -7,7 +7,14 @@ const assetRegistry = require('../../config/assetRegistry');
 const decorationColors = require('../../config/decorationColors');
 const funCardRendererClient = require('../../utils/funCardRendererClient');
 const transformMath = require('../../utils/funTextTransform');
-const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
+const ink = require('../../utils/funStrokes');
+const handwriting = require('../../utils/handwritingLibrary');
+const inkStickers = require('../../utils/inkStickers');
+const exportManifest = require('../../utils/stackExportManifest');
+const badgeComposer = require('../../utils/sequenceBadgeComposer');
+const imageExporter = require('../../utils/imageExporter');
+const previewPreloader = require('../../utils/funPreviewPreloader');
+const { ENABLE_FUN_TEXT_STACK_ENTRY, ENABLE_FUN_LOCAL_EDITOR, ENABLE_FUN_OFFLINE_PREVIEW } = require('../../config/env');
 
 const EDITOR_TABS = [
   { key: 'content', label: '内容' },
@@ -221,6 +228,8 @@ function buildDecorationHandles(scene, selectedId) {
       selected: layer.id === selectedId,
       left: Math.round((layer.x || 0) / 1080 * 320 - size / 2),
       top: Math.round((layer.y || 0) / 1080 * 320 - size / 2),
+      leftPercent: (layer.x || 0) / 1080 * 100,
+      topPercent: (layer.y || 0) / 1080 * 100,
       size: Math.round(size),
       rotation: Number(layer.rotation) || 0,
       color: layer.type === 'doodle' ? paint.stroke : paint.fill
@@ -234,6 +243,17 @@ function sceneText(scene) {
 
 Page({
   data: {
+    exportProgress:{visible:false,stage:'audit',current:0,total:0,completed:0,percent:0},
+    handwritingVisible:false, handwritingScene:null, handwritingDrafts:[], handwritingStatus:'',
+    handwritingCanUndo:false, handwritingCanRedo:false, selectedInkId:'', handwritingPanMode:false,
+    localEditorEnabled: ENABLE_FUN_LOCAL_EDITOR === true || ENABLE_FUN_OFFLINE_PREVIEW === true,
+    drawingMode: false,
+    brushKey: 'pen',
+    penWidth: 8,
+    inkColor: 'black',
+    inkWidths: ink.WIDTHS,
+    inkColors: Object.keys(ink.COLORS).map(function(key){return {key:key,color:ink.COLORS[key]};}),
+    draftStatus: '',
     project: null,
     selectedCandidate: null,
     scenes: [],
@@ -257,6 +277,7 @@ Page({
     currentFallbackImage: '',
     serverPreviewLoading: false,
     serverPreviewFailed: false,
+    serverPreviewDiagnostic: null,
     canUndo: false,
     canRedo: false,
     editingTextModalVisible: false,
@@ -274,18 +295,19 @@ Page({
 
   onLoad: function () {
     if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
+    this.loadHandwritingDrafts();
     const that = this;
     const eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
       eventChannel.on('funTextProject', function (data) {
         if (data && data.project) {
-          that.initProject(data.project);
+          that.initProject(data.project, data);
         }
       });
     }
   },
 
-  initProject: function (project) {
+  initProject: function (project, navigation) {
     if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     if (!project) return;
     const selectedCandidateId = project.selectedCandidateId || (project.candidates[0] && project.candidates[0].candidateId);
@@ -355,6 +377,11 @@ Page({
       sortItemWidth: sortGeometry.width,
       sortAreaWidth: sortGeometry.areaWidth
     });
+    const requestedIndex = navigation && navigation.currentCardIndex;
+    if (this.data.localEditorEnabled) previewPreloader.warm(wx, project, selectedCandidate.candidateId, requestedIndex || 0);
+    if (Number.isInteger(requestedIndex) && requestedIndex > 0 && requestedIndex < scenes.length) {
+      this.onSelectCard({ currentTarget: { dataset: { index: requestedIndex } } });
+    }
   },
 
   onSelectCard: function (event) {
@@ -362,6 +389,7 @@ Page({
     if (!Number.isFinite(index) || index < 0 || index >= this.data.scenes.length) return;
     const scene = this.data.scenes[index];
     this.setData({
+      selectedInkId:'',
       currentCardIndex: index,
       currentScene: scene,
       currentText: sceneText(scene),
@@ -376,6 +404,196 @@ Page({
       currentFallbackImage: this.data.fallbackImages[index] || '',
       styleControls: buildStyleControls(this.data.selectedCandidate, scene)
     });
+  },
+
+  onPreviewGeometry: function (event) {
+    if (event.detail && event.detail.width > 0) this._previewWidth = event.detail.width;
+  },
+
+  onPreviewTap: function () {
+    if (this.data.activeEditorTab !== 'decoration') this.onEditText();
+  },
+
+  loadHandwritingDrafts: function() {
+    try { this.setData({handwritingDrafts:handwriting.decorate(handwriting.read(wx))}); }
+    catch(error){this.setData({handwritingStatus:error.message || '读取草稿失败'});}
+  },
+  onHandwritingHelp: function() {
+    wx.showModal({title:'自由手写',content:'在独立画布写画，保存到本机或作为贴纸添加。贴纸可拖动、双指缩放旋转，并继续改笔迹。仅保存在本机，不会跨设备同步。',showCancel:false});
+  },
+  onStartHandwriting: function(event) {
+    if(!this.data.currentScene)return;
+    const id=event && event.currentTarget.dataset.id;
+    const draft=(this.data.handwritingDrafts || []).find(item=>item.id===id);
+    this._handwritingTarget={candidateId:this.data.selectedCandidate.candidateId,sceneId:this.data.currentScene.sceneId};
+    this._handwritingId=draft ? draft.id : 'hw_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+    this._editingInkId='';this._handwritingPast=[];this._handwritingFuture=[];
+    this._handwritingDirty=false;
+    this.setData({handwritingVisible:true,handwritingPanMode:false,handwritingScene:handwriting.scene(draft ? draft.strokes : [],draft || {workspaceSize:2160,viewport:{x:540,y:540}}),
+      handwritingCanUndo:false,handwritingCanRedo:false,handwritingStatus:''});
+  },
+  onHandwritingChange: function(event) {
+    if(!this.data.handwritingVisible || !ink.valid(event.detail.strokes,this.data.handwritingScene.workspaceSize))return;
+    this._handwritingPast.push(handwriting.copy(this.data.handwritingScene.strokes));
+    if(this._handwritingPast.length>20)this._handwritingPast.shift();
+    this._handwritingFuture=[];
+    this._handwritingDirty=true;
+    this.setData({handwritingScene:handwriting.scene(event.detail.strokes,this.data.handwritingScene),handwritingCanUndo:true,handwritingCanRedo:false,handwritingStatus:'尚未保存'});
+  },
+  onHandwritingUndo: function() {
+    if(!this._handwritingPast.length)return;
+    this._handwritingDirty=true;
+    this._handwritingFuture.push(this.data.handwritingScene.strokes);
+    this.setData({handwritingScene:handwriting.scene(this._handwritingPast.pop(),this.data.handwritingScene),handwritingCanUndo:!!this._handwritingPast.length,handwritingCanRedo:true,handwritingStatus:'尚未保存'});
+  },
+  onHandwritingRedo: function() {
+    if(!this._handwritingFuture.length)return;
+    this._handwritingDirty=true;
+    this._handwritingPast.push(this.data.handwritingScene.strokes);
+    this.setData({handwritingScene:handwriting.scene(this._handwritingFuture.pop(),this.data.handwritingScene),handwritingCanRedo:!!this._handwritingFuture.length,handwritingCanUndo:true,handwritingStatus:'尚未保存'});
+  },
+  onSaveHandwriting: function() {
+    try{
+      const items=handwriting.save(wx,{id:this._handwritingId,updatedAt:Date.now(),strokes:this.data.handwritingScene.strokes,workspaceSize:this.data.handwritingScene.workspaceSize,viewport:this.data.handwritingScene.viewport});
+      this._handwritingDirty=false;
+      this.setData({handwritingDrafts:handwriting.decorate(items),handwritingStatus:'已保存到本机'});
+    }catch(error){this.setData({handwritingStatus:error.message || '本机保存失败，请勿退出'});}
+  },
+  onCancelHandwriting: function() {
+    const close=()=>this.setData({handwritingVisible:false});
+    if(this._handwritingDirty)wx.showModal({title:'放弃未保存的笔迹？',content:'不会修改当前卡片或已保存草稿。',success:r=>{if(r.confirm)close();}});
+    else close();
+  },
+  onClearHandwritingDrafts: function() {
+    wx.showModal({title:'清空本机手写草稿？',content:'仅删除手写素材库，不删除当前卡片和项目草稿，无法撤销。',success:r=>{
+      if(!r.confirm)return;
+      try{wx.removeStorageSync(handwriting.KEY);this.setData({handwritingDrafts:[],handwritingStatus:'已清空手写草稿'});}
+      catch(_){wx.showToast({title:'清空失败，请重试',icon:'none'});}
+    }});
+  },
+  onDeleteHandwritingDraft: function(event) {
+    const id=event.currentTarget.dataset.id;
+    wx.showModal({title:'删除这份手写草稿？',content:'不影响已添加到卡片的贴纸。',success:r=>{
+      if(!r.confirm)return;
+      try{wx.setStorageSync(handwriting.KEY,handwriting.read(wx).filter(d=>d.id!==id));this.loadHandwritingDrafts();}
+      catch(_){wx.showToast({title:'删除失败',icon:'none'});}
+    }});
+  },
+  onAddHandwritingSticker: function() {
+    const strokes=this.data.handwritingScene.strokes;
+    if(!strokes.length){wx.showToast({title:'请先写画',icon:'none'});return;}
+    if(!this._handwritingTarget || this._handwritingTarget.sceneId!==this.data.currentScene.sceneId)return;
+    try{
+      const groups=handwriting.copy(this.data.currentScene.inkStickers || []);
+      const existing=groups.find(g=>g.id===this._editingInkId);
+      const id=existing ? existing.id : 'hw_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+      const workspaceSize=this.data.handwritingScene.workspaceSize;
+      const viewport=handwriting.copy(this.data.handwritingScene.viewport);
+      if(existing)Object.assign(existing,{strokes:handwriting.copy(strokes),workspaceSize,viewport});
+      else groups.push({id,x:540,y:540,scale:0.5,rotation:0,strokes:handwriting.copy(strokes),workspaceSize,viewport});
+      const project=funTextProject.updateInkStickers(this.data.project,this._handwritingTarget.candidateId,this._handwritingTarget.sceneId,groups);
+      this.syncProject(project,this.data.currentCardIndex,'');
+      this.setData({handwritingVisible:false,selectedInkId:id});
+      this.onSaveHandwriting();
+    }catch(error){wx.showToast({title:error.message || '添加失败',icon:'none'});}
+  },
+  onSelectInkSticker: function(event) {this.setData({selectedInkId:event.currentTarget.dataset.id,selectedDecorationId:''});},
+  onEditInkSticker: function() {
+    const group=(this.data.currentScene.inkStickers || []).find(g=>g.id===this.data.selectedInkId);
+    if(!group)return;
+    this.onStartHandwriting();this._editingInkId=group.id;this._handwritingId=group.id;
+    this.setData({handwritingScene:handwriting.scene(group.strokes,group)});
+  },
+  onDeleteInkSticker: function() {
+    try{const groups=(this.data.currentScene.inkStickers || []).filter(g=>g.id!==this.data.selectedInkId);
+      this.syncProject(funTextProject.updateInkStickers(this.data.project,this.data.selectedCandidate.candidateId,this.data.currentScene.sceneId,groups),this.data.currentCardIndex,'');
+    }catch(error){wx.showToast({title:error.message,icon:'none'});}
+  },
+  onInkStickerStart: function(event) {
+    this.onSelectInkSticker(event);
+    const group=(this.data.currentScene.inkStickers || []).find(g=>g.id===this.data.selectedInkId);
+    if(!group)return;
+    this._inkStickerSession=transformMath.beginTransform(event.touches,group,this._previewWidth || 320);
+    this._inkStickerGroups=null;
+  },
+  onInkStickerMove: function(event) {
+    if(!this._inkStickerSession)return;
+    const original=this.data.project.candidates.find(c=>c.candidateId===this.data.selectedCandidate.candidateId).editedScenes[this.data.currentCardIndex];
+    const scene=handwriting.copy(original), group=scene.inkStickers.find(g=>g.id===this.data.selectedInkId);
+    if(!group)return;
+    Object.assign(group,transformMath.updateTransform(this._inkStickerSession,event.touches));
+    try{inkStickers.flatten(scene);this._inkStickerGroups=scene.inkStickers;this.setData({currentScene:scene});}catch(_){/* Keep last valid position at the canvas boundary. */}
+  },
+  onInkStickerEnd: function() {
+    if(this._inkStickerGroups){const id=this.data.selectedInkId;
+      try{this.syncProject(funTextProject.updateInkStickers(this.data.project,this.data.selectedCandidate.candidateId,this.data.currentScene.sceneId,this._inkStickerGroups),this.data.currentCardIndex,'');this.setData({selectedInkId:id});}
+      catch(error){wx.showToast({title:error.message,icon:'none'});}}
+    this._inkStickerSession=null;this._inkStickerGroups=null;
+  },
+  onInkStickerCancel: function() {
+    this._inkStickerSession=null;this._inkStickerGroups=null;this.onSelectCard({currentTarget:{dataset:{index:this.data.currentCardIndex}}});
+  },
+
+  onToggleDrawing: function () { this.setData({drawingMode:!this.data.drawingMode}); },
+  onHandwritingMode:function(event) {
+    this.setData({handwritingPanMode:event.currentTarget.dataset.mode==='pan'});
+  },
+  onHandwritingViewport:function(event) {
+    if(!this.data.handwritingVisible)return;
+    const max=this.data.handwritingScene.workspaceSize-1080, v=event.detail;
+    if(![v.x,v.y].every(n=>Number.isFinite(n)&&n>=0&&n<=max))return;
+    this._handwritingDirty=true;
+    this.setData({handwritingScene:Object.assign({},this.data.handwritingScene,{viewport:{x:v.x,y:v.y}}),handwritingStatus:'尚未保存'});
+  },
+  onInkBrush: function(event) {
+    const key=event.currentTarget.dataset.key;
+    if(['pen','highlighter','eraser'].indexOf(key)>=0) this.setData({brushKey:key});
+  },
+  onInkWidth: function(event) {
+    const width=Number(event.currentTarget.dataset.width);
+    if(ink.WIDTHS.indexOf(width)>=0) this.setData({penWidth:width});
+  },
+  onInkColor: function(event) {
+    const key=event.currentTarget.dataset.key;
+    if(Object.prototype.hasOwnProperty.call(ink.COLORS,key)) this.setData({inkColor:key});
+  },
+  onInkLimit: function(event) { wx.showToast({title:event && event.detail && event.detail.message || '笔迹达到上限，请撤销或减少笔迹',icon:'none'}); },
+  onInkChange: function(event) {
+    if(!this.data.localEditorEnabled) return;
+    try {
+      const project=funTextProject.updateStrokes(this.data.project,this.data.selectedCandidate.candidateId,
+        this.data.currentScene.sceneId,event.detail.strokes);
+      this.syncProject(project,this.data.currentCardIndex,'');
+    } catch(error) { wx.showToast({title:error.message || '笔迹保存失败',icon:'none'}); }
+  },
+  onClearInk: function() {
+    const that=this;
+    const sceneId=this.data.currentScene.sceneId;
+    wx.showModal({title:'清空当前卡片笔迹？',content:'不会删除文字和贴纸，可撤销。',success:function(result){
+      if(result.confirm && that.data.currentScene.sceneId===sceneId) that.onInkChange({detail:{strokes:[]}});
+    }});
+  },
+  saveLocalDraft: function() {
+    if(!this.data.localEditorEnabled) return;
+    try {
+      if(!wx.setStorageSync) throw new Error('storage unavailable');
+      const project=JSON.parse(JSON.stringify(this.data.project));
+      project.editHistory={past:[],future:[]};
+      wx.setStorageSync('wepic_fun_editor_draft_v1',{project:project,currentCardIndex:this.data.currentCardIndex});
+      this.setData({draftStatus:'已保存到本机（仅最近一个草稿）'});
+    } catch(_) { this.setData({draftStatus:'本机保存失败，请勿退出'}); }
+  },
+  onRestoreLocalDraft: function() {
+    try {
+      const draft=wx.getStorageSync('wepic_fun_editor_draft_v1');
+      if(!draft || !draft.project || !Array.isArray(draft.project.candidates)) throw new Error('没有本机草稿');
+      draft.project.candidates.forEach(function(c){c.editedScenes.forEach(function(s){
+        if(!ink.valid(s.strokes || [])) throw new Error('草稿笔迹格式不正确');
+        inkStickers.flatten(s);
+      });});
+      this.initProject(draft.project,draft);
+      this.setData({draftStatus:'已恢复本机草稿'});
+    } catch(error) { wx.showToast({title:error.message || '草稿无法恢复',icon:'none'}); }
   },
 
   syncProject: function (project, cardIndex, selectedDecorationId) {
@@ -403,6 +621,7 @@ Page({
       scenes: scenes,
       currentCardIndex: index,
       currentScene: scene,
+      selectedInkId:'',
       currentText: sceneText(scene),
       sortItems: sortGeometry.items,
       sortItemWidth: sortGeometry.width,
@@ -423,6 +642,8 @@ Page({
       canRedo: Boolean(project.editHistory && project.editHistory.future && project.editHistory.future.length),
       canvasRevision: this.data.canvasRevision + 1
     });
+    this.saveLocalDraft();
+    if(this.data.localEditorEnabled)previewPreloader.warm(wx,this.data.project,this.data.selectedCandidate.candidateId,this.data.currentCardIndex);
   },
 
   onSelectEditorTab: function (event) {
@@ -584,6 +805,7 @@ Page({
     const activeColorGroup = colorGroupForSelection(this.data.currentScene, layerId, this.data.activeDecorationColorGroup);
     const layer = findDecorationLayer(this.data.currentScene, layerId);
     this.setData({
+      selectedInkId:'',
       selectedDecorationId: layerId,
       decorationHandles: buildDecorationHandles(this.data.currentScene, layerId),
       decorationAssets: buildDecorationAssets(this.data.currentScene, layerId),
@@ -683,7 +905,7 @@ Page({
     const layer = (this.data.currentScene.layers || []).find(function (item) { return item.id === layerId; });
     if (!layer || layer.type === 'text') return;
     this._transformLayerId = layerId;
-    this._transformSession = transformMath.beginTransform(event.touches, layer, 320);
+    this._transformSession = transformMath.beginTransform(event.touches, layer, this._previewWidth || 320);
     this._transformDraft = null;
     this.onSelectDecoration(event);
   },
@@ -760,6 +982,7 @@ Page({
   },
 
   onFontUnavailable: async function () {
+    if (ENABLE_FUN_OFFLINE_PREVIEW === true) return;
     if (!this.data.project || !this.data.selectedCandidate) return;
     const projectId = this.data.project.projectId;
     let fallback = this._editorPreviewFallback;
@@ -778,12 +1001,34 @@ Page({
     this.setData({ serverPreviewLoading: true, serverPreviewFailed: false });
 
     try {
+      this.setData({
+        serverPreviewDiagnostic: {
+          stage: 'buildPreviewPayload',
+          message: '开始构建预览参数'
+        }
+      });
+
       const payload = funTextProject.buildPreviewPayload(this.data.project);
+
+      this.setData({
+        serverPreviewDiagnostic: {
+          stage: 'requestPreviewStack',
+          message: '开始请求云端预览'
+        }
+      });
+
       const response = await funCardRendererClient.requestPreviewStack(wx, payload);
       if (this._editorPreviewFallback !== fallback || !this.data.project || this.data.project.projectId !== projectId) return;
       const selectedCandidateId = this.data.selectedCandidate.candidateId;
       const renderedCandidate = response.candidates.find(function (candidate) {
         return candidate && candidate.candidateId === selectedCandidateId;
+      });
+
+      this.setData({
+        serverPreviewDiagnostic: {
+          stage: 'responseReceived',
+          message: '已收到云端返回'
+        }
       });
       if (!renderedCandidate || !Array.isArray(renderedCandidate.cards)) {
         throw new Error('预览图片不完整');
@@ -798,12 +1043,35 @@ Page({
         serverPreviewFailed: false
       });
     } catch (error) {
-      if (this._editorPreviewFallback !== fallback || !this.data.project || this.data.project.projectId !== projectId) return;
+      if (
+        this._editorPreviewFallback !== fallback ||
+        !this.data.project ||
+        this.data.project.projectId !== projectId
+      ) return;
+
       fallback.loading = false;
+
+      const diagnostic = {
+        stage: 'failed',
+        message: error && error.message
+          ? String(error.message)
+          : String(error || '未知错误'),
+        errCode: error && error.errCode !== undefined
+          ? error.errCode
+          : null,
+        errMsg: error && error.errMsg
+          ? String(error.errMsg)
+          : '',
+        name: error && error.name
+          ? String(error.name)
+          : ''
+      };
+
       this.setData({
         serverPreviewLoading: false,
         serverPreviewFailed: true,
-        currentFallbackImage: ''
+        currentFallbackImage: '',
+        serverPreviewDiagnostic: diagnostic
       });
     }
   },
@@ -893,15 +1161,83 @@ Page({
   },
 
   // 4. 确认编辑并进入结果页
+  onShow:function(){this._openingResult=false;},
+  onUnload:function(){this._editorUnloaded=true;this._openingResult=false;},
+  onSaveCurrentPage:function(){return this.runEditorExport('current');},
+  onSaveAllPages:function(){return this.runEditorExport('all');},
+  onWechatPreview:function(){return this.runEditorExport('preview');},
+  onExportMaskTouch:function(){},
+  updateExportProgress:function(stage,current,total,completed){
+    if(this._editorUnloaded)return;
+    this.setData({exportProgress:{visible:true,stage,current:current||0,total:total||0,completed:completed||0,
+      percent:total ? Math.min(100,Math.round((completed||0)*100/total)) : 0}});
+  },
+  runEditorExport:async function(action){
+    if(this._editorExportBusy || !this.data.project || ENABLE_FUN_TEXT_STACK_ENTRY!==true)return;
+    if(!this.data.localEditorEnabled && this.data.scenes.some(s=>(s.strokes||[]).length||(s.inkStickers||[]).length)) {
+      wx.showToast({title:'此版本暂不支持手绘导出',icon:'none'});return;
+    }
+    const snapshot=handwriting.copy(this.data.project), sceneId=this.data.currentScene.sceneId;
+    const fingerprint=JSON.stringify(funTextProject.buildRenderPayload(snapshot));
+    const isCurrent=()=>!this._editorUnloaded && fingerprint===JSON.stringify(funTextProject.buildRenderPayload(this.data.project));
+    this._editorExportBusy=true;this.setData({editorExportBusy:true});
+    this.updateExportProgress('audit');
+    try {
+      let manifest=this._editorManifestKey===fingerprint && this._editorManifest;
+      if(!manifest){
+        const result=await funCardRendererClient.requestRenderStack(wx,funTextProject.buildRenderPayload(snapshot));
+        if(!isCurrent())throw Error('内容已改变，请重新保存');
+        this.updateExportProgress('preparing');
+        const canvas=await new Promise((resolve,reject)=>wx.createSelectorQuery().select('#editorExportCanvas').fields({node:true,size:true}).exec(r=>r&&r[0]&&r[0].node?resolve(r[0].node):reject(Error('导出画布未就绪，请重试'))));
+        manifest=await badgeComposer.materializeManifest(wx,canvas,exportManifest.buildFunTextManifest(snapshot,result.cards),{isCurrent});
+        if(!isCurrent())throw Error('内容已改变，请重新保存');
+        this._editorManifest=manifest;this._editorManifestKey=fingerprint;
+      }
+      if(!isCurrent())return;
+      if(action==='preview'){
+        wx.navigateTo({url:'/pages/preview/preview',success:r=>r.eventChannel.emit('acceptTaskData',{manifest,selectedStackIds:[manifest.stacks[0].stackId],ratio:'1:1'})});
+      }else{
+        const cards=manifest.stacks[0].cards;
+        const urls=(action==='current'?cards.filter(c=>c.cardId===sceneId):cards).map(c=>c.exportUrl);
+        if(!urls.length)throw Error('未找到当前页图片');
+        const key=fingerprint+'/'+action+'/'+(action==='current'?sceneId:'');
+        const startIndex=this._editorSaveKey===key ? this._editorSaveCursor||0 : 0;
+        this._editorSaveKey=key;
+        try {
+          await imageExporter.saveImagesSequentially(wx,urls,{startIndex,resolvePath:async(api,url)=>{
+            if(!isCurrent())throw Error('内容已改变，请重新保存');
+            return imageExporter.resolveImagePath(api,url);
+          },onProgress:(current,total)=>this.updateExportProgress('saving',current,total,current-1),
+          onSaved:(completed,total)=>this.updateExportProgress('saving',completed,total,completed)});
+          this._editorSaveCursor=0;
+        }catch(error){this._editorSaveCursor=error.nextIndex||0;throw error;}
+        wx.showToast({title:action==='current'?'当前页已保存':'整组图片已保存',icon:'success'});
+      }
+    }catch(error){
+      if(!this._editorUnloaded){
+        this.setData({'exportProgress.visible':false});
+        if(error.code==='AUTH_DENIED')wx.showModal({title:'需要相册权限',content:'请允许访问相册后再点击保存。',confirmText:'去设置',success:r=>{if(r.confirm)wx.openSetting();}});
+        else if(error.code==='SAFETY_UNAVAILABLE' || error.code==='IMAGE_SAFETY_UNAVAILABLE' || error.code==='RENDER_TIMEOUT')wx.showModal({title:'暂未生成成品',content:error.message,showCancel:false,confirmText:'继续编辑'});
+        else wx.showToast({title:error.message||'准备失败，请重试',icon:'none'});
+      }
+    }finally{this._editorExportBusy=false;if(!this._editorUnloaded)this.setData({editorExportBusy:false,'exportProgress.visible':false});}
+  },
   onConfirmEdits: function () {
+    if(this._editorExportBusy || this._openingResult)return;
+    if (!this.data.localEditorEnabled && (this.data.scenes || []).some(function(scene){return (scene.strokes && scene.strokes.length) || (scene.inkStickers && scene.inkStickers.length);} )) {
+      wx.showToast({title:'此版本暂不支持手绘导出，已保留草稿',icon:'none'});
+      return;
+    }
     if (ENABLE_FUN_TEXT_STACK_ENTRY !== true) return;
     if (!this.data.project) return;
     const project = this.data.project;
+    this._openingResult=true;
     wx.navigateTo({
       url: '/pages/template-result/template-result',
       success: function (navRes) {
         navRes.eventChannel.emit('funTextProject', { project: project });
-      }
+      },
+      fail: function () { this._openingResult = false; }.bind(this)
     });
   }
 });

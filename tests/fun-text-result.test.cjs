@@ -44,6 +44,7 @@ function recordingWx(overrides) {
     storage: {}
   };
   const wxApi = Object.assign({
+    login(options) { options.success({ code: 'test-login-code' }); },
     navigateTo(options) {
       calls.navigations.push(options.url);
       if (typeof options.success === 'function') {

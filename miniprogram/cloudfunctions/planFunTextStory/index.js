@@ -25,7 +25,7 @@ function collectCandidateTexts(candidates) {
 async function defaultCallLlm(messages, options) {
   const apiKey = process.env.LLM_API_KEY || process.env.DASHSCOPE_API_KEY || '';
   const baseUrl = (process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '');
-  const model = process.env.LLM_MODEL || 'deepseek-v3';
+  const model = process.env.LLM_MODEL || 'qwen3.8-flash';
 
   if (!apiKey) {
     throw new Error('LLM_API_KEY 未配置');

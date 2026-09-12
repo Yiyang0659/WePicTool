@@ -1,8 +1,20 @@
 # WePicTool 微信小程序
 
+2026-09-12 本机编辑（功能分支，未发布）：趣味字画输入、规则候选、改字/字体/背景、贴纸及手写预览改为本机绘制，编辑不调用审核、AI或renderer。字体随异步分包加载，首次下载仍需网络。保存、完成及微信成品预览仍走原云端审核，不代表45009已修复。资源生成：`node scripts/build-local-fonts.mjs`；回滚关闭`ENABLE_FUN_OFFLINE_PREVIEW`。
+
+2026-09-11 编辑导出与预加载（功能分支）：画布下支持保存当前页/整组，底部固定微信预览/完成按钮；保存与微信预览复用审核后的高清成图。候选生成后后台依次预热封面、卡片及三字体变体，编辑页共享本机临时图片缓存（并发2、最多60项、15分钟）；已缓存组合直接显示，新文字/配色/模板仍可能首次等待。未新增云资源，真机相册授权和固定栏效果待验收。
+
+2026-09-11 参考图编辑页（功能分支）：保留大画布，下方重排卡片顺序、三标签、自由手写、本机草稿库、贴纸和配色、完成按钮。独立手写支持作为可移动/缩放/旋转、可继续改笔迹的贴纸添加；草稿库仅本机最多10份/2MiB，长按删除单份，清空不影响当前项目。新增局部线段橡皮擦、横向10档笔宽（4–96）、写画/移动画布切换；新作品2160工作区保存完整内容，旧草稿保留1080尺寸。程序化装饰一键置底/置顶，手写贴纸仍独立上层。最终成图继续审核，新笔宽renderer更新状态以docs/current.md为准；真机手感与严格视觉验收尚未完成，不包含跨设备同步或压感保证。
+
+最新补充（2026-09-10 23:07）：011的真实单卡预览与含手绘审核成图已成功，首张下载目检通过；`ENABLE_FUN_LOCAL_EDITOR` 已启用。客户端需重新编译，CLI登录阻塞导致新界面尚未验证；以下早先“开关关闭”记录为过程状态，最新结论以current.md为准。
+
+2026-09-10 编辑体验实验：功能分支加入云端单卡字体底图缓存、本地装饰与自由笔迹分层（实线笔/荧光笔、颜色/粗细、整笔擦除、撤销），以及最近一个本机可编辑草稿。`ENABLE_FUN_LOCAL_EDITOR` 暂为 `false`，尚未开放：renderer 011已部署，但新接口真实调用被开发者工具登录失效阻断。手绘最终图必须通过图片审核后才能上传；不包含跨设备草稿同步或压感保证。详见设计与当前状态。
+
+2026-09-10 部署补充：已加入 `scripts/deploy-renderer-preserving-network.cjs`，通过现有CLI会话只更新原renderer代码和微信审核变量，不提交网络或实例规格字段。使用方法和真实部署状态见 `docs/deployment/fun-card-renderer.md`、`docs/current.md`；提交成功不等于已恢复成图。
+
 WePicTool 是微信「合并发送 / 叠图」前的素材处理与玩法生成工具——它不替代微信发送，而是先把原始图片或一句话整理成有分组、有封面、有顺序、可预演的一叠图。穿搭叠图与趣味字画是当前两条主玩法；穿搭叠图同时支持“自己分层”和“AI 帮我整理”，两种方式共享一个四部位工作台并可混用（详见 [`docs/product/PLAYBOOK.md`](docs/product/PLAYBOOK.md)）。当前项目以微信小程序为实际主线，并让穿搭叠图和趣味字画共用同一顺序导出契约。
 
-当前证据边界：共同基线已合并到 `main`；`codex/ai-outfit-picker-flow` 又完成了待合并的首页交互改进。开发者工具已完成普通编译、结构检查和 iPhone 12/13 Pro 模拟页视觉复核，但真实左右手势、iOS、Android 或相册授权仍未验收。P2.2 实验、Docker、CloudBase 线上端点和真实微信聊天也仍未完成验收。功能未部署、未发布。生产仍为 **NOT READY**，当前发布预检会因私密访问模式未声明、HTTP 字体地址和本机 loopback 地址失败。
+当前证据边界：共同基线已合并到 `main`；`codex/ai-outfit-picker-flow` 又完成了待合并的首页交互改进。趣味字画 renderer v004 已把三款授权字体固定打入镜像、启动期一次注册并完成 100% 切流，正常服务端渲染不再依赖字体 CDN；客户端 CDN 配置暂留跨设备加载和回滚。真实 `callContainer` 三字体中文成图、48 小时清理、iOS、Android、相册授权与真实微信聊天仍未验收。按用户要求，VPC、子网、NAT 与公网关闭操作已暂停；小程序未发布，生产仍为 **NOT READY**。
 
 小程序 UI 采用底部三 Tab 架构（首页 / 记录 / 我的）。首页使用“穿搭叠图 / 趣味字画”双玩法选择和单一共享预览，让用户先选任务、在同一区域试玩或开始创作；结果页与预览页采用沉浸式微信聊天窗口风格，让用户提前预演多图合并发送后的真实叠图折叠效果。
 
@@ -176,9 +188,10 @@ WePicTool/
 3. 在微信开发者工具中开通云开发环境，获取 **环境 ID**。
 4. 在 `miniprogram/config/env.js` 中填入 `CLOUD_ENV_ID`。
 5. 分别右键 `miniprogram/cloudfunctions/` 下的 `processOutfit` 和 `contentGuard`，选择“上传并部署：云端安装依赖”。
-6. 需要联调趣味字画时，按 [`docs/deployment/fun-card-renderer.md`](docs/deployment/fun-card-renderer.md) 部署：小程序 POST 始终只通过 `wx.cloud.callContainer`，服务端/发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only`。上线硬前提是在服务设置关闭公网并保存核验证据，HTTP 网关仅公开字体精确路径；context/OpenID 头部不是独立公网鉴权。配置服务名、HTTPS 字体地址和 flag，客户端不得传 OpenID/context 或秘密。flag=false 时只保留首页静态示例，关闭直链输入、候选/编辑、记录重开/再次生成及结果恢复/渲染/保存；静态包不需 renderer URL/服务/access mode，其他玩法不受影响。
-7. 如评估后决定验证 P2.2，再单独部署 `planFunTextStory` 并配置服务端模型 API key；当前尚未完成这一步，也未确认它属于发布范围。
-8. 运行 `npm run check:miniprogram:release` 后再进入微信开发者工具、iOS、Android 与真实聊天验收。当前发布预检仍因 access mode、HTTP 和 loopback 字体地址失败；已有开发者工具局部回归不代表趣味字画线上链路或双端真机已通过。
+6. 需要联调趣味字画时，按 [`docs/deployment/fun-card-renderer.md`](docs/deployment/fun-card-renderer.md) 部署：三款服务端字体必须随 renderer 镜像发布并在启动期注册，现有 CloudBase 字体 CDN 与 `FUN_CARD_RENDERER_URL` 暂留客户端加载和回滚；preview/render POST 始终只通过 `wx.cloud.callContainer`，服务端/发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only`。context/OpenID 头部不是独立公网鉴权。当前网络资源与公网开关操作暂停，恢复前不得创建可能计费的 VPC、子网或 NAT。
+7. renderer 分支新增可选微信 HTTPS 审核模式（未部署）：本地秘密准备入口为根目录 `.env.renderer.local`，只在其中填写小程序 AppSecret，不放入小程序配置或 Git。文件不自动加载/部署；原模式默认保留。新模式由客户端每次 `wx.login`，服务端核验一次性登录凭证后再审核、渲染；本机身份与审核实测通过，云端部署验证未完成。详见部署手册的 2026-09-10 小节。
+8. 如评估后决定验证 P2.2，再单独部署 `planFunTextStory` 并配置服务端模型 API key；当前尚未完成这一步，也未确认它属于发布范围。
+8. 显式设置 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only` 后运行 `npm run check:miniprogram:release`，再进入微信开发者工具、iOS、Android 与真实聊天验收。renderer v004 镜像字体与构建运行已通过，但预检和服务在线都不代表三字体中文成图、preview/render 私密链路或双端真机已通过。
 
 ---
 

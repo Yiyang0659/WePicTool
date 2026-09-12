@@ -1,14 +1,28 @@
 # 趣味字画云托管服务部署指南（fun-card-renderer）
 
-本文是 `fun-card-renderer` 的可重复部署与回滚手册，不是已部署证明。当前功能分支只完成代码和自动化验证；Docker 镜像、CloudBase 服务、线上端点、微信开发者工具、iOS、Android 和真实微信聊天均仍未验证。生产状态为 **NOT READY**：尤其是服务公网关闭设置尚未核验；代码检查通过不解除该阻塞。
+本文是 `fun-card-renderer` 的可重复部署与回滚手册。2026-09-07 的 `fun-card-renderer-004` 已把三款授权字体固定打入镜像，在服务启动期一次注册，并承接 100% 流量；renderer 正常渲染不再访问字体 CDN。原静态托管字体、客户端环境变量和兼容 GET 路由暂留回滚。按用户要求，本轮不创建 VPC、子网、NAT，不关闭公网。真实 `callContainer` 三字体中文成图、线上 preview/render、48 小时清理、iOS、Android 和真实微信聊天仍未完整验证。生产状态为 **NOT READY**。
+
+2026-09-08 更新：只读控制台 API 确认在线版本已为 `fun-card-renderer-008`，状态 normal，端口 8080，构建 ID `2602243913`，运行 ID `multi_tenant_1x3wRTNRatvFAe`。新增审核等待 6 秒、最终渲染等待 20 秒与 HTTP 异常 JSON 兜底，尚未解决已知请求超时的底层原因。preview 渲染总期限、超时后底层上传取消和请求关联日志仍待补齐。开发者工具端口已开，但当前返回 `需要重新登录（code 10）`，部署后真实成图尚未验证；以下 v004 数据为历史记录。客户端成功取图变量修复及入口先校验配置再加载 SDK 的收尾改动目前仅在本地，未再次部署。
 
 ## 1. 固定交付物与本地门禁
+
+既有服务更新脚本：`scripts/deploy-renderer-preserving-network.cjs`默认只读。WEPIC_TCB_CLI指定已安装CLI的standalone/cli.js；--execute才提交，--status查询。只提交原服务EnvParam与源码DeployInfo，不提交网络字段，部署前后核对配置。秘密不进入OS命令参数或源码包。提交后必须继续等待构建并真实验证。
+
+### 2026-09-10 微信HTTPS审核（分支实现，未部署）
+
+默认FUN_CARD_SAFETY_MODE=cloud-sdk保留原SDK模式。显式设置wechat-https才使用新的微信2.0审核，所需服务端配置为WECHAT_APP_ID、WECHAT_APP_SECRET。不得在小程序配置中填写。
+
+用户本地填写入口为仓库根目录`.env.renderer.local`（Git忽略、权限600）；此文件只用于准备配置，不会自动加载或部署。只填写WECHAT_APP_SECRET，模式先保持cloud-sdk。renderer的.dockerignore另外排除.env*、node_modules和cloudbaserc.json，不能将秘密打进镜像。
+
+HTTPS模式使用stable_token普通模式并缓存令牌；只对明确pass的2.0结果生成图片，risky/review均阻止。令牌和正文不写日志，40164表示需要处理微信IP白名单，遇到时停止，不自动创建NAT。2026-09-10已补可信入口代码：共享客户端每次wx.login并通过X-Wepic-Login-Code传递一次性code，renderer仅用固定code2session接口返回的身份审核和限流，不相信自报OpenID/context。核验5秒超时、最多8并发及每实例每分钟120次；失败不渲染。旧SDK仅显式回滚，不自动降级。本地实测成功但尚未部署，下文私网生产门禁仍未通过，网络禁令保持。
+
+待配置和入口门禁满足后，先在原环境验证短文本审核，再部署原服务新版本并冒烟；不重建环境，不迁移prod，不合并或推送。
 
 - 服务名：`fun-card-renderer`
 - 构建目录：`miniprogram/cloudhosting/fun-card-renderer`
 - 基础镜像：`node:20-bookworm-slim`，不得切换为 Alpine；原生 `@napi-rs/canvas` 必须在最终 Linux 镜像中重新验证。
 - HTTP 实现：Node.js 内置 `node:http`，入口为 `index.js`，监听平台注入的 `PORT`。
-- 字体：`fonts/LXGWMarkerGothic-Regular.ttf`
+- 字体：`assets/fonts/LXGWMarkerGothic-Regular.ttf`、`assets/fonts/SmileySans-Oblique.ttf`、`assets/fonts/MaShanZheng-Regular.ttf`
 - 许可：`LICENSES/OFL-LXGWMarkerGothic.txt`（SIL OFL 1.1）
 
 从仓库根目录运行：
@@ -25,7 +39,29 @@ docker build -t wepictool-fun-card-renderer miniprogram/cloudhosting/fun-card-re
 
 `docker build` 必须在有 Docker 的机器或 CI 中真实成功后才能记录为通过。不要用宿主机上的 Node 测试替代 Linux 镜像验证。
 
-## 2. 创建服务、构建版本与切流
+Dockerfile 的 `COPY . .` 会复制 `assets/fonts/`，随后用三个 `test -s` 在构建期校验文件确实进入镜像且非空；缺少任一字体必须令构建失败。`renderer.js` 对 Canvas `GlobalFonts` 对象使用进程级幂等注册，重复创建 PNG maker 或处理请求不会重复注册字体。
+
+## 2. 镜像内字体与 CDN 回滚
+
+### 2.1 正常路径：镜像内字体
+
+服务端 `/preview-stack` 与 `/render-stack` 只从 `assets/fonts/` 注册三款固定字体。CloudBase 版本的环境变量中不需要也不应新增字体 CDN 地址；成功成图时不应出现对 `tcloudbaseapp.com/font/` 的运行时请求。
+
+### 2.2 回滚路径：保留静态字体资源
+
+字体与渲染 POST 必须分离：字体是需要跨设备下载和 CDN 缓存的公开静态资源，`/preview-stack` 和 `/render-stack` 则必须只经小程序 `callContainer` 私有链路。不再用云托管公网网关同时承载两者。
+
+现有 CDN 字体仍供小程序 `wx.loadFontFace` 跨设备加载，也可在 renderer 回滚旧版本时使用。暂不删除对应对象或 `FUN_CARD_RENDERER_URL`。如需重复上传，源目录已迁移为：
+
+```bash
+npx --yes -p @cloudbase/cli@3.8.1 tcb hosting deploy \
+  miniprogram/cloudhosting/fun-card-renderer/assets/fonts font \
+  -e cloud1-d0g1blfsde474b168 --safe --verify --json
+```
+
+当前 CDN 基地址为 `https://cloud1-d0g1blfsde474b168-1451421513.tcloudbaseapp.com`，云端对象为 `font/LXGWMarkerGothic-Regular.ttf`、`font/SmileySans-Oblique.ttf` 和 `font/MaShanZheng-Regular.ttf`。上线前仍需在微信公众平台确认该 HTTPS 域名符合小程序字体下载域名规则，并完成 iOS/Android 真机加载。
+
+### 2.3 创建服务、构建版本与切流
 
 1. 在与目标小程序已关联的 CloudBase 环境进入「云托管」，创建服务 `fun-card-renderer`。
 2. 选择 Dockerfile/源码构建，构建上下文填写 `miniprogram/cloudhosting/fun-card-renderer`，容器端口填写 `8080`。Dockerfile 会执行 `npm ci --omit=dev` 并以 `node index.js` 启动。
@@ -40,6 +76,8 @@ docker build -t wepictool-fun-card-renderer miniprogram/cloudhosting/fun-card-re
 
    `PORT` 由平台注入。生产版本不得设置 `FUN_CARD_RENDERER_DEV_MODE`；本地离线模拟只接受精确的 `NODE_ENV=development FUN_CARD_RENDERER_DEV_MODE=1`，NODE_ENV 缺失、staging 或 production 均不允许模拟。本地模拟仅供独立 renderer 工具/测试调用，小程序 POST 仍只走 `callContainer`。非模拟运行必须声明 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only`，缺失或不同值会在监听前拒绝启动；这只是部署意图声明，不会操作或验证 CloudBase 公网开关。缺少环境 ID、审核或存储能力也会关闭式失败。
 5. 新版本构建完成后先保持旧版本 100% 流量；在控制台允许的情况下让新版本从 0% 或最小灰度流量开始，检查启动日志和下文冒烟，再逐步切到 100%。每次调整前记录旧/新版本流量比例和时间。
+
+2026-09-07 当前环境证据：服务 `fun-card-renderer` 的在线版本为 `fun-card-renderer-004`，镜像为 `ccr.ccs.tencentyun.com/tcb-100050496765-lapk/ca-pcsdrzau_fun-card-renderer:fun-card-renderer-004-20260907212701`，构建 ID `2602249361`，运行 ID `multi_tenant_1x3ZN4LJocZ1vz`，状态 `normal`、流量 `100%`、端口 `8080`。云端 `EnvParams` 仅包含上述三个非秘密键，没有字体 CDN URL。部署构建成功同时证明 Dockerfile 对三款镜像内字体的非空检查全部通过。公开兼容 GET 路由读取镜像文件的重复请求返回 200；真实中文绘制仍以 `callContainer` 冒烟结果为准。
 
 CloudBase 的资源模型是「服务 → 不可变版本 → 实例」，版本可按比例切流并回切。参见 [CloudBase 云托管资源模型](https://docs.cloudbase.net/run/introduction)。
 
@@ -61,17 +99,18 @@ CloudBase 的资源模型是「服务 → 不可变版本 → 实例」，版本
 
 以下均为上线硬前置条件，不是建议。发布负责人须填写结果并保存截图/配置导出和外部请求证据；任一未核验均保持 NOT READY：
 
-- [ ] 「服务详情 → 服务设置」的“允许公网通过服务域名访问服务”开关已关闭。实际服务/版本：待填写；开关结果：**未验证**；核验人/时间/截图：待填写。
-- [ ] 已盘点默认服务域名、自定义服务域名及 HTTP 网关所有绑定，两个 POST 端点均不对公网开放。实际结果：**未验证**。
-- [ ] 外部网络对上述每个入口分别尝试 `/preview-stack`、`/render-stack`，包括无身份和人工测试头部请求，均在平台访问边界被拒绝、没有进入业务渲染/审核/上传。不能仅凭无头部请求收到应用层 403 就判通过。实际结果：**未验证**。
-- [ ] 关联小程序通过 `callContainer` 成功、字体 GET 成功，且没有为此重新打开服务公网。实际结果：**未验证**。
+- [ ] 「服务详情 → 服务设置」的“允许公网通过服务域名访问服务”开关已关闭。实际服务/版本：`fun-card-renderer` / `fun-card-renderer-004`；当前 `PublicNetStatus=ENABLE`。用户已明确暂停 VPC、子网、NAT 和关闭公网，本轮不得继续操作或创建任何可能计费的网络资源。
+- [ ] 已盘点默认服务域名、自定义服务域名及 HTTP 网关所有绑定，两个 POST 端点均不对公网开放。当前默认服务域名为 `https://fun-card-renderer-309392-9-1451421513.sh.run.tcloudbase.com`，自定义域名列表为空；HTTP 网关绑定仍待控制台核验，实际结果：**未通过**。
+- [ ] 外部网络对上述每个入口分别尝试 `/preview-stack`、`/render-stack`，包括无身份和人工测试头部请求，均在平台访问边界被拒绝、没有进入业务渲染/审核/上传。不能仅凭无头部请求收到应用层 403 就判通过。当前 `/preview-stack` 无头部返回应用层 `403 CALLER_UNAUTHORIZED`，伪造 `x-wx-openid` 与 `x-cloudbase-context` 后返回应用层 `400 INVALID_REQUEST`，证明公网请求可越过平台边界进入业务服务；实际结果：**未通过**。
+- [ ] 关联小程序通过 `callContainer` 成功，三款镜像内字体均生成可识别中文，并确认 renderer 运行时没有请求字体 CDN。镜像字体文件存在与兼容 GET 已验证；真实 `callContainer`：**等待开发者工具 CLI 服务端口开启后验证**。
 
 配置步骤：
 
-- 在「服务详情 → 服务设置 → 网络访问」关闭通过服务域名的公网入向访问；小程序的 `/preview-stack` 与 `/render-stack` 只通过 `wx.cloud.callContainer` 调用。
-- 在 HTTP 网关绑定备案 HTTPS 域名，只新建精确触发路径 `/font/LXGWMarkerGothic-Regular.ttf`，关联 `fun-card-renderer` 并开启路径透传。不要为 `/`、`/preview-stack` 或 `/render-stack` 建公网路由。
-- 按微信公众平台当前规则把该字体 HTTPS 域名加入小程序允许的网络域名；生产 POST 走 `callContainer`，不应为了 POST 再开放普通 request 域名。
-- 服务本身只对字体路径接受 `GET`/`HEAD`，其他未注册方法/路径返回 404。上线后还要用公网请求确认两个 POST 路径不可达。
+- 当前网络治理暂停。不得创建或绑定 VPC/子网，不得购买 NAT，不得改变公网开关；恢复时间以用户后续明确确认为准。
+- VPC/子网绑定完成后，在同一位置关闭通过服务域名的公网入向访问；小程序的 `/preview-stack` 与 `/render-stack` 只通过 `wx.cloud.callContainer` 调用。
+- renderer 使用镜像内字体；现有三条字体 GET 与静态托管对象只作客户端兼容和回滚，不新增入口。
+- 按微信公众平台当前规则把该静态托管 HTTPS 域名加入小程序允许的网络域名；生产 POST 走 `callContainer`，不应为了 POST 再开放普通 request 域名。
+- 云托管服务公网入向完全关闭；上线后还要用外部请求确认两个 POST 路径不可达。
 
 官方说明 `callContainer` 走私有链路，服务设置可关闭公网且默认公网不提供鉴权。参见 [小程序访问云托管](https://docs.cloudbase.net/run/develop/access/mini)、[公网访问与关闭位置](https://docs.cloudbase.net/run/deploy/networking/public) 和 [服务网络设置](https://docs.cloudbase.net/run/deploy/service-setting)。注意关闭服务域名公网并不关闭 HTTP 网关绑定，必须另行限制精确字体路径，参见 [CloudBase HTTP 配置说明](https://docs.cloudbase.net/run/related)。
 
@@ -80,7 +119,7 @@ CloudBase 的资源模型是「服务 → 不可变版本 → 实例」，版本
 ```js
 const CLOUD_ENV_ID = '<真实 CloudBase 环境 ID>';
 const FUN_CARD_RENDERER_SERVICE = 'fun-card-renderer';
-const FUN_CARD_RENDERER_URL = 'https://<仅公开字体路径的备案域名>';
+const FUN_CARD_RENDERER_URL = 'https://cloud1-d0g1blfsde474b168-1451421513.tcloudbaseapp.com';
 const ENABLE_FUN_TEXT_STACK_ENTRY = true;
 ```
 
@@ -94,19 +133,17 @@ FUN_CARD_RENDERER_ACCESS_MODE=call-container-only npm run check:miniprogram:rele
 
 ## 4. 可复制冒烟
 
-先在 HTTP 网关验证唯一公开资源：
+先在静态托管 CDN 验证公开字体资源：
 
 ```bash
-export WEPIC_FONT_BASE='https://<字体域名>'
+export WEPIC_FONT_BASE='https://cloud1-d0g1blfsde474b168-1451421513.tcloudbaseapp.com'
 curl --fail-with-body --silent --show-error \
   --output /tmp/wepictool-LXGWMarkerGothic-Regular.ttf \
   --write-out 'font HTTP %{http_code}\n' \
   "$WEPIC_FONT_BASE/font/LXGWMarkerGothic-Regular.ttf"
-curl --silent --show-error --output /dev/null --write-out 'public render HTTP %{http_code}\n' \
-  --request POST "$WEPIC_FONT_BASE/render-stack"
 ```
 
-字体必须是 200。公网 POST 必须在平台访问边界被拒绝；上述 curl 只做初筛，业务层 `CALLER_UNAUTHORIZED` 的 403 本身不能证明公网已关闭。必须完成 3.2 中全部域名、两个 POST 路径及测试头部的核验，并确认未触发业务处理；绝不能把携带头部可调用的公网接口当作通过。
+字体必须是 200。公网 POST 不与字体 CDN 共用域名；云托管建立后仍必须完成 3.2 中所有服务域名和两个 POST 路径的不可达核验，确认未触发业务处理。
 
 再把下面整段复制到已关联目标环境的微信开发者工具 Console。它只使用 `callContainer`，不会由客户端构造 OpenID：
 
@@ -240,4 +277,4 @@ const ENABLE_FUN_TEXT_STACK_ENTRY = false;
 
 ## 7. 发布证据清单
 
-每次发布在当天迭代日志记录：Git SHA、镜像/版本名、构建结果、环境变量键名（不记秘密值）、access mode 值、3.2 公网开关核验人/时间/结果及截图、服务权限、网络入口、流量变化、字体/preview/render/403/503 实际状态码、返回的 `cloud://` 形态、48 小时规则截图或导出、回切目标版本，以及微信开发者工具/iOS/Android/真实聊天中哪些已验证或未验证。当前这些平台证据均未取得，生产仍为 NOT READY。
+每次发布在当天迭代日志记录：Git SHA、字体对象路径与 ETag、镜像/版本名、构建结果、环境变量键名（不记秘密值）、access mode 值、3.2 公网开关核验人/时间/结果及截图、服务权限、网络入口、流量变化、字体/preview/render/403/503 实际状态码、返回的 `cloud://` 形态、48 小时规则截图或导出、回切目标版本，以及微信开发者工具/iOS/Android/真实聊天中哪些已验证或未验证。当前已取得字体 CDN 3/3 HTTP 200、v003 构建/运行/100% 流量、环境变量和公网失败烟测证据；公网关闭、HTTP 网关盘点、真实 `callContainer`、成功 preview/render、内容安全故障矩阵、生命周期与双端证据仍未取得，生产仍为 NOT READY。

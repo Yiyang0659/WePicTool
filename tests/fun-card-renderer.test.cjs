@@ -15,6 +15,7 @@ const serviceRoot = path.join(
 const server = require(path.join(serviceRoot, 'server.js'));
 const validator = require(path.join(serviceRoot, 'sceneValidator.js'));
 const renderer = require(path.join(serviceRoot, 'renderer.js'));
+const bundledFontRoot = path.join(serviceRoot, 'assets', 'fonts');
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -104,6 +105,23 @@ function validPreviewPayload() {
   };
 }
 
+test('both handlers pass separate caller context to content auditing', async () => {
+  const caller = { openid: 'header-only-openid' };
+  for (const [factory, payload] of [
+    [server.createRenderStackHandler, validPayload()],
+    [server.createPreviewStackHandler, validPreviewPayload()]
+  ]) {
+    let received;
+    payload.openid = 'untrusted-body';
+    const handler = factory({ checkContent: async (_text, context) => {
+      received = context;
+      return { ok: false, code: 'SAFETY_UNAVAILABLE' };
+    }});
+    assert.equal((await handler(payload, caller)).statusCode, 503);
+    assert.equal(received, caller);
+  }
+});
+
 function renderedCards(scenes, prefix) {
   return scenes.map((scene) => ({
     sceneId: scene.sceneId,
@@ -120,6 +138,39 @@ function pngDimensions(buffer) {
     height: buffer.readUInt32BE(20)
   };
 }
+
+test('renderer bundles all licensed fonts under assets/fonts for container-local use', () => {
+  const dockerfile = fs.readFileSync(path.join(serviceRoot, 'Dockerfile'), 'utf8');
+  for (const font of Object.values(renderer.FONT_REGISTRY)) {
+    const fontPath = path.join(bundledFontRoot, font.file);
+    assert.equal(fs.existsSync(fontPath), true, font.file + ' must exist in assets/fonts');
+    assert.ok(fs.statSync(fontPath).size > 100000, font.file + ' must not be a placeholder');
+    assert.match(dockerfile, new RegExp('assets/fonts/' + font.file.replaceAll('.', '\\.')));
+  }
+});
+
+test('renderer registers bundled fonts once when multiple PNG makers are created', () => {
+  const registrations = [];
+  const fakeCanvasModule = {
+    createCanvas() { throw new Error('not used'); },
+    GlobalFonts: {
+      registerFromPath(fontPath, family) {
+        registrations.push({ fontPath, family });
+        return true;
+      }
+    }
+  };
+
+  renderer.createPngMaker(fakeCanvasModule);
+  renderer.createPngMaker(fakeCanvasModule);
+
+  assert.equal(registrations.length, 3);
+  assert.deepEqual(registrations.map((item) => path.dirname(item.fontPath)), [
+    bundledFontRoot,
+    bundledFontRoot,
+    bundledFontRoot
+  ]);
+});
 
 async function request(baseUrl, route, options) {
   const response = await fetch(baseUrl + route, options);
@@ -506,7 +557,7 @@ test('real PNG rendering rejects a text layer without an explicit registered eff
 });
 
 test('HTTP routes expose both handlers and all licensed fonts with CORS headers', async (t) => {
-  const fontPath = path.join(serviceRoot, 'fonts', 'LXGWMarkerGothic-Regular.ttf');
+  const fontPath = path.join(bundledFontRoot, 'LXGWMarkerGothic-Regular.ttf');
   const httpServer = server.createHttpServer({
     devMode: true,
     renderStackHandler: async () => ({ statusCode: 200, body: { ok: true, route: 'render' } }),
@@ -524,7 +575,7 @@ test('HTTP routes expose both handlers and all licensed fonts with CORS headers'
     assert.equal(font.status, 200);
     assert.match(font.headers.get('content-type') || '', /font\/ttf/);
     assert.equal(font.headers.get('access-control-allow-origin'), '*');
-    assert.equal(font.body.equals(fs.readFileSync(path.join(serviceRoot, 'fonts', fileName))), true);
+    assert.equal(font.body.equals(fs.readFileSync(path.join(bundledFontRoot, fileName))), true);
   }
 
   const render = await request(baseUrl, '/render-stack', {
@@ -572,6 +623,54 @@ test('oversized HTTP JSON returns INVALID_REQUEST without resetting the connecti
 
   assert.equal(response.status, 400);
   assert.deepEqual(response.body, { ok: false, code: 'INVALID_REQUEST' });
+});
+
+test('render handler fails closed when content audit exceeds its deadline', async () => {
+  const handler = server.createRenderStackHandler({
+    checkContent: async () => new Promise(() => {}),
+    renderScenes: async () => {
+      throw new Error('render must not start before audit completes');
+    },
+    auditTimeoutMs: 10
+  });
+
+  const result = await handler(validPayload());
+
+  assert.deepEqual(result, { statusCode: 503, body: { ok: false, code: 'SAFETY_UNAVAILABLE' } });
+});
+
+test('render handler returns an explicit timeout when rendering exceeds its deadline', async () => {
+  const handler = server.createRenderStackHandler({
+    checkContent: async () => ({ ok: true, code: 'OK' }),
+    renderScenes: async () => new Promise(() => {}),
+    renderTimeoutMs: 10
+  });
+
+  const result = await handler(validPayload());
+
+  assert.deepEqual(result, { statusCode: 504, body: { ok: false, code: 'RENDER_TIMEOUT' } });
+});
+
+test('HTTP routes convert unexpected handler rejection into a JSON failure', async (t) => {
+  const httpServer = server.createHttpServer({
+    devMode: true,
+    renderStackHandler: async () => {
+      throw new Error('unexpected failure');
+    },
+    previewStackHandler: async () => ({ statusCode: 200, body: { ok: true } })
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  t.after(() => httpServer.close());
+
+  const response = await request('http://127.0.0.1:' + httpServer.address().port, '/render-stack', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(validPayload())
+  });
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(response.body, { ok: false, code: 'INTERNAL_ERROR' });
 });
 
 test('production HTTP routes require both CloudBase context and caller identity', async (t) => {

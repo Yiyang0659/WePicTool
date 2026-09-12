@@ -1,7 +1,7 @@
 <!-- pages/template-result/template-result.wxml -->
 <view class="result-page">
   <view class="result-header">
-    <view class="result-title">{{funTextEntryEnabled ? '趣味字画已生成' : '趣味字画暂不可用'}}</view>
+    <view class="result-title">{{!funTextEntryEnabled ? '趣味字画暂不可用' : (renderFailed ? '暂未生成成品' : (rendering ? '正在生成趣味字画' : '趣味字画已生成'))}}</view>
     <view class="result-source" wx:if="{{project.sourceText}}">“{{project.sourceText}}”</view>
   </view>
 
@@ -15,6 +15,7 @@
   <view wx:elif="{{renderFailed}}" class="render-failed-box">
     <view class="failed-text">{{renderErrorMessage || '生成失败，请重试'}}</view>
     <button wx:if="{{funTextEntryEnabled}}" class="btn-retry-render" bindtap="onRetryRender">重新生成</button>
+    <button wx:if="{{funTextEntryEnabled && project}}" class="btn-edit-again" bindtap="onEditStack">返回编辑，内容已保留</button>
   </view>
 
   <!-- 渲染成功卡片展示 -->

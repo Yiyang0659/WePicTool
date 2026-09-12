@@ -1,7 +1,8 @@
 {
   "description": "项目配置文件",
   "packOptions": {
-    "ignore": []
+    "ignore": [],
+    "include": [{"type":"folder","value":"font-packages"}]
   },
   "setting": {
     "urlCheck": true,
@@ -40,12 +41,18 @@
     "minifyWXML": true,
     "showES6CompileOption": false,
     "useCompilerPlugins": [],
-    "ignoreUploadUnusedFiles": true
+    "ignoreUploadUnusedFiles": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "localPlugins": false,
+    "condition": false
   },
   "compileType": "miniprogram",
   "libVersion": "3.16.2",
   "appid": "wxf16280c0ba5c507d",
   "projectname": "WePicTool",
   "condition": {},
-  "cloudfunctionRoot": "cloudfunctions/"
+  "cloudfunctionRoot": "cloudfunctions/",
+  "simulatorPluginLibVersion": {},
+  "editorSetting": {}
 }

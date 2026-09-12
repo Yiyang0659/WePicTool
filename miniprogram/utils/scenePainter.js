@@ -204,7 +204,7 @@ function drawProceduralAsset(context, layer) {
   context.restore();
 }
 
-function paintText(context, layer, ratio) {
+function paintText(context, layer, ratio, drawText) {
   if (!effectIsRegistered(layer) || !fontIsRegistered(layer)) return;
   var lines = Array.isArray(layer.lines) ? layer.lines : [];
   if (!lines.length) return;
@@ -217,31 +217,36 @@ function paintText(context, layer, ratio) {
   context.textAlign = layer.align || 'center';
   context.textBaseline = 'middle';
   var offset = (lines.length - 1) * layer.lineHeight * ratio / 2;
+  function text(line, x, y, stroke) {
+    if (drawText) drawText(context, line, x, y, layer, ratio, stroke);
+    else if (stroke) context.strokeText(line, x, y);
+    else context.fillText(line, x, y);
+  }
   lines.forEach(function (line, index) {
     var y = index * layer.lineHeight * ratio - offset;
     if (layer.effectKey === 'marker-bold') {
       context.strokeStyle = layer.color;
       context.lineWidth = Math.max(2, layer.fontSize * ratio * 0.075);
-      context.strokeText(line, 0, y);
+      text(line, 0, y, true);
       context.fillStyle = layer.color;
-      context.fillText(line, 0, y);
+      text(line, 0, y);
     } else if (layer.effectKey === 'chalk-rough') {
       context.fillStyle = layer.color;
-      context.fillText(line, -1.5 * ratio, y + ratio);
-      context.fillText(line, 1.5 * ratio, y - ratio);
-      context.fillText(line, 0, y);
+      text(line, -1.5 * ratio, y + ratio);
+      text(line, 1.5 * ratio, y - ratio);
+      text(line, 0, y);
     } else if (layer.effectKey === 'collage-cutout') {
       var width = Math.max(layer.fontSize * ratio, Array.from(line).length * layer.fontSize * ratio * 1.08);
       var height = layer.lineHeight * ratio * 0.78;
       context.fillStyle = '#FFFDF7';
       context.fillRect(-width / 2, y - height / 2, width, height);
       context.fillStyle = layer.color;
-      context.fillText(line, 0, y);
+      text(line, 0, y);
     } else if (layer.effectKey === 'stamp-shadow') {
       context.fillStyle = '#8F4562';
-      context.fillText(line, 5 * ratio, y + 5 * ratio);
+      text(line, 5 * ratio, y + 5 * ratio);
       context.fillStyle = layer.color;
-      context.fillText(line, 0, y);
+      text(line, 0, y);
     }
   });
   context.restore();
@@ -268,7 +273,7 @@ function paintScene(context, scene, size, dependencies) {
   context.fillRect(0, 0, previewSize, previewSize);
   (scene.layers || []).forEach(function (layer) {
     if (layer.type === 'text') {
-      paintText(context, layer, ratio);
+      paintText(context, layer, ratio, dependencies && dependencies.drawText);
     } else if (layer.type === 'sticker' || layer.type === 'doodle') {
       paintAsset(context, layer, ratio, dependencies && dependencies.drawAsset);
     }

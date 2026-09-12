@@ -76,6 +76,128 @@ function loadEditorPage(wxApi, customDeps) {
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text-editor/fun-text-editor.js', deps, wxApi));
 }
 
+test('editor opens the card passed by candidate navigation', () => {
+  const { wxApi } = recordingWx();
+  const page = loadEditorPage(wxApi);
+  const project = createSampleProject();
+  page.initProject(project, { currentCardIndex: 2 });
+  assert.equal(page.data.currentCardIndex, 2);
+  assert.equal(page.data.currentScene.sceneId, project.candidates[0].editedScenes[2].sceneId);
+});
+
+test('editor saves selected audited final card and reuses manifest for WeChat preview',async()=>{
+  const {wxApi,calls}=recordingWx({showLoading(){},hideLoading(){},createSelectorQuery(){return {select(){return this;},fields(){return this;},exec(cb){cb([{node:{}}]);}};}});
+  let renders=0,saved;
+  const page=loadEditorPage(wxApi,{
+    '../../utils/funCardRendererClient':{async requestRenderStack(){renders++;return {cards:[]};}},
+    '../../utils/stackExportManifest':{buildFunTextManifest(){return {}; }},
+    '../../utils/sequenceBadgeComposer':{async materializeManifest(){return {stacks:[{stackId:'stack',cards:page.data.scenes.map(s=>({cardId:s.sceneId,exportUrl:'/final/'+s.sceneId}))}]};}},
+    '../../utils/imageExporter':{async saveImagesSequentially(api,urls){saved=urls;}}
+  });
+  page.initProject(createSampleProject(),{currentCardIndex:2});
+  await page.onSaveCurrentPage();
+  assert.deepEqual(Array.from(saved),['/final/'+page.data.scenes[2].sceneId]);
+  await page.onWechatPreview();assert.equal(renders,1);
+  assert.equal(calls.emitted.at(-1).name,'acceptTaskData');
+  assert.equal(page.data.editorExportBusy,false);
+});
+
+test('editor save overlay follows actual audit and album callbacks',async()=>{
+  let finishRender, albumCallback, renders=0;
+  const {wxApi}=recordingWx({
+    showLoading(){throw Error('native loading should not be used');},
+    createSelectorQuery(){return {select(){return this;},fields(){return this;},exec(cb){cb([{node:{}}]);}};},
+    saveImageToPhotosAlbum(options){albumCallback=options;}
+  });
+  const page=loadEditorPage(wxApi,{
+    '../../utils/funCardRendererClient':{requestRenderStack(){renders++;return new Promise(resolve=>{finishRender=resolve;});}},
+    '../../utils/stackExportManifest':{buildFunTextManifest(){return {}; }},
+    '../../utils/sequenceBadgeComposer':{async materializeManifest(){return {stacks:[{stackId:'stack',cards:page.data.scenes.map(s=>({cardId:s.sceneId,exportUrl:'/final/'+s.sceneId}))}]};}},
+    '../../utils/imageExporter':require('../miniprogram/utils/imageExporter')
+  });
+  page.initProject(createSampleProject());
+  const saving=page.onSaveAllPages();
+  assert.equal(page.data.exportProgress.stage,'audit');
+  await page.onSaveAllPages();assert.equal(renders,1);
+  finishRender({cards:[]});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(page.data.exportProgress.stage,'saving');
+  assert.equal(page.data.exportProgress.current,1);
+  assert.equal(page.data.exportProgress.percent,0);
+  albumCallback.success({});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(page.data.exportProgress.current,2);
+  assert.equal(page.data.exportProgress.completed,1);
+  assert.equal(page.data.exportProgress.percent,20);
+  albumCallback.fail({errMsg:'save failed'});
+  await saving;
+  assert.equal(page.data.exportProgress.visible,false);
+  assert.equal(page._editorSaveCursor,1);
+  assert.equal(page.data.editorExportBusy,false);
+});
+
+test('export modal removes native preview canvases in every stage and restores them afterwards',()=>{
+  const markup=readMiniProgramFile('miniprogram/pages/fun-text-editor/fun-text-editor.wxml');
+  const tags=markup.match(/<(?:fun-live-preview|fun-card-canvas)\b[^>]*>/g);
+  assert.ok(tags.length>=3);
+  for(const stage of ['audit','preparing','saving']){
+    for(const tag of tags){
+      const match=tag.match(/wx:(?:if|elif)="\{\{(.*?)\}\}"/);
+      assert.ok(match,'every native preview must have a mounting condition');
+      const evaluate=new Function('localEditorEnabled','currentScene','editingTextModalVisible','handwritingVisible','exportProgress','return '+match[1]);
+      for(const local of [true,false]){
+        for(const handwritingVisible of [true,false]){
+          assert.equal(Boolean(evaluate(local,{},false,handwritingVisible,{visible:true,stage})),false);
+        }
+      }
+    }
+  }
+  const main=tags[0].match(/wx:if="\{\{(.*?)\}\}"/)[1];
+  const visible=new Function('localEditorEnabled','currentScene','editingTextModalVisible','exportProgress','return '+main);
+  assert.equal(Boolean(visible(true,{},false,{visible:false})),true);
+  assert.match(markup,/<canvas type="2d" id="editorExportCanvas" class="editor-export-canvas"\s*\/>/);
+});
+
+test('editor audit failure cannot save or navigate and releases export lock',async()=>{
+  const {wxApi,calls}=recordingWx({showLoading(){},hideLoading(){}});
+  const page=loadEditorPage(wxApi,{'../../utils/funCardRendererClient':{async requestRenderStack(){throw Error('审核未通过');}}});
+  page.initProject(createSampleProject());await page.onSaveAllPages();
+  assert.equal(calls.navigations.length,0);assert.equal(calls.toasts.at(-1).title,'审核未通过');
+  assert.equal(page.data.editorExportBusy,false);
+  assert.equal(page.data.exportProgress.visible,false);
+});
+
+test('ink changes save editable draft and enter audited results, rollback blocks ink export', () => {
+  const saved = [];
+  const { wxApi,calls } = recordingWx({setStorageSync(key,value) {saved.push({key,value});}});
+  const page = loadEditorPage(wxApi, {'../../config/env':{ENABLE_FUN_TEXT_STACK_ENTRY:true,ENABLE_FUN_LOCAL_EDITOR:true}});
+  page.initProject(createSampleProject());
+  page.onInkChange({detail:{strokes:[{id:'stroke_1',brushKey:'pen',colorKey:'black',width:8,points:[{x:10,y:10}]}]}});
+  page.onConfirmEdits();
+  assert.equal(calls.navigations.length,1);
+  page.data.localEditorEnabled=false;
+  page.onConfirmEdits();
+  assert.equal(calls.navigations.length,1);
+  assert.equal(saved.length,1);
+  assert.equal(saved[0].value.project.candidates[0].editedScenes[0].strokes.length,1);
+});
+
+test('standalone handwriting saves real drafts, adds editable sticker and cancels without replacing project', () => {
+  const store={};
+  const {wxApi,calls}=recordingWx({getStorageSync:k=>store[k],setStorageSync:(k,v)=>store[k]=v});
+  const page=loadEditorPage(wxApi,{'../../config/env':{ENABLE_FUN_TEXT_STACK_ENTRY:true,ENABLE_FUN_LOCAL_EDITOR:true}});
+  page.initProject(createSampleProject());const id=page.data.project.projectId;
+  page.onStartHandwriting();
+  page.onHandwritingChange({detail:{strokes:[{id:'stroke_h',brushKey:'pen',colorKey:'black',width:8,points:[{x:400,y:400},{x:600,y:600}]}]}});
+  page.onSaveHandwriting();assert.equal(page.data.handwritingDrafts.length,1);
+  page.onAddHandwritingSticker();assert.equal(page.data.currentScene.inkStickers.length,1);
+  assert.equal(model.buildRenderPayload(page.data.project).scenes[0].strokes.length,1);
+  page.onEditInkSticker();assert.equal(page.data.handwritingScene.strokes.length,1);
+  page.onCancelHandwriting();assert.equal(page.data.project.projectId,id);
+  page.onStartHandwriting();page.onCancelHandwriting();assert.equal(page.data.project.projectId,id);
+  page.onClearHandwritingDrafts();assert.equal(calls.modals.at(-1).title,'清空本机手写草稿？');
+});
+
 function handlerBoundToElement(wxml, className, binding) {
   const matcher = new RegExp('<[^>]*class="[^\"]*' + className + '[^\"]*"[^>]*' + binding + '="([^\"]+)"', 's');
   const match = wxml.match(matcher);
@@ -267,8 +389,8 @@ test('editor exposes visual choice previews, live sort positions and a canvas-sa
   assert.match(wxml, /item\.glyph/);
   assert.match(wxml, /已添加/);
   assert.match(wxml, /currentScene && !editingTextModalVisible/);
-  assert.match(wxml, /往前显示/);
-  assert.match(wxml, /往后显示/);
+  assert.match(wxml, /置顶/);
+  assert.match(wxml, /置底/);
   assert.match(wxml, /只在装饰互相重叠时改变遮挡顺序/);
   assert.match(wxml, /bindfontunavailable="onFontUnavailable"/);
   assert.match(wxml, /currentFallbackImage/);
@@ -356,6 +478,19 @@ test('onConfirmEdits emits full updated project and navigates to template-result
   assert.equal(calls.emitted.length, 1);
   assert.equal(calls.emitted[0].name, 'funTextProject');
   assert.equal(calls.emitted[0].payload.project.projectId, project.projectId);
+});
+
+test('onConfirmEdits ignores a rapid duplicate tap until the result page returns', () => {
+  const { wxApi, calls } = recordingWx({});
+  const page = loadEditorPage(wxApi);
+  page.initProject(createSampleProject());
+
+  page.onConfirmEdits();
+  page.onConfirmEdits();
+  assert.equal(calls.navigations.length, 1);
+  page.onShow();
+  page.onConfirmEdits();
+  assert.equal(calls.navigations.length, 2);
 });
 
 test('editor markup groups focused actions without exposing a general-purpose image editor', () => {

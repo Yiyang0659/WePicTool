@@ -1,0 +1,10 @@
+<view class="preview">
+  <image wx:if="{{url}}" class="base" src="{{url}}" mode="aspectFit" binderror="imageFailed" />
+  <canvas wx:if="{{localPreview && !localOnly}}" type="2d" id="localBase" class="base" />
+  <canvas type="2d" id="overlay" class="overlay" />
+  <canvas type="2d" id="committed" class="overlay" />
+  <canvas type="2d" id="ink" class="ink {{drawing ? 'drawing' : ''}}" disable-scroll="{{drawing}}"
+    catchtouchstart="inkStart" catchtouchmove="inkMove" catchtouchend="inkEnd" catchtouchcancel="inkCancel" />
+  <view wx:if="{{loading}}" class="status {{url || localReady ? 'compact' : ''}}">{{localPreview ? '正在准备本机字体…' : (url ? '预览更新中…' : '正在生成字体预览…')}}</view>
+  <view wx:if="{{failed}}" class="status {{url || localReady ? 'compact' : ''}}" catchtap="retry">{{errorText || '预览未更新，点此重试'}}</view>
+</view>

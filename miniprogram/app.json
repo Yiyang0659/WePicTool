@@ -46,5 +46,84 @@
   },
   "sitemapLocation": "sitemap.json",
   "style": "v2",
-  "lazyCodeLoading": "requiredComponents"
+  "lazyCodeLoading": "requiredComponents",
+  "subPackages": [
+    {
+      "name": "font-marker-0",
+      "root": "font-packages/font-marker-0",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-marker-1",
+      "root": "font-packages/font-marker-1",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-marker-2",
+      "root": "font-packages/font-marker-2",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-playful-0",
+      "root": "font-packages/font-playful-0",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-playful-1",
+      "root": "font-packages/font-playful-1",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-playful-2",
+      "root": "font-packages/font-playful-2",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-headline-0",
+      "root": "font-packages/font-headline-0",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-headline-1",
+      "root": "font-packages/font-headline-1",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-headline-2",
+      "root": "font-packages/font-headline-2",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-headline-3",
+      "root": "font-packages/font-headline-3",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "name": "font-headline-4",
+      "root": "font-packages/font-headline-4",
+      "pages": [
+        "index"
+      ]
+    }
+  ]
 }

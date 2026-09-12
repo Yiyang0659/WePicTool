@@ -1,0 +1,11 @@
+:host { display: block; width: 100%; height: 100%; }
+.preview { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.base, .overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+.base { z-index: 0; }
+.overlay { pointer-events: none; z-index: 1; }
+.ink { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.ink { z-index: 2; }
+.drawing { pointer-events:auto; }
+.status { position: absolute; left: 12rpx; right: 12rpx; top: 46%; padding: 12rpx; text-align: center; font-size: 24rpx; color: #655d73; background: #fff9; border-radius: 12rpx; }
+.status { z-index: 3; }
+.compact { top: auto; bottom: 8rpx; font-size: 22rpx; }

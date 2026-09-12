@@ -1,5 +1,7 @@
 # WePicTool 技术方案设计
 
+2026-09-12 分支增量：趣味字画ENABLE_FUN_OFFLINE_PREVIEW开启时，本机规则规划、异步字体资源分包、OpenType轮廓Canvas绘制；不调用AI/审核/renderer预览。其他玩法不变，保存和微信成品预览仍使用审核后的云端产物。实现边界见`../superpowers/specs/2026-09-12-local-font-editor.md`。
+
 **版本：** v2.4
 **日期：** 2026-09-05
 **状态：** 记录 `codex/unified-stack-export` 当前代码与工作树契约。首页、统一导出和预览改版均未合并或发布；趣味字画 P2.2 仍是计划外实验；生产与双端证据边界以 `../current.md` 为准。
@@ -12,7 +14,8 @@
 |------|------|------|
 | 前端 | 原生微信小程序 | 无需框架，直接调用微信原生 API |
 | 后端 | CloudBase 云函数 | `processOutfit` 处理图片审核与 AI 链路，`contentGuard` 审核用户反馈文本 |
-| 趣味字画渲染 | CloudBase 云托管，Node 20 bookworm-slim + `node:http` | 授权字体、低清预览、1080 PNG 与二次文字审核；尚未部署验证 |
+| 趣味字画字体 | renderer 镜像内 `assets/fonts/`；客户端 CloudBase CDN 暂留回滚 | 三款字体经 Docker 构建期非空检查并在进程启动期一次注册；客户端 CDN 仍待双端验收 |
+| 趣味字画渲染 | CloudBase 云托管，Node 20 bookworm-slim + `node:http` | v004 已完成 Linux 源码构建、正常启动和 100% 切流；`callContainer` 三字体中文成图、低清预览、1080 PNG、二次审核与生命周期尚未完成生产验收 |
 | 故事规划实验 | `planFunTextStory` 云函数 | P2.2 计划外实验代码；发布范围、部署和模型 API key 未确认 |
 | 云存储 | CloudBase 云存储 | 原图临时文件、结果图临时文件 |
 | AI 分类 | DashScope qwen-vl-plus | 多模态模型识别穿搭部件 |
@@ -62,7 +65,9 @@
 云端增强
   -> processOutfit：图片审核、分类、抠图
   -> contentGuard：用户/模型文字审核
-  -> fun-card-renderer：授权字体预览与 1080 PNG（未部署验证）
+  -> renderer 镜像内字体（服务端正常路径）
+  -> CloudBase 静态托管字体 HTTPS/CDN（客户端加载与回滚，真机待验收）
+  -> fun-card-renderer：服务端低清预览与 1080 PNG（v003 在线，私密入口未验收）
   -> planFunTextStory：P2.2 结构化故事规划实验（未纳入发布）
 
 存储
@@ -85,7 +90,7 @@ flowchart TD
     OUTFIT --> PO["processOutfit\n图片审核 / 分类 / 抠图"]
     FUN --> CG["contentGuard\n输入文字审核"]
     FUN -.实验.-> PLAN["planFunTextStory"]
-    FUN -.未部署.-> RENDER["fun-card-renderer"]
+    FUN -.待私密链路验收.-> RENDER["fun-card-renderer v003"]
 
     PROJECT --> MANIFEST["StackExportManifest"]
     PO --> MANIFEST
@@ -124,7 +129,7 @@ flowchart TD
 | `miniprogram/cloudfunctions/processOutfit/` | 云函数：阶段一 mock 处理 + 阶段二 AI 分类 + 阶段三抠图 |
 | `miniprogram/cloudfunctions/contentGuard/` | 云函数：使用微信内容安全接口审核用户反馈文本 |
 | `miniprogram/cloudfunctions/planFunTextStory/` | P2.2 实验云函数：结构化故事规划、单次修复和候选文字复核；未部署 |
-| `miniprogram/cloudhosting/fun-card-renderer/` | 独立 Node 20 渲染器：字体、360 预览、1080 成品、审核与云存储；未部署 |
+| `miniprogram/cloudhosting/fun-card-renderer/` | 独立 Node 20 渲染器：镜像内字体、360 预览、1080 成品、审核与云存储；v004 已部署运行，`callContainer` 三字体中文成图、云存储和内容安全线上验收待完成 |
 
 ---
 
@@ -620,7 +625,7 @@ cloud://cloud1-d0g1blfsde474b168/
 - 图片违规或审核服务异常时，云函数返回 `CONTENT_UNSAFE` 或 `SAFETY_UNAVAILABLE`，前端停留在当前页并显示非技术性提示；违规任务的 `cloud://` 源图片会尽力删除，删除失败仅记录日志且不影响拦截。
 - 意见反馈文本由独立 `contentGuard` 云函数调用 `security.msgSecCheck`；仅 `ok === true` 时才允许写入本地 `wepictool_feedbacks`，违规或安全服务异常均不保存。
 - `processOutfit/config.json` 必须声明 `security.imgSecCheck`，`contentGuard/config.json` 必须声明 `security.msgSecCheck`；客户端不得保存 AppSecret，也不得绕过云函数直连安全接口。
-- 趣味字画用户输入先走 `contentGuard`；`fun-card-renderer` 在绘制/上传前再次聚合审核 `sourceText` 与全部可见文字。小程序 POST 始终只经 `wx.cloud.callContainer`，服务端要求非空 `x-cloudbase-context` + `x-wx-openid`，客户端不得传身份/context/秘密。头部不是独立公网鉴权：生产部署必须关闭并验证服务公网访问、限制字体网关精确路径；非模拟运行及启用入口的发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only` 声明，但声明不能证明平台配置。审核缺失、异常或未知响应均不得渲染。flag=false 同时关闭输入/候选/编辑、记录恢复和结果渲染/保存，静态回滚包免 renderer 配置；部署边界未验证前保持 NOT READY。
+- 趣味字画用户输入先走 `contentGuard`；`fun-card-renderer` 在绘制/上传前再次聚合审核 `sourceText` 与全部可见文字。小程序 POST 始终只经 `wx.cloud.callContainer`，服务端要求非空 `x-cloudbase-context` + `x-wx-openid`，客户端不得传身份/context/秘密。头部不是独立公网鉴权。三款字体固定进入 renderer 镜像并在启动期一次注册，正常服务端渲染无字体 CDN 依赖；CloudBase 静态字体仅供客户端加载与回滚。非模拟运行及启用入口的发布预检要求 `FUN_CARD_RENDERER_ACCESS_MODE=call-container-only`。2026-09-07 v004 已在线且平台变量未包含字体 URL；网络资源和公网开关按用户要求暂停，真实 `callContainer` 尚未验收，因此仍为 NOT READY。审核缺失、异常或未知响应均不得渲染。
 - P2.2 的模型新增文字必须在场景合成前复查；但该云函数目前只是计划外实验代码，未完成发布范围确认、线上权限/模型配置或真机验证，不能据此声明生产门禁已验收。
 
 ### 12.4 翻页动画云托管 ffmpeg 备注

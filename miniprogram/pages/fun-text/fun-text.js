@@ -1,11 +1,12 @@
 // pages/fun-text/fun-text.js
-// 趣味字画输入页：一句话 + 组合表达标签；本地归一化 → contentGuard → 创建规则项目 → 候选页。
+// 本机模式：一句话 + 组合表达标签 → 本地规则项目 → 候选页；审核仅保留在导出链路。
 // 内置示例固定使用已审核文案，不调用云函数。
 const contentGuardClient = require('../../utils/contentGuardClient');
 const creativePlannerClient = require('../../utils/creativePlannerClient');
 const funTextProject = require('../../utils/funTextProject');
 const funTextCases = require('../../config/funTextCases');
-const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
+const { ENABLE_FUN_TEXT_STACK_ENTRY, ENABLE_FUN_OFFLINE_PREVIEW } = require('../../config/env');
+const localFonts = require('../../utils/localFontRenderer');
 
 const EXPRESSION_OPTIONS = [
   { key: 'random-fun', label: '随机好玩', desc: '自动挑三种结构' },
@@ -19,6 +20,9 @@ const DEMO_EXPRESSION_KEY = 'funny-reversal';
 const MAX_CHAR_COUNT = 40;
 
 Page({
+  onLoad: function () {
+    if (ENABLE_FUN_OFFLINE_PREVIEW === true) localFonts.warm(wx).catch(function () {});
+  },
   data: {
     funTextEntryEnabled: ENABLE_FUN_TEXT_STACK_ENTRY === true,
     inputText: '',
@@ -86,7 +90,7 @@ Page({
 
     this.setData({ generating: true });
     try {
-      await contentGuardClient.checkTextContent(wx, sourceText);
+      if (ENABLE_FUN_OFFLINE_PREVIEW !== true) await contentGuardClient.checkTextContent(wx, sourceText);
       const brief = {
         sourceText: sourceText,
         expressionKey: this.data.expressionKey,
@@ -95,7 +99,7 @@ Page({
         preferredStylePackId: this.data.preferredStylePackId,
         now: Date.now()
       };
-      const planRes = await creativePlannerClient.planCandidates(wx, brief);
+      const planRes = await creativePlannerClient.planCandidates(wx, brief, {forceRule: ENABLE_FUN_OFFLINE_PREVIEW === true});
       const project = funTextProject.createFunTextProject(Object.assign({}, brief, {
         candidates: planRes.candidates,
         generationMode: planRes.source

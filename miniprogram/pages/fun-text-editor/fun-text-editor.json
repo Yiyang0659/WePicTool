@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "自己改改",
   "usingComponents": {
+    "fun-live-preview": "../../components/fun-live-preview/fun-live-preview",
     "fun-card-canvas": "../../components/fun-card-canvas/fun-card-canvas"
   }
 }

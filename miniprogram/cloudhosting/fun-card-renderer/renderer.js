@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { drawProceduralAsset } = require('./drawAssets');
+const ink = require('./funStrokes');
 
 const SCENE_SIZE = 1080;
 const PREVIEW_SIZE = 360;
@@ -11,17 +12,20 @@ const FONT_REGISTRY = Object.freeze({
   playful: { family: 'SmileySans', file: 'SmileySans-Oblique.ttf' },
   headline: { family: 'MaShanZheng', file: 'MaShanZheng-Regular.ttf' }
 });
-let fontsRegistered = false;
+const registeredFontCollections = new WeakSet();
 
-function registerFont(GlobalFonts) {
-  if (fontsRegistered) return;
+function registerLicensedFonts(GlobalFonts) {
+  if (!GlobalFonts || typeof GlobalFonts.registerFromPath !== 'function') {
+    throw new Error('font registry is unavailable');
+  }
+  if (registeredFontCollections.has(GlobalFonts)) return;
   Object.values(FONT_REGISTRY).forEach((font) => {
-    const fontPath = path.join(__dirname, 'fonts', font.file);
+    const fontPath = path.join(__dirname, 'assets', 'fonts', font.file);
     if (!GlobalFonts.registerFromPath(fontPath, font.family)) {
       throw new Error('licensed font registration failed: ' + font.family);
     }
   });
-  fontsRegistered = true;
+  registeredFontCollections.add(GlobalFonts);
 }
 
 function paintText(context, layer, ratio) {
@@ -83,9 +87,9 @@ function paintAsset(context, layer, ratio) {
   context.restore();
 }
 
-function createPngMaker() {
-  const { createCanvas, GlobalFonts } = require('@napi-rs/canvas');
-  registerFont(GlobalFonts);
+function createPngMaker(canvasModule) {
+  const { createCanvas, GlobalFonts } = canvasModule || require('@napi-rs/canvas');
+  registerLicensedFonts(GlobalFonts);
   return async function makePng(scene, size) {
     if (size !== PREVIEW_SIZE && size !== FINAL_SIZE) throw new Error('unsupported render size');
     const ratio = size / SCENE_SIZE;
@@ -97,6 +101,8 @@ function createPngMaker() {
       if (layer.type === 'text') paintText(context, layer, ratio);
       else paintAsset(context, layer, ratio);
     });
+    if (!ink.valid(scene.strokes || [])) throw new Error('invalid strokes');
+    ink.paint(context, scene.strokes || [], size);
     return canvas.toBuffer('image/png');
   };
 }
@@ -114,8 +120,17 @@ function createSceneRenderer(dependencies) {
       for (const scene of scenes) {
         const buffer = await deps.makePng(scene, job.size);
         if (!Buffer.isBuffer(buffer)) throw new Error('PNG renderer returned no buffer');
+        if (scene.strokes && scene.strokes.length) {
+          const audit=typeof deps.checkImage==='function' ? await deps.checkImage(buffer) : null;
+          if(!audit || audit.ok!==true) {
+            const error=new Error('image audit blocked');
+            error.code=audit && audit.code==='CONTENT_UNSAFE' ? 'CONTENT_UNSAFE' : 'IMAGE_SAFETY_UNAVAILABLE';
+            throw error;
+          }
+        }
         const cloudPath = [
-          'funtext', job.projectId, job.candidateId, job.kind, scene.order + '.png'
+          'funtext', job.projectId, job.candidateId, job.kind,
+          (job.revision ? job.revision + '-' : '') + scene.order + '.png'
         ].join('/');
         const stored = await deps.uploadBuffer(buffer, cloudPath, { scene, job });
         if (!stored || typeof stored.fileId !== 'string' || !stored.fileId || typeof stored.url !== 'string' || !stored.url) {
@@ -150,6 +165,7 @@ module.exports = {
   PREVIEW_SIZE,
   FINAL_SIZE,
   FONT_REGISTRY,
+  registerLicensedFonts,
   createPngMaker,
   createSceneRenderer,
   createCardRollback

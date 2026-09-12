@@ -24,7 +24,7 @@
         "type": "file"
       }
     ],
-    "include": []
+    "include": [{"type":"folder","value":"miniprogram/font-packages"}]
   },
   "setting": {
     "urlCheck": true,

@@ -293,9 +293,12 @@ function switchCandidateStyle(project, candidateId, stylePackId) {
   requireCandidate(project, candidateId);
   return commitEdit(project, function (next) {
   var candidate = requireCandidate(next, candidateId);
+  var previousInk = {};
+  candidate.editedScenes.forEach(function(scene){ previousInk[scene.sceneId]={strokes:scene.strokes,inkStickers:scene.inkStickers}; });
   candidate.stylePackId = stylePackId;
   candidate.originalScenes = clone(composer.composeCandidate(candidate, stylePackId));
   candidate.editedScenes = clone(composeEditedScenes(candidate, stylePackId));
+  candidate.editedScenes.forEach(function(scene){ var saved=previousInk[scene.sceneId];if(saved){if(saved.strokes)scene.strokes=clone(saved.strokes);if(saved.inkStickers)scene.inkStickers=clone(saved.inkStickers);} });
   });
 }
 
@@ -457,13 +460,12 @@ function moveDecorationLayer(project, candidateId, sceneId, layerId, direction) 
     var scene = requireScene(requireCandidate(next, candidateId), sceneId);
     var index = scene.layers.findIndex(function (item) { return item.id === layerId && item.type !== 'text'; });
     if (index < 0) throw new Error('未找到该装饰');
-    var target = direction === 'forward' ? index + 1 : index - 1;
-    while (target >= 0 && target < scene.layers.length && scene.layers[target].type === 'text') {
-      target += direction === 'forward' ? 1 : -1;
-    }
-    if (target < 0 || target >= scene.layers.length) return;
-    var moved = scene.layers.splice(index, 1)[0];
-    scene.layers.splice(target, 0, moved);
+    // Reorder decoration slots only; leave text slots and their relative order intact.
+    var decorations = scene.layers.filter(function(layer){return layer.type !== 'text';});
+    var moved = decorations.splice(decorations.findIndex(function(layer){return layer.id===layerId;}),1)[0];
+    if(direction==='forward') decorations.push(moved); else decorations.unshift(moved);
+    var slot=0;
+    scene.layers=scene.layers.map(function(layer){return layer.type==='text'?layer:decorations[slot++];});
   });
 }
 
@@ -519,7 +521,7 @@ function buildPreviewPayload(project) {
       return {
         candidateId: candidate.candidateId,
         stylePackId: candidate.stylePackId,
-        scenes: clone(candidate.editedScenes)
+        scenes: clone(candidate.editedScenes).map(require('./inkStickers').renderScene)
       };
     })
   };
@@ -572,7 +574,7 @@ function buildRenderPayload(project) {
     sourceText: project.sourceText,
     candidateId: candidate.candidateId,
     stylePackId: candidate.stylePackId,
-    scenes: clone(candidate.editedScenes)
+    scenes: clone(candidate.editedScenes).map(require('./inkStickers').renderScene)
   };
 }
 
@@ -609,6 +611,23 @@ function buildPreviewGroups(project, renderedCards) {
 }
 
 module.exports = {
+  updateInkStickers: function(project,candidateId,sceneId,groups) {
+    return commitEdit(project,function(next){
+      var scene=requireCandidate(next,candidateId).editedScenes.find(function(s){return s.sceneId===sceneId;});
+      if(!scene)throw new Error('找不到当前卡片');
+      require('./inkStickers').flatten(Object.assign({},scene,{inkStickers:groups}));
+      scene.inkStickers=clone(groups);
+    });
+  },
+  updateStrokes: function (project, candidateId, sceneId, strokes) {
+    if (!require('./funStrokes').valid(strokes)) throw new Error('笔迹超出限制或格式不正确');
+    return commitEdit(project, function (next) {
+      var candidate = requireCandidate(next, candidateId);
+      var scene = candidate.editedScenes.find(function (item) { return item.sceneId === sceneId; });
+      if (!scene) throw new Error('找不到当前卡片');
+      scene.strokes = clone(strokes);
+    });
+  },
   createFunTextProject: createFunTextProject,
   replanProject: replanProject,
   selectCandidate: selectCandidate,

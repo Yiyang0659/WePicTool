@@ -23,6 +23,39 @@ function createSampleProject() {
   });
 }
 
+test('candidate navigation preserves visible card and blocks duplicate opens until return', () => {
+  const { wxApi, calls } = recordingWx();
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text-candidates/fun-text-candidates.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true }
+  }, wxApi));
+  page.initProject(createSampleProject());
+  page.data.candidates[0].currentIndex = 2;
+  const event = { currentTarget: { dataset: { index: 0 } } };
+  page.onEditCandidate(event);
+  page.onEditCandidate(event);
+  assert.equal(calls.navigations.length, 1);
+  assert.equal(calls.emitted[0].payload.currentCardIndex, 2);
+  page.onShow();
+  page.onEditCandidate(event);
+  assert.equal(calls.navigations.length, 2);
+});
+
+test('candidate frame rejects swipe gestures but accepts a new tap', () => {
+  const { wxApi, calls } = recordingWx();
+  const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text-candidates/fun-text-candidates.js', {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true }
+  }, wxApi));
+  page.initProject(createSampleProject());
+  const event = { currentTarget: { dataset: { index: 0 } }, touches: [{ clientX: 10, clientY: 10 }] };
+  page.onCardTouchStart(event);
+  page.onCardTouchMove({ touches: [{ clientX: 40, clientY: 10 }] });
+  page.onCardTap(event);
+  assert.equal(calls.navigations.length, 0);
+  page.onCardTouchStart(event);
+  page.onCardTap(event);
+  assert.equal(calls.navigations.length, 1);
+});
+
 function recordingWx(overrides) {
   const calls = {
     toasts: [],
@@ -32,6 +65,7 @@ function recordingWx(overrides) {
     requests: []
   };
   const wxApi = Object.assign({
+    login(options) { options.success({ code: 'test-login-code' }); },
     navigateTo(options) {
       calls.navigations.push(options.url);
       if (typeof options.success === 'function') {
@@ -78,6 +112,7 @@ test('renderer client uses CloudBase callContainer with the configured service i
   const payload = model.buildPreviewPayload(project);
   const calls = [];
   const wxApi = {
+    login(options) { options.success({ code: 'test-login-code' }); },
     request() {
       throw new Error('production must not use wx.request');
     },
@@ -112,6 +147,7 @@ test('renderer client uses CloudBase callContainer with the configured service i
   assert.equal(calls[0].method, 'POST');
   assert.equal(calls[0].config.env, 'prod-env-123');
   assert.equal(calls[0].header['X-WX-SERVICE'], 'fun-card-renderer');
+  assert.equal(calls[0].header['X-Wepic-Login-Code'], 'test-login-code');
   assert.equal(Object.prototype.hasOwnProperty.call(calls[0].header, 'x-wx-openid'), false);
 });
 
@@ -535,6 +571,23 @@ test('onUseCandidate selects candidate and navigates to template-result', () => 
   assert.equal(calls.emitted[0].name, 'funTextProject');
   const emittedProject = calls.emitted[0].payload.project;
   assert.equal(emittedProject.selectedCandidateId, chosenCandidateId);
+});
+
+test('onUseCandidate ignores a rapid duplicate tap before returning', () => {
+  const { wxApi, calls } = recordingWx({});
+  const page = loadCandidatesPage(wxApi, {
+    '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true, ENABLE_FUN_OFFLINE_PREVIEW: false }
+  });
+  const project = createSampleProject();
+  page.initProject(project);
+  const event = { currentTarget: { dataset: { candidateId: project.candidates[0].candidateId, index: 0 } } };
+
+  page.onUseCandidate(event);
+  page.onUseCandidate(event);
+  assert.equal(calls.navigations.length, 1);
+  page.onShow();
+  page.onUseCandidate(event);
+  assert.equal(calls.navigations.length, 2);
 });
 
 test('onEditCandidate selects candidate and navigates to fun-text-editor', () => {

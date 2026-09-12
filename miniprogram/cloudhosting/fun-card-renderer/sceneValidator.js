@@ -148,6 +148,7 @@ function validateScene(scene, expectedOrder, expectedStylePackId) {
     return { valid: false, errors: ['场景必须是对象'] };
   }
   push(errors, hasBoundedId(scene.sceneId, SCENE_ID, 100), 'sceneId 不合法');
+  if (scene.strokes !== undefined) push(errors, require('./funStrokes').valid(scene.strokes), '笔迹不合法');
   push(errors, scene.order === expectedOrder, '场景序号必须连续');
   push(errors, scene.width === 1080 && scene.height === 1080, '场景必须为 1080 方图');
   if (scene.role !== undefined) push(errors, ALLOWED_ROLES.includes(scene.role), '卡片角色不合法');

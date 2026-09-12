@@ -102,6 +102,7 @@ async function saveImagesSequentially(wxApi, urls, options) {
       var filePath = await pathResolver(wxApi, items[i], i);
       await saveSingleImage(wxApi, filePath);
       savedCount += 1;
+      if (typeof opts.onSaved === 'function') opts.onSaved(i + 1, items.length);
     } catch (err) {
       var error = makeError((err && err.message) || '保存相册失败', (err && err.code) || 'SAVE_FAILED', {
         nextIndex: i,

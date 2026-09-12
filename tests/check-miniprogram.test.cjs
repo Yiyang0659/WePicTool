@@ -88,7 +88,7 @@ test('preflight rejects a fake font and an incomplete OFL license', (t) => {
   const badFontRoot = makeFixture(t);
   writeEnv(badFontRoot);
   fs.writeFileSync(
-    path.join(badFontRoot, 'miniprogram/cloudhosting/fun-card-renderer/fonts/LXGWMarkerGothic-Regular.ttf'),
+    path.join(badFontRoot, 'miniprogram/cloudhosting/fun-card-renderer/assets/fonts/LXGWMarkerGothic-Regular.ttf'),
     Buffer.alloc(1024, 0)
   );
   const badFont = runCheck(badFontRoot);
