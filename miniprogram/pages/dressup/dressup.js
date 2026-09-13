@@ -55,13 +55,17 @@ Page({
     if (mode === 'upload') {
       try {
         var saved = wx.getStorageSync(DRAFT_KEY);
+        var backup = wx.getStorageSync(DRAFT_KEY + '_previous');
+        if (backup && backup.playId === 'layered-dressup' && backup.groups &&
+            (backup.sourceMode === 'upload' || backup.sourceMode === 'mixed')) this._backupDraft = backup;
         if (
           saved &&
           saved.playId === 'layered-dressup' &&
           saved.groups &&
           (saved.sourceMode === 'upload' || saved.sourceMode === 'mixed')
         ) {
-          project = saved;
+          this._previousDraft = saved;
+          this.setData({ hasPreviousDraft: true });
         }
       } catch (err) {
         console.warn('读取分层换装草稿失败:', err);
@@ -81,6 +85,19 @@ Page({
 
   onReady: function () {
     if (!this._sequenceReady) this.initSequenceCanvas();
+  },
+
+  onRestorePreviousDraft: function () {
+    if (!this._previousDraft) return;
+    const that = this;
+    wx.showModal({ title: '恢复上次草稿', content: '将切换到上次草稿。当前作品不会自动合并，是否继续？', success: function(res) {
+      if (!res.confirm) return;
+      const previous = that._previousDraft;
+      that._previousDraft = that._backupDraft || that.data.project;
+      that._backupDraft = null;
+      that.refreshProject(previous, false);
+      that.persistDraft(previous);
+    }});
   },
 
   onUnload: function () {
@@ -138,7 +155,9 @@ Page({
   refreshProject: function (project, persist) {
     this.invalidateExportState();
     var sendability = dressup.buildSendability(project);
-    var groupList = registry.GROUP_DEFINITIONS.map(function (definition) {
+    var groupList = dressup.GROUP_DEFINITIONS.filter(function (definition) {
+      return definition.key !== 'others' || (project.groups.others || []).length > 0;
+    }).map(function (definition) {
       var items = (project.groups[definition.key] || []).map(function (item, index, all) {
         return Object.assign({}, item, {
           displayUrl: getItemUrl(item),
@@ -226,7 +245,7 @@ Page({
     }
     var sourceManifest;
     try {
-      sourceManifest = stackExportManifest.buildDressupManifest(this.data.project, registry.GROUP_DEFINITIONS);
+      sourceManifest = stackExportManifest.buildDressupManifest(this.data.project, dressup.GROUP_DEFINITIONS.filter(d=>d.key!=='others' || (this.data.project.groups.others || []).length>0));
     } catch (error) {
       this.setData({ exportError: (error && error.message) || '顺序图准备失败' });
       return Promise.reject(error);
@@ -275,6 +294,7 @@ Page({
 
   persistDraft: function (project) {
     try {
+      if (this._previousDraft) wx.setStorageSync(DRAFT_KEY + '_previous', dressup.serializeProject(this._previousDraft));
       wx.setStorageSync(DRAFT_KEY, dressup.serializeProject(project));
     } catch (err) {
       console.warn('保存分层换装草稿失败:', err);
@@ -300,6 +320,14 @@ Page({
       return;
     }
     var that = this;
+    if (this.data.project.sourceMode === 'demo') {
+      wx.showModal({ title: '使用自己的素材', content: '开始 AI 整理前清空内置示例？你的新图片将按分类加入空工作台。', success: function (res) {
+        if (!res.confirm) return;
+        that.refreshProject(dressup.createProject({sourceMode:'upload'}));
+        that.onOpenAiImporter();
+      } });
+      return;
+    }
     wx.navigateTo({
       url: '/pages/outfit-import/outfit-import',
       success: function (result) {
@@ -329,9 +357,50 @@ Page({
   onAddUserItems: function (event) {
     this.chooseUserItemsForGroup(event.currentTarget.dataset.group);
   },
+  onGroupAdd: function (event) {
+    if (this.data.saving || this.data.exportPreparing) return;
+    const groupKey = event.currentTarget.dataset.group;
+    const definition = dressup.GROUP_DEFINITIONS.find(group => group.key === groupKey);
+    if (!definition || !this.data.project) return;
+    if ((this.data.project.groups[groupKey] || []).length >= definition.maxCount) {
+      wx.showToast({ title: '每组最多 12 张', icon: 'none' });
+      return;
+    }
+    wx.showActionSheet({
+      itemList: ['继续让 AI 整理', '自己添加图片'],
+      success: result => {
+        if (this.data.saving || this.data.exportPreparing) return;
+        if (result.tapIndex === 0) this.onOpenAiImporter();
+        else if (result.tapIndex === 1) this.chooseUserItemsForGroup(groupKey);
+      }
+    });
+  },
+  onEditMaterial: function (event) {
+    if(this.data.saving || this.data.exportPreparing)return;
+    const group=event.currentTarget.dataset.group,id=event.currentTarget.dataset.id;
+    const item=(this.data.project.groups[group] || []).find(x=>x.id===id);if(!item)return;
+    wx.showActionSheet({itemList:['修改分类','查看原图','使用原图','使用整理图'],success:res=>{
+      if(res.tapIndex===0){
+        wx.showActionSheet({itemList:dressup.GROUP_DEFINITIONS.map(x=>x.title),success:r=>{
+          const target=dressup.GROUP_DEFINITIONS[r.tapIndex];if(!target || target.key===group)return;
+          if((this.data.project.groups[target.key] || []).length>=target.maxCount){wx.showToast({title:'目标组已满',icon:'none'});return;}
+          const next=dressup.removeItem(this.data.project,group,id);
+          this.refreshProject(dressup.addItems(next,target.key,[item],item.source));
+        }});
+      }else if(res.tapIndex===1){
+        const url=item.originalUrl || item.url;wx.previewImage({current:url,urls:[url]});
+      }else{
+        const url=res.tapIndex===2 ? item.originalUrl : item.processedUrl;
+        if(!url){wx.showToast({title:'没有可用的这个版本',icon:'none'});return;}
+        const next=JSON.parse(JSON.stringify(this.data.project));
+        const target=next.groups[group].find(x=>x.id===id);target.url=url;target.localPath=url;target.displayUrl=url;
+        next.updatedAt=Date.now();this.refreshProject(next);
+      }
+    }});
+  },
 
   chooseUserItemsForGroup: function (groupKey) {
-    var definition = registry.GROUP_DEFINITIONS.find(function (group) {
+    var definition = dressup.GROUP_DEFINITIONS.find(function (group) {
       return group.key === groupKey;
     });
     if (!definition) return;
@@ -385,11 +454,11 @@ Page({
     if (!itemId) return;
     var that = this;
     wx.showActionSheet({
-      itemList: registry.GROUP_DEFINITIONS.map(function (group) {
+      itemList: dressup.GROUP_DEFINITIONS.map(function (group) {
         return group.emoji + ' ' + group.title;
       }),
       success: function (sheetResult) {
-        var definition = registry.GROUP_DEFINITIONS[sheetResult.tapIndex];
+        var definition = dressup.GROUP_DEFINITIONS[sheetResult.tapIndex];
         if (!definition) return;
         var moveResult = dressup.assignPendingItem(that.data.project, itemId, definition.key);
         if (!moveResult.assigned) {
@@ -490,7 +559,7 @@ Page({
       wx.showToast({ title: '这一组至少需要 3 张素材', icon: 'none' });
       return Promise.resolve(null);
     }
-    var definition = registry.GROUP_DEFINITIONS.find(function (group) {
+    var definition = dressup.GROUP_DEFINITIONS.find(function (group) {
       return group.key === groupKey;
     });
     return this.saveManifestSelection([groupKey], '已保存' + definition.title + '组');
@@ -748,6 +817,9 @@ Page({
 
   onCloseGuide: function () {
     this.setData({ showGuide: false });
+  },
+  onGoWechat: function () {
+    if (this.data.showGuide && !this.data.saving) require('../../utils/wechatSendGuide').goToWechat(wx);
   },
 
   onGuidePanelTap: function () {},

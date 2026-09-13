@@ -19,7 +19,8 @@ function bufferToBase64DataUrl(buffer, mimeType) {
 }
 
 cloud.init({
-  env: cloud.DYNAMIC_CURRENT_ENV
+  env: cloud.DYNAMIC_CURRENT_ENV,
+  timeout: 150000
 });
 
 const PROCESSABLE_GROUPS = ['tops', 'bottoms', 'shoes'];
@@ -27,6 +28,7 @@ const OTHER_GROUP = 'others';
 const SAFETY_CONCURRENCY = 2;
 
 const GROUP_META = {
+  head: { itemLabel: '头像 / 发型' },
   tops: { itemLabel: '上衣' },
   bottoms: { itemLabel: '下装' },
   shoes: { itemLabel: '鞋子' },
@@ -36,12 +38,13 @@ const GROUP_META = {
 const CLASSIFICATION_PROMPT = `你是一名穿搭商品分类助手。请判断这张图片中的主体物品属于哪个类别，只返回以下标签之一，并给出置信度：
 
 可选标签：
+- head：以头部、脸或发型为主要内容的头像、半身头像
 - tops：上衣、T恤、衬衫、外套、卫衣、针织衫、POLO衫、背心等穿在上半身的衣物
 - bottoms：裤子、牛仔裤、休闲裤、裙子、半身裙、短裤等穿在下半身的衣物
 - shoes：鞋、运动鞋、皮鞋、靴子、凉鞋、高跟鞋等 footwear
 - other_product：其他商品或小物件（如手表、手机、化妆品、食品等）
 - daily：完整人物试穿图、真人上身照、生活场景照、合照、风景照
-- unsupported：头像、包、帽子、腰带、项链、眼镜、围巾、手套等非穿搭主链路配饰
+- unsupported：包、帽子、腰带、项链、眼镜、围巾、手套等非穿搭主链路配饰
 - uncertain：图片模糊、主体无法辨认、或无法归入以上任何类别
 
 输出格式必须是纯 JSON，不要加 markdown 代码块，不要解释：
@@ -64,6 +67,7 @@ const CLASSIFICATION_PROMPT = `你是一名穿搭商品分类助手。请判断�
 
 function createEmptyGroups() {
   return {
+    head: [],
     tops: [],
     bottoms: [],
     shoes: [],
@@ -79,6 +83,7 @@ function getMockCategory(index) {
 }
 
 function normalizeGroupKey(groupKey) {
+  if (groupKey === 'head') return 'head';
   if (!groupKey) return OTHER_GROUP;
   if (groupKey === 'unprocessed') return OTHER_GROUP;
   if (PROCESSABLE_GROUPS.indexOf(groupKey) !== -1) return groupKey;
@@ -310,99 +315,14 @@ async function classifyImageWithDashScope(imageInput, apiKey) {
   return parseClassificationResponse(text);
 }
 
-// ===== 阶段三：抠图 =====
-// 注意：白底卡片合成在前端通过 Canvas 完成，云函数只负责抠图
+// 成图仅使用 CloudBase 成长计划混元接口，不回退到阿里云。
 
-const MATTING_PROMPT = '对这张图片进行抠图，去除原背景，将背景替换为纯白色，保留主体的完整轮廓，确保边缘干净';
-
-// 抠图模型：默认 qwen-image-2.0-pro-2026-06-22（2026-09-07 改用用户百炼账号免费额度内的
-// qwen-image-2.0-pro 定版；历史实测 qwen-image-edit / qwen-image-edit-plus / qwen-image-2.0 /
-// qwen-image-2.0-pro 均可用，edit-plus 速度最快约 7s/张）。
-// wanx-v1 是文生图模型，与本端点不兼容，已弃用。
-// 可在云函数环境变量 DASHSCOPE_MATTING_MODEL 中覆盖——注意该变量优先级最高，
-// 若被设成 wanx-v1 等不兼容模型，改代码默认值也不会生效
-const MATTING_MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'qwen-image-2.0-pro-2026-06-22';
-
-async function mattingImageWithDashScope(imageInput, apiKey) {
-  const maxRetries = 1;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      if (attempt > 0) {
-        console.log(`抠图第 ${attempt + 1} 次重试`);
-        await new Promise(r => setTimeout(r, 1000));
-      }
-
-      const response = await axios.post(
-        'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
-        {
-          model: MATTING_MODEL,
-          input: {
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  { image: imageInput },
-                  { text: MATTING_PROMPT }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 60000
-        }
-      );
-
-      const output = response.data && response.data.output;
-      const choices = output && output.choices;
-
-      if (!Array.isArray(choices) || choices.length === 0) {
-        throw new Error('抠图返回结构异常');
-      }
-
-      const message = choices[0].message;
-      const content = message && message.content;
-
-      if (Array.isArray(content) && content.length > 0) {
-        const imageItem = content.find(item => item && item.image);
-        if (imageItem) {
-          return imageItem.image;
-        }
-      }
-
-      throw new Error('抠图未返回图片');
-    } catch (err) {
-      console.error(`抠图${attempt > 0 ? '重试' : ''}失败:`, err.message);
-      if (err.response) {
-        console.error('DashScope 抠图错误状态码:', err.response.status);
-        console.error('DashScope 抠图错误响应:', JSON.stringify(err.response.data));
-      }
-
-      // 限流错误（429）等待更久再重试
-      if (err.response && err.response.status === 429 && attempt < maxRetries) {
-        console.log('抠图限流，等待 3 秒后重试...');
-        await new Promise(r => setTimeout(r, 3000));
-        continue;
-      }
-
-      if (attempt >= maxRetries) {
-        throw err;
-      }
-    }
-  }
-}
-
-async function processMattingForImage(image, imageInput, apiKey) {
+async function processMattingForImage(image, imageInput, apiKey, category) {
   console.log('开始抠图: ' + image.imageId);
 
   // 1. 调用抠图 API
-  const resultImageUrl = await mattingImageWithDashScope(imageInput, apiKey);
-  console.log('抠图完成: ' + image.imageId + ', 结果 URL: ' + resultImageUrl.substring(0, 80) + '...');
+  const resultImageUrl = await require('./hunyuanImage').generateGarmentImage(cloud, imageInput, category);
+  console.log('混元成图完成: ' + image.imageId);
 
   // 2. 下载抠图结果图片
   const resultResponse = await axios.get(resultImageUrl, {
@@ -465,7 +385,7 @@ async function processMatting(images, classifications, apiKey, base64Cache) {
               console.log('抠图未命中缓存，重新下载: ' + task.image.imageId);
               imageInput = await downloadImageAsBase64(task.image);
             }
-            const matted = await processMattingForImage(task.image, imageInput, apiKey);
+            const matted = await processMattingForImage(task.image, imageInput, apiKey, classifications[task.index].category);
             mattedResults[task.index] = matted;
           } catch (err) {
             console.error('图片 ' + task.image.imageId + ' 抠图失败:', err.message);
@@ -487,7 +407,7 @@ async function downloadImageAsBase64(image) {
     console.log(`下载云存储文件: ${image.fileId}`);
     const buffer = await downloadCloudFile(image.fileId);
     console.log(`下载完成, 大小: ${buffer.length} bytes`);
-    return bufferToBase64DataUrl(buffer, 'image/jpeg');
+    return bufferToBase64DataUrl(buffer, inferImageMimeType(image.fileId));
   }
 
   if (image.url && (image.url.indexOf('http://') === 0 || image.url.indexOf('https://') === 0)) {
@@ -598,7 +518,7 @@ function createTaskFromClassifications(normalizedImages, classifications, useMoc
     const matted = mattedResults && mattedResults[index];
 
     const result = {
-      resultId: 'result_' + (index + 1),
+      resultId: 'result_' + image.imageId,
       sourceImageId: image.imageId,
       category,
       classification: useMockFallback
@@ -609,7 +529,7 @@ function createTaskFromClassifications(normalizedImages, classifications, useMoc
             needsConfirmation: classification.confidence < 0.8
           },
       type: matted ? 'matted' : 'original',
-      status: 'done',
+      status: !useMockFallback && PROCESSABLE_GROUPS.indexOf(category) !== -1 && !matted ? 'processing_failed' : 'done',
       localPath: '',
       fileId: matted ? matted.mattedFileId : image.fileId,
       url: matted ? matted.mattedUrl : image.url,
@@ -692,14 +612,14 @@ exports.main = async (event) => {
     // 内容安全必须在所有 AI 调用之前完成；接口异常同样不放行。
     const auditResult = await auditImages(normalizedImages);
     if (!auditResult.ok) {
-      await deleteSourceFiles(normalizedImages);
+      // Transient audit failures stay blocked, but keep the source for an explicit retry.
+      if (auditResult.code === 'CONTENT_UNSAFE') await deleteSourceFiles(normalizedImages);
       return createSafetyBlockedResult(auditResult.code);
     }
 
-    // 未配置 API Key 时退回 mock 分组
+    // Missing credentials must not masquerade as successful AI classification.
     if (!apiKey) {
-      console.log('未配置 DASHSCOPE_API_KEY，使用 mock 分组');
-      return createMockTask(normalizedImages);
+      return { status: 'error', error: { code: 'AI_KEY_MISSING', message: '请配置分类模型密钥' } };
     }
 
     // 阶段二：接入 DashScope / 通义千问视觉模型做 AI 分类

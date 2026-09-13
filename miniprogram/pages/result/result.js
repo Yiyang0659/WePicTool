@@ -1,4 +1,5 @@
 // pages/result/result.js
+const recordStorage = require('../../utils/recordStorage');
 const { normalizeTaskGroups, GROUP_META, createMockTask } = require('../../utils/task');
 const { composeCard, DEFAULT_OPTIONS } = require('../../utils/cardComposer');
 const imageExporter = require('../../utils/imageExporter');
@@ -1069,7 +1070,7 @@ Page({
 
   saveRecordToStorage: function (task) {
     try {
-      const records = wx.getStorageSync(RECORDS_KEY) || [];
+      const records = recordStorage.get(wx, RECORDS_KEY) || [];
       // 按 taskId 去重：同一任务（如从记录页「查看」再次打开旧 taskSnapshot）只保留首次写入的记录，
       // 命中已存在记录时直接跳过（不新增、不挪动位置），避免列表出现同组重复记录。
       // 去重口径：优先比对 r.taskSnapshot.taskId，兼容历史可能存在的 r.taskId 直存形态；
@@ -1098,7 +1099,7 @@ Page({
         sourceImages
       });
       if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
-      wx.setStorageSync(RECORDS_KEY, records);
+      recordStorage.set(wx, RECORDS_KEY, records);
     } catch (err) {
       console.error('保存记录失败:', err);
     }

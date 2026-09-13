@@ -135,7 +135,7 @@ test('fingerprint tracks source, ratio, order and badge version but ignores expo
   assert.notEqual(manifest.manifestFingerprint(base), manifest.manifestFingerprint(moved));
 
   const changedStyle = plain(base);
-  changedStyle.badgeStyleVersion = 2;
+  changedStyle.badgeStyleVersion = base.badgeStyleVersion + 1;
   assert.notEqual(manifest.manifestFingerprint(base), manifest.manifestFingerprint(changedStyle));
 });
 

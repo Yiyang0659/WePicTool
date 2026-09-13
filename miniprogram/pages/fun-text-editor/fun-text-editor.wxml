@@ -6,16 +6,17 @@
     <view class="history-action {{canRedo ? '' : 'history-action-disabled'}}" bindtap="onRedo">重做 ↷</view>
   </view>
 
-  <view class="editor-stage" wx:if="{{!handwritingVisible}}">
+  <view class="editor-stage {{cardSlideClass}}" wx:if="{{!handwritingVisible && !imageViewerVisible}}" bindtouchstart="onStageTouchStart" bindtouchend="onStageTouchEnd" bindtouchcancel="onStageTouchCancel">
     <!-- Native canvases must be unmounted while the ordinary-view progress dialog is visible. -->
     <fun-live-preview class="local-editor-preview" wx:if="{{localEditorEnabled && currentScene && !editingTextModalVisible && !exportProgress.visible}}"
       scene="{{currentScene}}" project-id="{{project.projectId}}" candidate-id="{{selectedCandidate.candidateId}}"
       drawing="{{drawingMode && activeEditorTab === 'decoration'}}" brush-key="{{brushKey}}" color-key="{{inkColor}}" pen-width="{{penWidth}}"
       bindinkchange="onInkChange" bindinklimit="onInkLimit"
-      bindgeometry="onPreviewGeometry" bindtap="onPreviewTap" />
+      bindgeometry="onPreviewGeometry" bindtap="onPreviewTap" bindbrowsestart="onStageTouchStart" bindbrowseend="onStageTouchEnd" bindbrowsecancel="onStageTouchCancel" />
     <image
       wx:elif="{{currentFallbackImage && !editingTextModalVisible}}"
       class="editor-stage-fallback"
+      bindtap="onPreviewTap"
       src="{{currentFallbackImage}}"
       mode="aspectFit"
     />
@@ -26,6 +27,7 @@
       revision="{{canvasRevision}}"
       bindfontunavailable="onFontUnavailable"
       bindrendererror="onFontUnavailable"
+      bindtap="onPreviewTap"
     />
     <view wx:if="{{serverPreviewLoading && !currentFallbackImage && !editingTextModalVisible}}" class="editor-preview-status">
       <view class="editor-preview-status-title">正在恢复手写预览…</view>
@@ -50,7 +52,7 @@
         catchtouchcancel="onDecorationTouchEnd"
       >{{item.label}}</view>
     </view>
-    <view wx:if="{{activeEditorTab === 'decoration'}}" class="ink-sticker-overlay">
+    <view wx:if="{{(activeEditorTab === 'decoration' || activeEditorTab === 'content') && !editingTextModalVisible && !exportProgress.visible}}" class="ink-sticker-overlay">
       <view wx:for="{{currentScene.inkStickers}}" wx:key="id" data-id="{{item.id}}"
         class="ink-sticker-handle {{selectedInkId === item.id ? 'ink-sticker-selected' : ''}}"
         style="left:{{item.x / 10.8}}%;top:{{item.y / 10.8}}%;width:{{item.scale * 100}}%;height:{{item.scale * 100}}%;transform:translate(-50%,-50%) rotate({{item.rotation}}deg);"
@@ -65,27 +67,21 @@
   <view class="editor-section cards-section">
     <view class="section-header compact-header">
       <text class="section-title">卡片顺序</text>
-      <text class="section-hint">拖动排序，首张是微信封面</text>
+      <text class="section-hint">左右滑动查看，首张是微信封面</text>
+      <button wx:if="{{localEditorEnabled}}" class="add-blank-card" disabled="{{scenes.length >= 8 || editorExportBusy}}" bindtap="onAddBlankCard">＋空白卡</button>
     </view>
+    <view wx:if="{{scenes.length >= 8}}" class="section-hint">已达8张上限，删除一张后可添加新卡</view>
     <scroll-view class="cards-scroll" scroll-x="true">
-      <movable-area class="cards-movable-area" style="width: {{sortAreaWidth}}px; height: {{sortItemWidth}}px;">
-        <movable-view
+      <view class="cards-movable-area" style="width: {{sortAreaWidth}}px; height: {{sortItemWidth * 4 / 3 + 6}}px;">
+        <view
           wx:for="{{sortItems}}"
           wx:key="sceneId"
           class="card-thumb-movable"
-          style="width: {{sortItemWidth}}px; height: {{sortItemWidth}}px;"
-          direction="horizontal"
-          x="{{item.positionX}}"
-          y="{{0}}"
-          animation="{{index !== draggingIndex}}"
-          data-index="{{index}}"
-          bindtouchstart="onSortStart"
-          bindchange="onSortMove"
-          bindtouchend="onSortEnd"
+          style="width: {{sortItemWidth}}px; transform: translateX({{item.x}}px);"
         >
           <view
             class="card-thumb-item {{item.previewPatternClass}} {{index === currentCardIndex ? 'thumb-active' : ''}} {{index === draggingIndex ? 'thumb-dragging' : ''}} {{item.isDropTarget ? 'thumb-drop-target' : ''}}"
-            style="background-color: {{item.previewBackground}};"
+            style="background-color: {{item.previewBackground}}; height: {{sortItemWidth}}px;"
             data-index="{{index}}"
             bindtap="onSelectCard"
           >
@@ -93,8 +89,13 @@
             <view class="thumb-decorations" style="color: {{item.previewDecorationColor}};">{{item.previewDecorations}}</view>
             <view class="thumb-text" style="color: {{item.previewTextColor}};">{{item.previewText}}</view>
           </view>
-        </movable-view>
-      </movable-area>
+          <view class="card-order-actions">
+            <button disabled="{{index === 0 || editorExportBusy}}" data-index="{{index}}" data-delta="-1" catchtap="onMoveCard" aria-label="前移">←</button>
+            <button disabled="{{index === sortItems.length - 1 || editorExportBusy}}" data-index="{{index}}" data-delta="1" catchtap="onMoveCard" aria-label="后移">→</button>
+            <button class="card-delete" disabled="{{sortItems.length <= 1 || editorExportBusy}}" data-index="{{index}}" catchtap="onDeleteCard" aria-label="删除">删</button>
+          </view>
+        </view>
+      </view>
     </scroll-view>
   </view>
 
@@ -114,8 +115,29 @@
       <text class="section-hint">只修改当前卡</text>
     </view>
     <view class="edit-text-row" bindtap="onEditText">
-      <view class="edit-text-preview">{{currentText ? currentText : '（纯涂鸦卡，点此添加文字）'}}</view>
+      <view class="edit-text-preview">{{currentText ? currentText : '（点击添加文字）'}}</view>
       <view class="edit-text-action">改文字</view>
+    </view>
+    <view wx:if="{{localEditorEnabled}}" class="handwriting-card content-handwriting">
+      <view class="handwriting-heading">
+        <view class="pen-tile"><view class="pen-icon"></view></view>
+        <view class="handwriting-intro"><view class="handwriting-title">自由手写 <text class="help-icon" bindtap="onHandwritingHelp">?</text></view><text class="handwriting-subtitle">加到当前卡，或配背景做成新卡</text></view>
+        <button class="handwriting-start" hover-class="button-pressed" disabled="{{editorExportBusy}}" bindtap="onStartHandwriting">开始手写 →</button>
+      </view>
+      <view class="draft-library">
+        <view class="draft-heading"><text class="draft-title">◷ 最近本机草稿</text><view class="draft-actions"><text>仅保存在本机</text><text class="draft-clear" bindtap="onClearHandwritingDrafts">清空</text></view></view>
+        <scroll-view scroll-x="true" enable-flex class="draft-scroll">
+          <view class="draft-row">
+            <view class="draft-tile draft-new" hover-class="button-pressed" bindtap="onStartHandwriting"><text class="draft-plus">＋</text><text>新建手写</text></view>
+            <view wx:for="{{handwritingDrafts}}" wx:key="id" class="draft-tile" data-id="{{item.id}}" bindtap="onStartHandwriting" bindlongpress="onDeleteHandwritingDraft" hover-class="button-pressed">
+              <view class="draft-image"><fun-live-preview wx:if="{{!handwritingVisible && !exportProgress.visible}}" local-only="{{true}}" scene="{{item.scene}}" /></view><text class="draft-date">{{item.timeLabel}}</text>
+            </view>
+            <view wx:if="{{!handwritingDrafts.length}}" class="draft-empty">你的手写作品会显示在这里<text>点击新建，写下第一笔</text></view>
+          </view>
+        </scroll-view>
+      </view>
+      <view wx:if="{{selectedInkId}}" class="ink-options"><button bindtap="onEditInkSticker">继续编辑手写</button><button bindtap="onDeleteInkSticker">删除此手写</button></view>
+      <view wx:if="{{handwritingStatus && !handwritingVisible}}" class="handwriting-save-status">{{handwritingStatus}}</view>
     </view>
     <view class="control-label">字号</view>
     <view class="size-options">
@@ -134,13 +156,17 @@
       <view class="scope-option {{editScope === 'card' ? 'scope-option-active' : ''}}" data-scope="card" bindtap="onSetEditScope">仅当前卡</view>
       <view class="scope-option {{editScope === 'stack' ? 'scope-option-active' : ''}}" data-scope="stack" bindtap="onSetEditScope">应用到整组</view>
     </view>
-    <view class="control-label">整组风格</view>
+    <view wx:if="{{localEditorEnabled}}" class="solid-background-control">
+      <view class="control-label">纯色背景</view>
+      <view class="background-swatches"><button wx:for="{{backgroundColors}}" wx:key="*this" data-color="{{item}}" bindtap="onSelectSolidBackground" aria-label="{{'背景色 ' + item}}" class="background-swatch {{currentScene.background.assetKey === 'solid' && currentScene.background.color === item ? 'background-selected' : ''}}" style="background-color:{{item}};"></button></view>
+    </view>
+    <view class="control-label">风格</view>
     <scroll-view class="horizontal-controls" scroll-x enable-flex>
       <view class="style-packs-row">
         <view
           wx:for="{{stylePacks}}"
           wx:key="id"
-          class="style-pack-chip {{item.id === selectedCandidate.stylePackId ? 'style-chip-active' : ''}}"
+          class="style-pack-chip {{item.id === currentScene.stylePackId ? 'style-chip-active' : ''}}"
           data-style-pack-id="{{item.id}}"
           bindtap="onSelectStylePack"
         >
@@ -148,7 +174,7 @@
             <text>字</text><view class="style-preview-accent" style="background: {{item.accentColor}};"></view>
           </view>
           <text class="style-name">{{item.name}}</text>
-          <text wx:if="{{item.id === selectedCandidate.stylePackId}}" class="choice-status">当前</text>
+          <text wx:if="{{item.id === currentScene.stylePackId}}" class="choice-status">当前</text>
         </view>
       </view>
     </scroll-view>
@@ -171,27 +197,6 @@
         <view class="font-name">{{item.name}}</view><view class="font-desc">{{item.description}}</view>
       </view>
     </view>
-  </view>
-
-  <view wx:if="{{activeEditorTab === 'decoration' && localEditorEnabled}}" class="editor-panel handwriting-card">
-    <view class="handwriting-heading">
-      <view class="pen-tile"><view class="pen-icon"></view></view>
-      <view class="handwriting-intro"><view class="handwriting-title">自由手写 <text class="help-icon" bindtap="onHandwritingHelp">?</text></view><text class="handwriting-subtitle">在画布上手写文字、涂鸦，生成贴纸</text></view>
-      <button class="handwriting-start" hover-class="button-pressed" bindtap="onStartHandwriting">开始手写 →</button>
-    </view>
-    <view class="draft-library">
-      <view class="draft-heading"><text class="draft-title">◷ 最近本机草稿</text><view class="draft-actions"><text>仅保存在本机</text><text class="draft-clear" bindtap="onClearHandwritingDrafts">清空</text></view></view>
-      <scroll-view scroll-x="true" enable-flex class="draft-scroll">
-        <view class="draft-row">
-          <view class="draft-tile draft-new" hover-class="button-pressed" bindtap="onStartHandwriting"><text class="draft-plus">＋</text><text>新建手写</text></view>
-          <view wx:for="{{handwritingDrafts}}" wx:key="id" class="draft-tile" data-id="{{item.id}}" bindtap="onStartHandwriting" bindlongpress="onDeleteHandwritingDraft" hover-class="button-pressed">
-            <view class="draft-image"><fun-live-preview wx:if="{{!handwritingVisible && !exportProgress.visible}}" local-only="{{true}}" scene="{{item.scene}}" /></view><text class="draft-date">{{item.timeLabel}}</text>
-          </view>
-          <view wx:if="{{!handwritingDrafts.length}}" class="draft-empty">你的手写作品会显示在这里<text>点击新建，写下第一笔</text></view>
-        </view>
-      </scroll-view>
-    </view>
-    <view wx:if="{{handwritingStatus && !handwritingVisible}}" class="handwriting-save-status">{{handwritingStatus}}</view>
   </view>
 
   <view wx:if="{{activeEditorTab === 'decoration'}}" class="editor-panel stickers-card">
@@ -271,15 +276,15 @@
   <canvas type="2d" id="editorExportCanvas" class="editor-export-canvas" />
 
   <view wx:if="{{exportProgress.visible}}" class="export-progress-mask" catchtouchmove="onExportMaskTouch" catchtap="onExportMaskTouch">
-    <view class="export-progress-dialog" role="alert" aria-label="{{exportProgress.stage === 'saving' ? '正在保存图片' : '正在审核并准备图片'}}">
+    <view class="export-progress-dialog" role="alert" aria-label="{{exportProgress.stage === 'preview' ? '正在本机准备预览' : exportProgress.stage === 'saving' ? '正在保存图片' : '正在审核并准备图片'}}">
       <view class="export-progress-icon"><view class="export-progress-ring"></view><text>{{exportProgress.stage === 'saving' ? '↓' : '✦'}}</text></view>
-      <view class="export-progress-title">{{exportProgress.stage === 'audit' ? '正在审核并生成' : exportProgress.stage === 'preparing' ? '正在准备图片' : '正在保存第 ' + exportProgress.current + ' / ' + exportProgress.total + ' 张'}}</view>
-      <view class="export-progress-subtitle">{{exportProgress.stage === 'audit' ? '正在检查内容并生成高清图片' : exportProgress.stage === 'preparing' ? '审核已通过，正在整理高清图片' : '审核已通过，正在保存到相册'}}</view>
+      <view class="export-progress-title">{{exportProgress.stage === 'preview' ? '正在准备微信预览' : exportProgress.stage === 'audit' ? '正在审核并生成' : exportProgress.stage === 'preparing' ? '正在准备图片' : '正在保存第 ' + exportProgress.current + ' / ' + exportProgress.total + ' 张'}}</view>
+      <view class="export-progress-subtitle">{{exportProgress.stage === 'preview' ? '仅在本机生成，保存时才提交审核' : exportProgress.stage === 'audit' ? '正在检查内容并生成高清图片' : exportProgress.stage === 'preparing' ? '审核已通过，正在整理高清图片' : '审核已通过，正在保存到相册'}}</view>
       <view class="export-progress-track">
         <view wx:if="{{exportProgress.stage === 'saving'}}" class="export-progress-fill" style="width:{{exportProgress.percent}}%;"></view>
         <view wx:else class="export-progress-indeterminate"></view>
       </view>
-      <view class="export-progress-steps">
+      <view wx:if="{{exportProgress.stage !== 'preview'}}" class="export-progress-steps">
         <view class="export-progress-step {{exportProgress.stage === 'audit' ? 'export-step-active' : 'export-step-done'}}"><view class="export-step-dot">{{exportProgress.stage === 'audit' ? '' : '✓'}}</view><text>审核与成图</text></view>
         <view class="export-step-line"></view>
         <view class="export-progress-step {{exportProgress.stage === 'preparing' ? 'export-step-active' : exportProgress.stage === 'saving' ? 'export-step-done' : ''}}"><view class="export-step-dot">{{exportProgress.stage === 'saving' ? '✓' : ''}}</view><text>准备图片</text></view>
@@ -296,6 +301,12 @@
       <view class="handwriting-canvas"><fun-live-preview wx:if="{{!exportProgress.visible}}" local-only="{{true}}" scene="{{handwritingScene}}" drawing="{{true}}" pan-mode="{{handwritingPanMode}}" brush-key="{{brushKey}}" color-key="{{inkColor}}" pen-width="{{penWidth}}" bindinkchange="onHandwritingChange" bindviewportchange="onHandwritingViewport" bindinklimit="onInkLimit" /></view>
       <scroll-view scroll-y="true" class="handwriting-tools-scroll">
       <view class="handwriting-toolbar">
+        <view wx:if="{{!handwritingEditing}}" class="ink-options"><button data-purpose="sticker" bindtap="onHandwritingPurpose" class="{{handwritingPurpose === 'sticker' ? 'ink-selected' : ''}}">加到当前卡</button><button data-purpose="card" bindtap="onHandwritingPurpose" class="{{handwritingPurpose === 'card' ? 'ink-selected' : ''}}">做成新卡</button></view>
+        <view class="handwriting-save-status">{{handwritingEditing ? '更新当前选中的手写' : handwritingPurpose === 'card' ? '完整笔迹缩放放入新卡，原卡保留' : '透明笔迹添加到第 ' + (currentCardIndex + 1) + ' 张卡，不改变背景'}}</view>
+        <view wx:if="{{handwritingPurpose === 'card'}}">
+          <view class="control-label">新卡背景</view>
+          <view class="background-swatches"><button wx:for="{{backgroundColors}}" wx:key="*this" data-color="{{item}}" bindtap="onHandwritingBackground" aria-label="{{'背景色 ' + item}}" class="background-swatch {{handwritingBackground === item ? 'background-selected' : ''}}" style="background-color:{{item}};"></button></view>
+        </view>
         <view class="ink-options"><button data-mode="draw" bindtap="onHandwritingMode" class="{{!handwritingPanMode ? 'ink-selected' : ''}}">写画</button><button data-mode="pan" bindtap="onHandwritingMode" class="{{handwritingPanMode ? 'ink-selected' : ''}}">移动画布</button></view>
         <view class="handwriting-save-status">{{handwritingPanMode ? '拖动纸面查看其他位置；切回写画继续落笔' : '单指写画；需要更多空间时切换移动画布'}} · 保存完整作品</view>
         <view class="ink-options"><button disabled="{{!handwritingCanUndo}}" bindtap="onHandwritingUndo">↶ 撤销</button><button disabled="{{!handwritingCanRedo}}" bindtap="onHandwritingRedo">重做 ↷</button></view>
@@ -303,8 +314,9 @@
         <view class="handwriting-save-status">{{brushKey === 'eraser' ? '橡皮大小' : '笔画粗细'}} · 左右滑动选择</view>
         <scroll-view scroll-x="true" class="ink-width-scroll"><view class="ink-width-row"><button wx:for="{{inkWidths}}" wx:key="*this" data-width="{{item}}" bindtap="onInkWidth" class="{{penWidth === item ? 'ink-selected' : ''}}">{{item}}</button></view></scroll-view>
         <view class="ink-options"><view wx:for="{{inkColors}}" wx:key="key" data-key="{{item.key}}" bindtap="onInkColor" class="ink-color {{inkColor === item.key ? 'ink-selected' : ''}}" style="background:{{item.color}};"></view></view>
-        <view class="handwriting-save-status">{{handwritingStatus || '笔迹仅在本机编辑，完成后统一审核成图'}}</view>
-        <view class="ink-options"><button bindtap="onSaveHandwriting">保存草稿</button><button class="handwriting-start" bindtap="onAddHandwritingSticker">作为贴纸添加 →</button></view>
+        <view class="handwriting-save-status">{{handwritingStatus || '笔迹在本机编辑，仅保存到相册时审核'}}</view>
+        <view wx:if="{{handwritingPurpose === 'card' && scenes.length >= 8}}" class="handwriting-save-status">已达8张上限，可先保存草稿，删除一张后再添加</view>
+        <view class="ink-options"><button bindtap="onSaveHandwriting">保存草稿</button><button class="handwriting-start" disabled="{{handwritingPurpose === 'card' && scenes.length >= 8}}" bindtap="onAddHandwritingSticker">{{handwritingEditing ? '更新此手写' : handwritingPurpose === 'card' ? '添加为新卡 →' : '添加到当前卡 →'}}</button></view>
       </view>
       </scroll-view>
     </view>
@@ -323,4 +335,11 @@
       </view>
     </view>
   </view>
+</view>
+<view wx:if="{{imageViewerVisible}}" class="editor-image-viewer" catchtouchmove="onExportMaskTouch">
+  <view class="editor-viewer-header"><text bindtap="onCloseImageViewer">‹ 返回</text><text>{{currentCardIndex + 1}} / {{scenes.length}}</text><text bindtap="onCloseImageViewer">关闭</text></view>
+  <view wx:if="{{imageViewerLoading || imageViewerError}}" class="editor-viewer-state">{{imageViewerError || '正在准备预览…'}}</view>
+  <swiper wx:else class="editor-viewer-swiper" current="{{currentCardIndex}}" duration="250" bindchange="onImageViewerChange">
+    <swiper-item wx:for="{{imageViewerCards}}" wx:key="sceneId"><image class="editor-viewer-image" src="{{item.url}}" mode="aspectFit" show-menu-by-longpress="{{false}}" /></swiper-item>
+  </swiper>
 </view>

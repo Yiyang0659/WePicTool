@@ -294,6 +294,21 @@ page {
   vertical-align: top;
 }
 
+.group-add {
+  height: 184rpx;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2rpx dashed #6670f6;
+  border-radius: 20rpx;
+  background: #f7f8fc;
+  color: #6670f6;
+  font-size: 24rpx;
+}
+
 .material-image-wrap {
   position: relative;
   width: 184rpx;

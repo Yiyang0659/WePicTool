@@ -3,7 +3,7 @@
     <view class="purpose-card">
       <view class="purpose-badge">AI 添加方式</view>
       <view class="purpose-title">把混在一起的图片交给 AI</view>
-      <view class="purpose-desc">自动分类、去背并统一白底。整理结果确认后才会加入穿搭叠图，不会覆盖已有素材。</view>
+      <view class="purpose-desc">自动分类、提取衣物并统一大小，完成后直接加入工作台。AI 会尽量保留原款式，侧拍或遮挡的细节可能不同，请检查成图。</view>
     </view>
 
     <view class="section-head">
@@ -74,10 +74,29 @@
 
   <view class="loading-overlay" wx:if="{{loading}}">
     <view class="loading-box">
-      <view class="spinner"></view>
+      <view class="spinner" wx:if="{{!batchFinished}}"></view>
       <view class="loading-title">{{loadingText}}</view>
-      <view class="loading-desc">可以取消，本批图片不会影响工作台已有素材</view>
-      <view class="loading-cancel" bindtap="onCancelProcess">取消处理</view>
+      <block wx:if="{{progressTotal > 0}}">
+        <view class="progress-count">已完成 {{progressDone}} / {{progressTotal}}</view>
+        <view class="loading-desc" wx:if="{{progressFailed > 0}}">失败 {{progressFailed}} 张（不计入完成数）</view>
+        <view class="progress-track"><view class="progress-fill" style="width: {{progressPercent}}%;"></view></view>
+        <view class="loading-desc">{{progressActive}} · 已等待 {{elapsedSeconds}} 秒</view>
+        <scroll-view class="progress-list" scroll-y="true">
+          <view class="progress-row" wx:for="{{progressRows}}" wx:key="index">
+            <image class="progress-thumb" src="{{item.src}}" mode="aspectFill" />
+            <view class="progress-detail">
+              <view class="progress-state state-{{item.status}}">第 {{item.index + 1}} 张 · {{item.label}}</view>
+              <view class="progress-error" wx:if="{{item.error}}">{{item.error}}</view>
+            </view>
+          </view>
+        </scroll-view>
+      </block>
+      <view class="loading-desc">结果仅保留在当前页面；取消或离开后，已发出的 AI 请求可能仍继续处理。</view>
+      <block wx:if="{{batchFinished}}">
+        <view class="primary-button" wx:if="{{canRetry}}" bindtap="onRetryFailed">只重试失败图片</view>
+        <view class="secondary-button" wx:if="{{progressDone > 0}}" bindtap="onImportCompleted">仅加入成功的 {{progressDone}} 张</view>
+      </block>
+      <view class="loading-cancel" bindtap="onCancelProcess">{{batchFinished ? '返回选图（放弃本次结果）' : '取消处理'}}</view>
     </view>
   </view>
 </view>

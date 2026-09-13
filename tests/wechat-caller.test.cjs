@@ -4,6 +4,30 @@ const { createWechatCaller } = require('../miniprogram/cloudhosting/fun-card-ren
 const { createHttpServer } = require('../miniprogram/cloudhosting/fun-card-renderer/server');
 const client = require('../miniprogram/utils/funCardRendererClient');
 const credentials = { appId: 'wx1234567890abcdef', appSecret: 'test-secret' };
+test('auth response distinguishes rejection from unavailable and retains safe request metadata', async () => {
+  for (const code of ['CALLER_UNAUTHORIZED','CALLER_AUTH_UNAVAILABLE']) {
+    await assert.rejects(client.requestRenderStack({login:o=>o.success({code:'private-login-code'}),
+      cloud:{callContainer:o=>o.success({statusCode:code==='CALLER_UNAUTHORIZED'?403:503,
+        requestId:'safe-request-id',data:{code,secret:'never-log'}})}}, {},
+      {serviceName:'renderer',cloudEnvId:'test'}),error=>{
+        assert.equal(error.code,code);assert.equal(error.requestId,'safe-request-id');
+        assert.equal(error.requestPath,'/render-stack');
+        assert.match(error.message,code==='CALLER_UNAUTHORIZED'?/凭证校验失败/:/连接微信验证失败/);
+        assert.ok(!JSON.stringify(error).includes('private-login-code'));return true;
+      });
+  }
+});
+test('upstream network and HTTP failures report only safe diagnostic codes',async()=>{
+  for (const mode of ['network','http']) {
+    const logs=[];
+    const verify=createWechatCaller({...credentials,onError:event=>logs.push(event),fetch:async()=>{
+      if(mode==='network')throw Error('https://private-secret');
+      return {ok:false};
+    }});
+    assert.equal((await verify('code')).code,'CALLER_AUTH_UNAVAILABLE');
+    assert.deepEqual(logs,[{code:mode==='network'?'WECHAT_LOGIN_CONNECTION_OR_RESPONSE_ERROR':'WECHAT_LOGIN_HTTP_ERROR'}]);
+  }
+});
 test('client login failure and missing code never invoke renderer', async () => {
   for (const login of [opts => opts.fail({ errMsg: 'private' }), opts => opts.success({})]) {
     let calls = 0;

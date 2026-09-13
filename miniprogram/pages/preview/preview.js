@@ -12,13 +12,17 @@ var resolveSwipeDecision = previewLayout.resolveSwipeDecision;
 var buildStackPositionStyle = previewLayout.buildStackPositionStyle;
 var buildStackMotionStyles = previewLayout.buildStackMotionStyles;
 var stackExportManifest = require('../../utils/stackExportManifest');
+var funModel = require('../../utils/funTextProject');
+var rendererClient = require('../../utils/funCardRendererClient');
+var badgeComposer = require('../../utils/sequenceBadgeComposer');
+var imageExporter = require('../../utils/imageExporter');
 
 var GROUP_ORDER = ['tops', 'bottoms', 'shoes', 'others'];
 var RATIO_CLASS = { '1:1': 'ar11', '4:5': 'ar45', '3:4': 'ar34' };
 var POS_CLASSES = ['pos-front', 'pos-g1', 'pos-g2'];
 var THEME_STORAGE_KEY = 'wepic_preview_theme';
 var GUIDE_STORAGE_KEY = 'wepic_preview_gesture_seen';
-// 位置轮转（固定节点只换位置 class，内容永不变更）
+// 三个显示节点复用位置，并按完整卡片列表更新图片。
 // 左滑：front→g2、g1→front、g2→g1；右滑反向取回
 var ROTATE_LEFT = { 'pos-front': 'pos-g2', 'pos-g1': 'pos-front', 'pos-g2': 'pos-g1' };
 var ROTATE_RIGHT = { 'pos-front': 'pos-g1', 'pos-g1': 'pos-g2', 'pos-g2': 'pos-front' };
@@ -55,6 +59,7 @@ Page({
     themeToggleLabel: '切换到深色模式',
     guideVisible: false,
     viewer: { show: false, url: '' }
+    ,canSaveCurrent: false, saveStatus: '', saveBusy: false, saveDone: false, selectedPreviewNum:''
   },
 
   _cardW: 143,              // 375px 标定约占屏宽 38%；每组仍以自身舞台宽度为手势阈值
@@ -91,12 +96,14 @@ Page({
     var eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
     if (eventChannel && typeof eventChannel.on === 'function') {
       eventChannel.on('acceptTaskData', function (data) {
+        that._previewOnly = !!(data && data.previewOnly);
         that._acceptInput(data);
       });
     }
   },
 
   onUnload: function () {
+    this._saveUnloaded = true;
     var timers = this._collapseTimers || {};
     Object.keys(timers).forEach(function (k) { clearTimeout(timers[k]); });
     if (this._guideTimer) clearTimeout(this._guideTimer);
@@ -121,7 +128,6 @@ Page({
       ? Math.max(44, (menuTop - statusBarHeight) * 2 + menuHeight)
       : 44;
     var navHeight = statusBarHeight + navRowHeight;
-    var capsuleRightInset = validMenu ? Math.max(7, width - Number(menu.left)) : 88;
     var toggleHeight = Math.min(32, menuHeight);
     var toggleTop = menuTop + Math.max(0, (menuHeight - toggleHeight) / 2);
 
@@ -130,7 +136,7 @@ Page({
       viewportStyle: 'height: 100%;',
       navStyle: 'height: ' + navHeight + 'px; padding-top: ' + statusBarHeight + 'px;',
       navRowStyle: 'height: ' + navRowHeight + 'px;',
-      themeToggleStyle: 'right: ' + (capsuleRightInset + 8) + 'px; top: ' + toggleTop + 'px; height: ' + toggleHeight + 'px;'
+      themeToggleStyle: 'left: 52px; top: ' + toggleTop + 'px; height: ' + toggleHeight + 'px;'
     });
   },
 
@@ -190,6 +196,11 @@ Page({
   // 新调用方只传 materialized manifest；task/groups 保留一个兼容周期。
   _acceptInput: function (data) {
     if (!data) return;
+    this._funProject = data.funProject ? JSON.parse(JSON.stringify(data.funProject)) : null;
+    this._saveManifest = null;
+    this._sourceManifest = data.manifest;
+    this._selectedPreviewUrl = '';
+    this.setData({canSaveCurrent: !!this._funProject});
     if (data.manifest) {
       this._acceptManifest(data.manifest, data.selectedStackIds, data.ratio);
       return;
@@ -314,11 +325,12 @@ Page({
       var nodeCount = Math.min(3, cards.length);
       var nodes = [];
       for (var k = 0; k < nodeCount; k++) {
+        var card = cards[cards.length > 3 && k === 2 ? cards.length - 1 : k];
         nodes.push({
-          url: cards[k].url,
-          num: cards[k].num,
+          url: card.url,
+          num: card.num,
           err: false,
-          cardStyle: cards[k].cardStyle,
+          cardStyle: card.cardStyle,
           pos: POS_CLASSES[k],
           motionStyle: '',
           incoming: false
@@ -336,6 +348,7 @@ Page({
         cards: cards,
         nodes: nodes,
         frontIdx: 0,
+        cardIndex: 0,
         dragging: false,
         settling: false,
         noanimIdx: -1,
@@ -577,16 +590,19 @@ Page({
       var map = dir < 0 ? ROTATE_LEFT : ROTATE_RIGHT;
       var two = cur.nodes.length === 2;
       var frontIdx = 0;
+      var cardIndex = ((cur.cardIndex || 0) + (dir < 0 ? 1 : -1) + cur.cards.length) % cur.cards.length;
       var nodes = cur.nodes.map(function (nd, i) {
         var pos = two
           ? (nd.pos === 'pos-front' ? 'pos-g1' : 'pos-front')
           : (map[nd.pos] || nd.pos);
         if (pos === 'pos-front') frontIdx = i;
+        var offset = pos === 'pos-front' ? 0 : (pos === 'pos-g1' ? 1 : -1);
+        var card = cur.cards[(cardIndex + offset + cur.cards.length) % cur.cards.length];
         return {
-          url: nd.url,
-          num: nd.num,
-          err: nd.err,
-          cardStyle: nd.cardStyle,
+          url: card.url,
+          num: card.num,
+          err: card.err,
+          cardStyle: card.cardStyle,
           pos: pos,
           motionStyle: i === cur.frontIdx ? buildStackPositionStyle(pos, 0) : '',
           incoming: false
@@ -597,6 +613,7 @@ Page({
       var u2 = {};
       u2['groupList[' + gi + '].nodes'] = nodes;
       u2['groupList[' + gi + '].frontIdx'] = frontIdx;
+      u2['groupList[' + gi + '].cardIndex'] = cardIndex;
       u2['groupList[' + gi + '].settling'] = false;
       u2['groupList[' + gi + '].noanimIdx'] = cur.frontIdx;
       that.setData(u2, function () {
@@ -624,6 +641,7 @@ Page({
       var orderedCards = orderCardsFromFront(g.cards, g.nodes, g.frontIdx);
       var u = {};
       u['groupList[' + gi + '].cards'] = orderedCards;
+      u['groupList[' + gi + '].cardIndex'] = 0;
       u['groupList[' + gi + '].rest'] = this._buildRest(orderedCards);
       u['groupList[' + gi + '].expanded'] = true;
       this.setData(u);
@@ -668,14 +686,57 @@ Page({
   },
 
   _openViewer: function (gi, url) {
+    this._selectedPreviewUrl = url;
     var g = this.data.groupList[gi];
+    var selected=g && g.cards.find(function(c){return c.url===url;});
+    this.setData({selectedPreviewNum:selected ? selected.num : ''});
     var urls = g && g.cards ? g.cards.map(function (card) { return card.url; }).filter(Boolean) : [url];
-    if (wx.previewImage) {
+    if (wx.previewImage && !this._previewOnly) {
       wx.previewImage({ current: url, urls: urls });
       return;
     }
     this.setData({ viewer: { show: true, url: url } });
   },
+
+  onSaveCurrentPreview: async function () {
+    if(this.data.saveBusy || !this._funProject)return;
+    var project=this._funProject, payload=funModel.buildRenderPayload(project);
+    var key=JSON.stringify(payload), that=this;
+    var current=function(){return !that._saveUnloaded && that._funProject===project;};
+    this.setData({saveBusy:true,saveDone:false,saveStatus:'正在审核图片'});
+    try {
+      var manifest=this._saveKey===key && this._saveManifest;
+      if(!manifest){
+        var result=await rendererClient.requestRenderStack(wx,payload);
+        if(!current())return;
+        this.setData({saveStatus:'审核通过，正在准备图片'});
+        var canvas=await new Promise(function(resolve,reject){wx.createSelectorQuery().select('#previewExportCanvas').fields({node:true,size:true}).exec(function(r){r&&r[0]&&r[0].node?resolve(r[0].node):reject(Error('画布未就绪，请重试'));});});
+        manifest=await badgeComposer.materializeManifest(wx,canvas,stackExportManifest.buildFunTextManifest(project,result.cards),{isCurrent:current});
+        if(!current())return;
+        this._saveKey=key;this._saveManifest=manifest;
+      }
+      var cards=manifest.stacks[0].cards;
+      if(!cards.length)throw Error('没有可保存的图片');
+      if(!current())return;
+      var startIndex=this._saveCursorKey===key ? this._saveCursor||0 : 0;
+      this._saveCursorKey=key;
+      try {
+        await imageExporter.saveImagesSequentially(wx,cards.map(function(c){return c.exportUrl;}),{
+          startIndex:startIndex,
+          onProgress:function(n,total){if(current())that.setData({saveStatus:'正在保存第 '+n+' / '+total+' 张图片'});},
+          onSaved:function(n,total){if(current())that.setData({saveStatus:'已保存 '+n+' / '+total+' 张图片'});},
+          resolvePath:async function(api,path){var local=await imageExporter.resolveImagePath(api,path);if(!current())throw Error('保存已取消');return local;}
+        });
+        this._saveCursor=0;
+      }catch(saveError){this._saveCursor=saveError.nextIndex||0;throw saveError;}
+      if(current())this.setData({saveDone:true,saveStatus:'已保存全部 '+cards.length+' 张图片到相册'});
+    }catch(error){
+      if(current())this.setData({saveDone:false,saveStatus:error.code==='AUTH_DENIED'?'需要相册权限，请在小程序设置中允许后重试':(error.message||'保存失败，请重试')});
+    }finally{if(current())this.setData({saveBusy:false});}
+  },
+  onDismissSave: function(){if(!this.data.saveBusy)this.setData({saveStatus:''});},
+  onGoWechat: function(){if(this.data.saveDone && !this.data.saveBusy)require('../../utils/wechatSendGuide').goToWechat(wx);},
+  onSaveMaskTouch:function(){},
 
   onCloseViewer: function () {
     this.setData({ viewer: { show: false, url: '' } });
@@ -701,6 +762,7 @@ Page({
   },
 
   _openActions: function (gi, singleUrl) {
+    if(this._previewOnly){wx.showToast({title:'请返回编辑或结果页，审核后保存',icon:'none'});return;}
     var that = this;
     var g = this.data.groupList[gi];
     if (!g) return;
@@ -733,13 +795,14 @@ Page({
 
   // ============ 保存到相册（与 result.js 同一实现口径）============
   _saveImagesSequentially: function (urls, successTitle) {
+    if(this._previewOnly)return;
     var that = this;
     if (!urls || urls.length === 0) return;
     wx.showLoading({ title: '正在保存 1/' + urls.length + ' 张...', mask: true });
     var saveNext = function (index) {
       if (index >= urls.length) {
         wx.hideLoading();
-        wx.showToast({ title: successTitle || '保存完成', icon: 'success', duration: 2000 });
+        require('../../utils/wechatSendGuide').goToWechat(wx);
         return;
       }
       wx.showLoading({ title: '正在保存 ' + (index + 1) + '/' + urls.length + ' 张...', mask: true });

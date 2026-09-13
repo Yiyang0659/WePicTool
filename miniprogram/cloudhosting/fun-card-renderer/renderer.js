@@ -121,7 +121,7 @@ function createSceneRenderer(dependencies) {
         const buffer = await deps.makePng(scene, job.size);
         if (!Buffer.isBuffer(buffer)) throw new Error('PNG renderer returned no buffer');
         if (scene.strokes && scene.strokes.length) {
-          const audit=typeof deps.checkImage==='function' ? await deps.checkImage(buffer) : null;
+          const audit=typeof deps.checkImage==='function' ? await deps.checkImage(buffer, { traceId: job.traceId }) : null;
           if(!audit || audit.ok!==true) {
             const error=new Error('image audit blocked');
             error.code=audit && audit.code==='CONTENT_UNSAFE' ? 'CONTENT_UNSAFE' : 'IMAGE_SAFETY_UNAVAILABLE';

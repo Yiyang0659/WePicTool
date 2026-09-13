@@ -36,7 +36,7 @@ function responseRid(response, body) {
 }
 
 function contentHash(content) {
-  return typeof content === 'string'
+  return typeof content === 'string' || Buffer.isBuffer(content)
     ? createHash('sha256').update(content, 'utf8').digest('hex')
     : null;
 }
@@ -173,6 +173,7 @@ function createWechatSafety(options) {
           auditMeta('/wxa/msg_sec_check', null, null, context, content),
           error.meta || {}
         );
+        meta.traceId = safeId(context.traceId);
         try {
           options.onError(Object.assign({ code }, meta));
         } catch (_) { /* Logging must not change the audit result. */ }
@@ -182,39 +183,48 @@ function createWechatSafety(options) {
       clearTimeout(timer);
     }
   };
-  checkContent.checkImage = async function (buffer) {
+  checkContent.checkImage = async function (buffer, context = {}) {
     const unavailable = {ok:false,code:'IMAGE_SAFETY_UNAVAILABLE'};
     if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > 1024*1024) return unavailable;
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),timeoutMs);
     try {
       for(let attempt=0;attempt<2;attempt++) {
-        const accessToken=await token();
-        if(controller.signal.aborted) return unavailable;
+        const accessToken=await token(context.traceId);
+        if(controller.signal.aborted) throw safeError('WECHAT_TIMEOUT');
         const form=new FormData();form.append('media',new Blob([buffer],{type:'image/png'}),'image.png');
         const response=await fetchImpl(IMAGE_CHECK_URL+'?access_token='+encodeURIComponent(accessToken),
           {method:'POST',body:form,redirect:'error',signal:controller.signal});
         const httpStatus = Number.isInteger(response.status) ? response.status : (response.ok ? 200 : null);
+        let result;
+        try { result = await response.json(); } catch (_) { result = null; }
+        const meta = auditMeta('/wxa/img_sec_check', { httpStatus, rid: responseRid(response, result) }, result, context, buffer);
         if(!response.ok) {
-          if (typeof options.onError === 'function') {
-            try { options.onError({ code: 'WECHAT_IMAGE_HTTP_ERROR', api: '/wxa/img_sec_check', errcode: null, errmsg: null, rid: safeId(responseHeader(response, 'x-request-id')), httpStatus, time: new Date().toISOString(), contentHash: null, traceId: null }); } catch (_) { /* Ignore diagnostics failures. */ }
-          }
-          return unavailable;
+          const error = safeError('WECHAT_IMAGE_HTTP_ERROR');
+          error.meta = meta;
+          throw error;
         }
-        const result=await response.json();
         if(result && INVALID_TOKEN_CODES.has(result.errcode) && attempt===0) {
           if(cached && cached.value===accessToken) cached=null;
           continue;
         }
         if(result && result.errcode===0) return {ok:true,code:'OK'};
         if(result && result.errcode===87014) return {ok:false,code:'CONTENT_UNSAFE'};
-        if (typeof options.onError === 'function') {
-          try { options.onError({ code: 'WECHAT_IMAGE_' + (Number.isInteger(result && result.errcode) ? result.errcode : 'INVALID_RESPONSE'), api: '/wxa/img_sec_check', errcode: Number.isInteger(result && result.errcode) ? result.errcode : null, errmsg: safeText(result && result.errmsg), rid: responseRid(response, result), httpStatus, time: new Date().toISOString(), contentHash: null, traceId: null }); } catch (_) { /* Ignore diagnostics failures. */ }
-        }
-        return unavailable;
+        const error = safeError('WECHAT_IMAGE_' + (Number.isInteger(result && result.errcode) ? result.errcode : 'INVALID_RESPONSE'));
+        error.meta = meta;
+        throw error;
       }
       return unavailable;
-    } catch(_) { return unavailable; }
+    } catch(error) {
+      const code = error && /^WECHAT_[A-Z0-9_-]+$/.test(error.code || '')
+        ? error.code : (controller.signal.aborted ? 'WECHAT_TIMEOUT' : 'WECHAT_REQUEST_FAILED');
+      const meta = Object.assign(auditMeta('/wxa/img_sec_check', null, null, context, buffer), error && error.meta || {});
+      meta.traceId = safeId(context.traceId);
+      if (typeof options.onError === 'function') {
+        try { options.onError({ code, ...meta }); } catch (_) { /* Ignore diagnostics failures. */ }
+      }
+      return unavailable;
+    }
     finally { clearTimeout(timer); }
   };
   return checkContent;

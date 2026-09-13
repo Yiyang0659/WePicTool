@@ -150,7 +150,9 @@ function validateScene(scene) {
   var errors = [];
   if (!scene || scene.width !== 1080 || scene.height !== 1080) errors.push('场景必须为 1080 方图');
   if (!scene || !scene.background || typeof scene.background.color !== 'string') errors.push('场景缺少背景');
-  if (scene && scene.background && !stylePacks.STYLE_PACKS.some(function (pack) {
+  var solid = scene && scene.background && scene.background.assetKey === 'solid';
+  if (solid && (!/^#[0-9a-f]{6}$/i.test(scene.background.color) || scene.backgroundVariantKey !== undefined)) errors.push('纯色背景不合法');
+  if (scene && scene.background && !solid && !stylePacks.STYLE_PACKS.some(function (pack) {
     return pack.backgroundVariants.some(function (variant) {
       return variant.assetKey === scene.background.assetKey;
     });
@@ -204,7 +206,7 @@ function validateScene(scene) {
   if (scenePack) {
     var variant = stylePacks.getBackgroundVariant(scenePack, scene.backgroundVariantKey);
     var palette = stylePacks.getPalette(scenePack, scene.paletteKey);
-    if (!variant || variant.assetKey !== scene.background.assetKey || variant.color !== scene.background.color) {
+    if (!solid && (!variant || variant.assetKey !== scene.background.assetKey || variant.color !== scene.background.color)) {
       errors.push('背景变体与视觉包不匹配');
     }
     if (!palette) {

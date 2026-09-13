@@ -28,6 +28,6 @@ test('late login cannot issue container request after timeout',async()=>{
 });
 test('failed result never claims success and offers retained editor',()=>{
   const wxml=fs.readFileSync('miniprogram/pages/template-result/template-result.wxml','utf8');
-  assert.match(wxml,/renderFailed \? '暂未生成成品'/);
+  assert.match(wxml,/renderFailed \? '暂未准备好预览'/);
   assert.match(wxml,/返回编辑，内容已保留/);
 });

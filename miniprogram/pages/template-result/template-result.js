@@ -1,51 +1,20 @@
 // pages/template-result/template-result.js
+const recordStorage = require('../../utils/recordStorage');
 // 趣味字画/通用模板结果页：高清云端渲染、微信牌堆全屏预演、顺序编号保存及四步发送引导。
 const funTextProject = require('../../utils/funTextProject');
+const localPreview = require('../../utils/funLocalPreview');
 const funCardRendererClient = require('../../utils/funCardRendererClient');
 const imageExporter = require('../../utils/imageExporter');
 const stackExportManifest = require('../../utils/stackExportManifest');
 const sequenceBadgeComposer = require('../../utils/sequenceBadgeComposer');
-const painter = require('../../utils/scenePainter');
 const funTextEnv = require('../../config/env');
 const { ENABLE_FUN_TEXT_STACK_ENTRY } = funTextEnv;
 
-const LOCAL_RENDER_FALLBACK_CODES = {
-  FUN_RENDERER_NOT_CONFIGURED: true,
-  NETWORK_ERROR: true
-};
 const RECORDS_KEY = 'wepictool_records';
 const MAX_RECORDS = 20;
 
-function usesLoopbackRenderer() {
-  const rendererUrl = funTextEnv && typeof funTextEnv.FUN_CARD_RENDERER_URL === 'string'
-    ? funTextEnv.FUN_CARD_RENDERER_URL.trim()
-    : '';
-  return /^http:\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:\/|$)/i.test(rendererUrl);
-}
-
-function canRenderLocally(error) {
-  if (!error || typeof error.code !== 'string') return false;
-  if (Object.prototype.hasOwnProperty.call(LOCAL_RENDER_FALLBACK_CODES, error.code)) return true;
-  // 当前真机开发配置使用回环地址标记本地模式。云托管尚未部署或路由异常时，
-  // callContainer 会返回非成功响应；仅开发模式允许用现有 Canvas 完成本机验证。
-  return error.code === 'INVALID_RENDER_RESPONSE' && usesLoopbackRenderer();
-}
-
 function isSupportedProject(project) {
   return Boolean(project && project.version === 1);
-}
-
-function selectedScenes(project) {
-  const candidate = (project && Array.isArray(project.candidates))
-    ? project.candidates.find(function (item) { return item.candidateId === project.selectedCandidateId; })
-    : null;
-  return candidate && Array.isArray(candidate.editedScenes) ? candidate.editedScenes : [];
-}
-
-function normalizedPersistentUrl(url) {
-  if (typeof url !== 'string') return '';
-  const normalized = url.trim();
-  return /^(?:https?|cloud):\/\/\S+$/i.test(normalized) ? normalized : '';
 }
 
 function renderFingerprint(project) {
@@ -54,40 +23,6 @@ function renderFingerprint(project) {
   } catch (error) {
     return '';
   }
-}
-
-function normalizeReusableCards(project, cards, taskSnapshot) {
-  const scenes = selectedScenes(project);
-  const fingerprint = renderFingerprint(project);
-  if (
-    !fingerprint
-    || !taskSnapshot
-    || taskSnapshot.type !== 'funtext'
-    || taskSnapshot.taskId !== project.projectId
-    || taskSnapshot.renderFingerprint !== fingerprint
-    || renderFingerprint(taskSnapshot.projectSnapshot) !== fingerprint
-    || !Array.isArray(cards)
-    || cards.length !== scenes.length
-    || scenes.length === 0
-  ) return null;
-
-  const normalizedCards = [];
-  const valid = cards.every(function (card, index) {
-    const scene = scenes[index];
-    const url = card && normalizedPersistentUrl(card.url);
-    if (!(
-      card
-      && scene
-      && card.sceneId === scene.sceneId
-      && card.role === scene.role
-      && card.order === scene.order
-      && card.renderFingerprint === fingerprint
-      && url
-    )) return false;
-    normalizedCards.push(Object.assign({}, card, { url: url }));
-    return true;
-  });
-  return valid ? normalizedCards : null;
 }
 
 function canonicalFunTextRecordId(record) {
@@ -201,6 +136,7 @@ Page({
   },
 
   invalidateExportState: function () {
+    this._auditedFingerprint = '';
     this._exportGeneration += 1;
     this._exportPreparePromise = null;
     this._savePromise = null;
@@ -243,7 +179,7 @@ Page({
     return false;
   },
 
-  initProject: async function (project, existingCards, taskSnapshot) {
+  initProject: async function (project) {
     if (!this.ensureEnabled()) return;
     const generation = this.nextRenderGeneration();
     this.invalidateExportState();
@@ -265,13 +201,13 @@ Page({
       return;
     }
 
-    const reusableCards = normalizeReusableCards(project, existingCards, taskSnapshot);
+    // History files are not proof of an audit in this session. Rebuild local previews.
 
     this.setData({
       project: project,
       task: null,
       renderedCards: [],
-      rendering: !reusableCards,
+      rendering: true,
       renderFailed: false,
       renderErrorMessage: '',
       saveCursor: 0,
@@ -280,109 +216,19 @@ Page({
       currentIndex: 0
     });
 
-    if (reusableCards) {
-      await this.applyRenderSuccess(project, reusableCards, generation);
-      return;
-    }
-
     try {
-      const payload = funTextProject.buildRenderPayload(project);
-      const res = await funCardRendererClient.requestRenderStack(wx, payload);
+      const canvas = await new Promise((resolve,reject)=>wx.createSelectorQuery().select('#funTextExporterCanvas').fields({node:true,size:true}).exec(r=>r&&r[0]&&r[0].node?resolve(r[0].node):reject(Error('预览画布尚未就绪，请重试'))));
+      const cards = await localPreview.renderCards(wx,canvas,project,()=>this.isCurrentRenderGeneration(generation));
       if (!this.isCurrentRenderGeneration(generation)) return;
-      await this.applyRenderSuccess(project, res.cards, generation);
+      await this.applyRenderSuccess(project, cards, generation);
     } catch (err) {
       if (!this.isCurrentRenderGeneration(generation)) return;
-      if (canRenderLocally(err)) {
-        this.renderLocalCanvasStack(project, generation);
-        return;
-      }
       this.setData({
         rendering: false,
         renderFailed: true,
         renderErrorMessage: (err && err.message) || '高清渲染失败，请重试'
       });
     }
-  },
-
-  renderLocalCanvasStack: function (project, generation) {
-    const that = this;
-    if (!that.isCurrentRenderGeneration(generation)) return Promise.resolve();
-    const candidate = (project.candidates || []).find(function (c) {
-      return c.candidateId === project.selectedCandidateId;
-    });
-    const scenes = (candidate && candidate.editedScenes) || [];
-    if (!scenes.length) {
-      that.setData({
-        rendering: false,
-        renderFailed: true,
-        renderErrorMessage: '未找到选中的场景数据'
-      });
-      return Promise.resolve();
-    }
-
-    return new Promise(function (resolve) {
-      const query = wx.createSelectorQuery();
-      query.select('#funTextExporterCanvas').fields({ node: true, size: true }).exec(async function (res) {
-      if (!that.isCurrentRenderGeneration(generation)) { resolve(); return; }
-      const canvasNode = res && res[0] && res[0].node;
-      if (!canvasNode) {
-        that.setData({
-          rendering: false,
-          renderFailed: true,
-          renderErrorMessage: '高清画布初始化失败，请重试'
-        });
-        resolve();
-        return;
-      }
-
-      try {
-        canvasNode.width = 1080;
-        canvasNode.height = 1080;
-        const ctx = canvasNode.getContext('2d');
-        const renderedCards = [];
-
-        for (let i = 0; i < scenes.length; i++) {
-          if (!that.isCurrentRenderGeneration(generation)) { resolve(); return; }
-          const scene = scenes[i];
-          ctx.clearRect(0, 0, 1080, 1080);
-          painter.paintScene(ctx, scene, 1080);
-
-          const tempFilePath = await new Promise(function (resolve, reject) {
-            wx.canvasToTempFilePath({
-              canvas: canvasNode,
-              width: 1080,
-              height: 1080,
-              destWidth: 1080,
-              destHeight: 1080,
-              fileType: 'png',
-              success: function (r) { resolve(r.tempFilePath); },
-              fail: reject
-            });
-          });
-
-          if (!that.isCurrentRenderGeneration(generation)) { resolve(); return; }
-
-          renderedCards.push({
-            sceneId: scene.sceneId,
-            role: scene.role,
-            order: i + 1,
-            url: tempFilePath
-          });
-        }
-
-        if (!that.isCurrentRenderGeneration(generation)) { resolve(); return; }
-        await that.applyRenderSuccess(project, renderedCards, generation);
-      } catch (error) {
-        if (!that.isCurrentRenderGeneration(generation)) { resolve(); return; }
-        that.setData({
-          rendering: false,
-          renderFailed: true,
-          renderErrorMessage: '本地生成失败: ' + ((error && error.message) || error)
-        });
-      }
-      resolve();
-      });
-    });
   },
 
   applyRenderSuccess: function (project, cards, generation) {
@@ -432,18 +278,18 @@ Page({
     this._pendingRenderRecord = null;
 
     try {
-      const history = wx.getStorageSync('wepic_history_tasks') || [];
+      const history = recordStorage.get(wx, 'wepic_history_tasks') || [];
       const filteredHistory = Array.isArray(history) ? history.filter(function (storedTask) {
         return canonicalFunTextTaskId(storedTask) !== task.taskId;
       }) : [];
       filteredHistory.unshift(task);
-      wx.setStorageSync('wepic_history_tasks', filteredHistory.slice(0, 20));
+      recordStorage.set(wx, 'wepic_history_tasks', filteredHistory.slice(0, 20));
     } catch (error) {
       console.warn('保存历史任务失败:', error);
     }
 
     try {
-      const savedRecords = wx.getStorageSync(RECORDS_KEY);
+      const savedRecords = recordStorage.get(wx, RECORDS_KEY);
       const records = Array.isArray(savedRecords) ? savedRecords : [];
       const originalIndex = records.findIndex(function (record) {
         return canonicalFunTextRecordId(record) === task.taskId;
@@ -464,7 +310,7 @@ Page({
         thumbnails: fingerprintedCards.slice(0, 4).map(function (card) { return card.url; }),
         taskSnapshot: task
       };
-      wx.setStorageSync(RECORDS_KEY, [record].concat(filteredRecords).slice(0, MAX_RECORDS));
+      recordStorage.set(wx, RECORDS_KEY, [record].concat(filteredRecords).slice(0, MAX_RECORDS));
     } catch (error) {
       console.warn('保存趣味字画记录失败:', error);
     }
@@ -561,6 +407,7 @@ Page({
 
   // 1. 先滑着看看（进入深色微信牌堆全屏预演）
   onPreviewStack: function () {
+    if(this.data.saving || this._savePromise)return;
     if (!this.ensureEnabled()) return;
     if (!this.data.project || !this.data.renderedCards.length) return;
     const that = this;
@@ -572,6 +419,7 @@ Page({
             manifest: manifest,
             selectedStackIds: [manifest.stacks[0].stackId],
             ratio: '1:1'
+            ,previewOnly: true, funProject: JSON.parse(JSON.stringify(that.data.project))
           });
         }
       });
@@ -584,6 +432,7 @@ Page({
 
   // 2. 自己改改（回退到轻编辑页）
   onEditStack: function () {
+    if(this.data.saving || this._savePromise)return;
     if (!this.ensureEnabled()) return;
     if (!this.data.project) return;
     const project = this.data.project;
@@ -596,16 +445,38 @@ Page({
   },
 
   // 3. 按顺序保存（支持断点续存）
+  prepareAuditedManifest: async function () {
+    const generation=this._renderGeneration, project=this.data.project;
+    const fingerprint=renderFingerprint(project);
+    if(this._auditedFingerprint!==fingerprint){
+      this.setData({saving:true});
+      wx.showLoading({title:'正在审核并生成',mask:true});
+      try {
+        if(this._exportPreparePromise)await this._exportPreparePromise;
+        if(!this.isCurrentRenderGeneration(generation))throw Object.assign(Error('保存任务已过期'),{code:'STALE_EXPORT_GENERATION'});
+        const result=await funCardRendererClient.requestRenderStack(wx,funTextProject.buildRenderPayload(project));
+        if(!this.isCurrentRenderGeneration(generation))throw Object.assign(Error('保存任务已过期'),{code:'STALE_EXPORT_GENERATION'});
+        this.setData({exportManifest:null,exportFingerprint:''});
+        await this.applyRenderSuccess(project,result.cards,generation);
+        if(!this.isCurrentRenderGeneration(generation))throw Object.assign(Error('保存任务已过期'),{code:'STALE_EXPORT_GENERATION'});
+        this._auditedFingerprint=fingerprint;
+      } finally { wx.hideLoading(); }
+    }
+    return this.prepareExportManifest();
+  },
   onSaveStack: async function () {
     if (!this.ensureEnabled()) return;
     if (this.data.saving || this._savePromise) return this._savePromise;
     if (!this.data.renderedCards.length) return;
     const that = this;
-    const run = this.prepareExportManifest().then(function (manifest) {
+    const renderGeneration=this._renderGeneration;
+    const run = this.prepareAuditedManifest().then(function (manifest) {
+      if(!that.isCurrentRenderGeneration(renderGeneration))return null;
       const saveGeneration = that._exportGeneration;
       const startIndex = that.data.saveSessionFingerprint === manifest.fingerprint ? that.data.saveCursor : 0;
       that.setData({ saving: true, saveCursor: startIndex, saveSessionFingerprint: manifest.fingerprint });
       return imageExporter.saveExportManifest(wx, manifest, {
+        allowNonStackable: true,
         startIndex: startIndex,
         expectedFingerprint: manifest.fingerprint,
         onProgress: function (entry, current, total) {
@@ -655,8 +526,9 @@ Page({
         return null;
       });
     }).catch(function (error) {
+      if(!that.isCurrentRenderGeneration(renderGeneration))return null;
       that.setData({ saving: false });
-      that.showExportPrepareError(error);
+      wx.showToast({title:error.message || '审核或成图失败，请重试',icon:'none'});
       return null;
     });
     let tracked;
@@ -673,5 +545,8 @@ Page({
 
   onCloseGuide: function () {
     this.setData({ showGuide: false });
+  },
+  onGoWechat: function () {
+    if (this.data.showGuide) require('../../utils/wechatSendGuide').goToWechat(wx);
   }
 });

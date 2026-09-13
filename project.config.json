@@ -7,6 +7,7 @@
   "projectname": "WePicTool",
   "packOptions": {
     "ignore": [
+      {"type":"folder","value":"miniprogram/cloudhosting"},
       {
         "value": "node_modules",
         "type": "folder"

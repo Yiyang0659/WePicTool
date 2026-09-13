@@ -58,7 +58,7 @@ async function defaultCallLlm(messages, options) {
 
 async function defaultCheckContent(content) {
   if (!cloud || !cloud.openapi || !cloud.openapi.security) {
-    return { ok: true, code: 'OK' };
+    return { ok: false, code: 'SAFETY_UNAVAILABLE' };
   }
   try {
     const res = await cloud.openapi.security.msgSecCheck({ content });

@@ -1,8 +1,13 @@
 {
   "description": "项目配置文件",
   "packOptions": {
-    "ignore": [],
-    "include": [{"type":"folder","value":"font-packages"}]
+    "ignore": [{"type":"folder","value":"cloudhosting"}],
+    "include": [
+      {
+        "value": "font-packages",
+        "type": "folder"
+      }
+    ]
   },
   "setting": {
     "urlCheck": true,

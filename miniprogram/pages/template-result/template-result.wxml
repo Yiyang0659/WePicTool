@@ -1,14 +1,14 @@
 <!-- pages/template-result/template-result.wxml -->
 <view class="result-page">
   <view class="result-header">
-    <view class="result-title">{{!funTextEntryEnabled ? '趣味字画暂不可用' : (renderFailed ? '暂未生成成品' : (rendering ? '正在生成趣味字画' : '趣味字画已生成'))}}</view>
+    <view class="result-title">{{!funTextEntryEnabled ? '趣味字画暂不可用' : (renderFailed ? '暂未准备好预览' : (rendering ? '正在准备预览' : '趣味字画预览'))}}</view>
     <view class="result-source" wx:if="{{project.sourceText}}">“{{project.sourceText}}”</view>
   </view>
 
   <!-- 渲染加载中 -->
   <view wx:if="{{rendering}}" class="render-loading-box">
     <view class="loading-spinner"></view>
-    <view class="loading-text">正在生成高清卡片...</view>
+    <view class="loading-text">正在本机准备预览，不提交审核...</view>
   </view>
 
   <!-- 渲染失败重试 -->
@@ -80,6 +80,7 @@
       </view>
 
       <button class="btn-guide-close" bindtap="onCloseGuide">我知道了</button>
+      <button class="btn-guide-close" bindtap="onGoWechat">去微信发送</button>
     </view>
   </view>
 

@@ -10,6 +10,34 @@ var candidateValidator = require('./candidateValidator');
 
 var HISTORY_LIMIT = 20;
 var SIZE_PRESET_SCALE = { small: 0.84, standard: 1, large: 1.16 };
+var freeCardSequence = 0;
+
+function insertFreeCard(project, candidateId, afterSceneId, options) {
+  var value = options || {};
+  var color = value.backgroundColor || '#FFFFFF';
+  if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error('背景颜色不合法');
+  return commitEdit(project, function(next) {
+    var candidate = requireCandidate(next, candidateId);
+    var source = requireScene(candidate, afterSceneId);
+    if (candidate.editedScenes.length >= 8) throw new Error('每组最多8张，请先删除一张再添加');
+    var scene = {
+      sceneId: 'scene_free_' + Date.now() + '_' + (freeCardSequence++),
+      order: source.order + 1, role: 'ending', width: 1080, height: 1080,
+      stylePackId: source.stylePackId || candidate.stylePackId, paletteKey: source.paletteKey,
+      fontFeelKey: source.fontFeelKey, background: {assetKey:'solid',color:color.toUpperCase()}, layers:[]
+    };
+    if (value.inkSticker) {
+      scene.inkStickers = [clone(value.inkSticker)];
+      require('./inkStickers').flatten(scene);
+    }
+    candidate.editedScenes.splice(source.order, 0, scene);
+    candidate.editedScenes.forEach(function(s,i){s.order=i+1;});
+    // Baselines are separate from template cards; deleted free cards do not resurrect on restore-all.
+    candidate.freeSceneOriginals = (candidate.freeSceneOriginals || []).filter(function(s) {
+      return candidate.editedScenes.some(function(current){return current.sceneId===s.sceneId;});
+    }).concat([clone(scene)]);
+  });
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -254,6 +282,7 @@ function selectCandidate(project, candidateId) {
 }
 
 function updateCardText(project, candidateId, sceneId, text) {
+  project = repairFreeCardStyles(project);
   if (typeof text !== 'string') throw new Error('卡片文字必须是字符串');
   var sourceCandidate = requireCandidate(project, candidateId);
   var sourceScene = requireScene(sourceCandidate, sceneId);
@@ -272,7 +301,7 @@ function updateCardText(project, candidateId, sceneId, text) {
   } else {
     var textOverrides = {};
     textOverrides[sceneId] = text;
-    var recomposed = composeEditedScenes(candidate, candidate.stylePackId, textOverrides, {
+    var recomposed = composeEditedScenes(candidate, scene.stylePackId || candidate.stylePackId, textOverrides, {
       backgroundVariantKey: scene.backgroundVariantKey,
       paletteKey: scene.paletteKey,
       fontFeelKey: scene.fontFeelKey
@@ -282,6 +311,17 @@ function updateCardText(project, candidateId, sceneId, text) {
       return layer.type === 'text';
     });
     if (!recomposedText) throw new Error('该卡片没有可编辑文字');
+    if (scene.background.assetKey === 'solid') {
+      var pack = stylePacks.getStylePack(scene.stylePackId || candidate.stylePackId);
+      var palette = stylePacks.getPalette(pack, scene.paletteKey);
+      function brightness(color) {
+        return parseInt(color.slice(1,3),16)*0.299 + parseInt(color.slice(3,5),16)*0.587 + parseInt(color.slice(5,7),16)*0.114;
+      }
+      var backgroundBrightness = brightness(scene.background.color);
+      recomposedText.color = Object.keys(palette.colors).map(function(key){return palette.colors[key];}).reduce(function(a,b) {
+        return Math.abs(brightness(a)-backgroundBrightness)>=Math.abs(brightness(b)-backgroundBrightness)?a:b;
+      });
+    }
     scene.layers.unshift(recomposedText);
   }
 
@@ -294,11 +334,35 @@ function switchCandidateStyle(project, candidateId, stylePackId) {
   return commitEdit(project, function (next) {
   var candidate = requireCandidate(next, candidateId);
   var previousInk = {};
-  candidate.editedScenes.forEach(function(scene){ previousInk[scene.sceneId]={strokes:scene.strokes,inkStickers:scene.inkStickers}; });
+  candidate.editedScenes.forEach(function(scene){ previousInk[scene.sceneId]=clone(scene); });
   candidate.stylePackId = stylePackId;
   candidate.originalScenes = clone(composer.composeCandidate(candidate, stylePackId));
   candidate.editedScenes = clone(composeEditedScenes(candidate, stylePackId));
-  candidate.editedScenes.forEach(function(scene){ var saved=previousInk[scene.sceneId];if(saved){if(saved.strokes)scene.strokes=clone(saved.strokes);if(saved.inkStickers)scene.inkStickers=clone(saved.inkStickers);} });
+  candidate.editedScenes.forEach(function(scene){
+    var saved=previousInk[scene.sceneId];
+    if (!saved) return;
+    if(saved.strokes)scene.strokes=clone(saved.strokes);
+    if(saved.inkStickers)scene.inkStickers=clone(saved.inkStickers);
+    if(saved.background.assetKey==='solid') {scene.background=clone(saved.background);delete scene.backgroundVariantKey;}
+    if(scene.sceneId.indexOf('scene_free_')===0) {
+      // A style change must not invent template decorations on a free card.
+      var pack=stylePacks.getStylePack(stylePackId);
+      var palette=stylePacks.getPalette(pack,pack.defaultPaletteKey);
+      scene.layers=clone(saved.layers);
+      scene.layers.forEach(function(layer){if(layer.type==='text')layer.color=palette.colors.primary;});
+      scene.fontFeelKey=saved.fontFeelKey;
+    }
+  });
+  });
+}
+
+function removeCard(project, candidateId, index) {
+  var candidate = requireCandidate(project, candidateId);
+  if (!Number.isInteger(index) || index < 0 || index >= candidate.editedScenes.length || candidate.editedScenes.length <= 1) return project;
+  return commitEdit(project, function(next) {
+    var scenes = requireCandidate(next, candidateId).editedScenes;
+    scenes.splice(index, 1);
+    scenes.forEach(function(scene, i) { scene.order = i + 1; });
   });
 }
 
@@ -323,6 +387,11 @@ function moveCard(project, candidateId, fromIndex, toIndex) {
 
 function updateSceneStyle(scene, pack, changes) {
   var value = changes || {};
+  if (value.backgroundColor !== undefined) {
+    if (!/^#[0-9a-f]{6}$/i.test(value.backgroundColor)) throw new Error('背景颜色不合法');
+    scene.background = {assetKey:'solid',color:value.backgroundColor.toUpperCase()};
+    delete scene.backgroundVariantKey;
+  }
   if (value.backgroundVariantKey) {
     var variant = stylePacks.getBackgroundVariant(pack, value.backgroundVariantKey);
     if (!variant) throw new Error('背景不属于当前风格');
@@ -351,17 +420,63 @@ function updateSceneStyle(scene, pack, changes) {
       layer.lineHeight = Math.max(48, Math.min(720, Math.round(layer.lineHeight * ratio)));
     });
   }
+  if (value.paletteKey || value.backgroundColor !== undefined || value.backgroundVariantKey) {
+    var selectedPalette = stylePacks.getPalette(pack, scene.paletteKey);
+    var textColor = selectedPalette.colors.primary;
+    if (scene.background.assetKey === 'solid') {
+      function brightness(color) {
+        return parseInt(color.slice(1,3),16)*0.299 + parseInt(color.slice(3,5),16)*0.587 + parseInt(color.slice(5,7),16)*0.114;
+      }
+      var bg = brightness(scene.background.color);
+      textColor = Object.keys(selectedPalette.colors).map(function(key){return selectedPalette.colors[key];}).reduce(function(a,b){
+        return Math.abs(brightness(a)-bg)>=Math.abs(brightness(b)-bg)?a:b;
+      });
+    }
+    (scene.layers || []).forEach(function(layer){if(layer.type === 'text') layer.color = textColor;});
+  }
 }
 
 function updateCardStyle(project, candidateId, sceneId, changes, scope) {
   var sourceCandidate = requireCandidate(project, candidateId);
   requireScene(sourceCandidate, sceneId);
-  var pack = stylePacks.getStylePack(sourceCandidate.stylePackId);
+  var pack = stylePacks.getStylePack(requireScene(sourceCandidate, sceneId).stylePackId || sourceCandidate.stylePackId);
   if (!pack) throw new Error('当前视觉包不可用');
   return commitEdit(project, function (next) {
     var candidate = requireCandidate(next, candidateId);
     var targets = scope === 'stack' ? candidate.editedScenes : [requireScene(candidate, sceneId)];
-    targets.forEach(function (scene) { updateSceneStyle(scene, pack, changes); });
+    targets.forEach(function (scene) {
+      var targetPack = stylePacks.getStylePack(scene.stylePackId || candidate.stylePackId);
+      var mapped = Object.assign({}, changes);
+      if (targetPack.id !== pack.id) {
+        if (changes.backgroundVariantKey) {
+          var bi = pack.backgroundVariants.findIndex(function(v){return v.key === changes.backgroundVariantKey;});
+          mapped.backgroundVariantKey = targetPack.backgroundVariants[Math.max(0,bi) % targetPack.backgroundVariants.length].key;
+        }
+        if (changes.paletteKey) {
+          var pi = pack.palettes.findIndex(function(v){return v.key === changes.paletteKey;});
+          mapped.paletteKey = targetPack.palettes[Math.max(0,pi) % targetPack.palettes.length].key;
+        }
+      }
+      updateSceneStyle(scene, targetPack, mapped);
+    });
+  });
+}
+
+function applyScenePack(scene, pack) {
+  scene.stylePackId = pack.id;
+  updateSceneStyle(scene, pack, { backgroundVariantKey: pack.defaultBackgroundVariantKey,
+    paletteKey: pack.defaultPaletteKey, fontFeelKey: pack.defaultFontFeelKey });
+}
+
+function updateStylePack(project, candidateId, sceneId, stylePackId, scope) {
+  var pack = stylePacks.getStylePack(stylePackId);
+  if (!pack) throw new Error('未知视觉包');
+  requireScene(requireCandidate(project, candidateId), sceneId);
+  return commitEdit(project, function(next) {
+    var candidate = requireCandidate(next, candidateId);
+    var targets = scope === 'stack' ? candidate.editedScenes : [requireScene(candidate, sceneId)];
+    targets.forEach(function(scene) { applyScenePack(scene, pack); });
+    if (scope === 'stack') candidate.stylePackId = pack.id;
   });
 }
 
@@ -475,9 +590,14 @@ function restoreCard(project, candidateId, sceneId) {
   return commitEdit(project, function (next) {
     var candidate = requireCandidate(next, candidateId);
     var index = candidate.editedScenes.findIndex(function (scene) { return scene.sceneId === sceneId; });
-    var original = candidate.originalScenes.find(function (scene) { return scene.sceneId === sceneId; });
+    var original = candidate.originalScenes.concat(candidate.freeSceneOriginals || []).find(function (scene) { return scene.sceneId === sceneId; });
     if (!original) throw new Error('未找到原始卡片');
     var restored = clone(original);
+    if (sceneId.indexOf('scene_free_')===0) {
+      var pack = stylePacks.getStylePack(candidate.stylePackId);
+      restored.stylePackId = pack.id;
+      restored.paletteKey = pack.defaultPaletteKey;
+    }
     restored.order = candidate.editedScenes[index].order;
     candidate.editedScenes[index] = restored;
   });
@@ -541,11 +661,11 @@ function validateCandidateCards(candidate) {
 }
 
 function validateRenderScenes(candidate) {
-  if (!Array.isArray(candidate.editedScenes) || candidate.editedScenes.length < 3 || candidate.editedScenes.length > 8) {
-    throw new Error('渲染卡片数量必须在 3 到 8 张之间');
+  if (!Array.isArray(candidate.editedScenes) || candidate.editedScenes.length < 1 || candidate.editedScenes.length > 8) {
+    throw new Error('渲染卡片数量必须在 1 到 8 张之间');
   }
-  if (candidate.editedScenes.length !== candidate.cards.length) {
-    throw new Error('场景数量必须与候选卡片一致');
+  if (candidate.editedScenes.filter(function(s){return s.sceneId.indexOf('scene_free_')!==0;}).length > candidate.cards.length) {
+    throw new Error('场景数量不能超过候选卡片');
   }
   var sceneIds = new Set();
   candidate.editedScenes.forEach(function (scene, index) {
@@ -555,7 +675,7 @@ function validateRenderScenes(candidate) {
     }
     sceneIds.add(scene.sceneId);
     var logicalIndex = logicalCardIndex(scene.sceneId);
-    var logicalCard = candidate.cards[logicalIndex];
+    var logicalCard = candidate.cards[logicalIndex] || (candidate.freeSceneOriginals || []).find(function(s){return s.sceneId===scene.sceneId;});
     if (!logicalCard || scene.role !== logicalCard.role) {
       throw new Error('场景与逻辑卡片不一致');
     }
@@ -564,8 +684,23 @@ function validateRenderScenes(candidate) {
   });
 }
 
+// Repair only the known legacy free-card inheritance bug, not arbitrary invalid scenes.
+function repairFreeCardStyles(project) {
+  var next = clone(project);
+  (next.candidates || []).forEach(function(candidate) {
+    (candidate.editedScenes || []).concat(candidate.freeSceneOriginals || []).forEach(function(scene) {
+      if (!/^scene_free_/.test(scene.sceneId) || !scene.background || scene.background.assetKey !== 'solid') return;
+      if (stylePacks.getPalette(stylePacks.getStylePack(scene.stylePackId), scene.paletteKey)) return;
+      var matches = stylePacks.STYLE_PACKS.filter(function(pack) { return !!stylePacks.getPalette(pack, scene.paletteKey); });
+      if (matches.length === 1) scene.stylePackId = matches[0].id;
+    });
+  });
+  return next;
+}
+
 function buildRenderPayload(project) {
   if (!project || !project.selectedCandidateId) throw new Error('请先选择一套方案');
+  project = repairFreeCardStyles(project);
   var candidate = requireCandidate(project, project.selectedCandidateId);
   validateCandidateCards(candidate);
   validateRenderScenes(candidate);
@@ -611,6 +746,9 @@ function buildPreviewGroups(project, renderedCards) {
 }
 
 module.exports = {
+  repairFreeCardStyles: repairFreeCardStyles,
+  updateStylePack: updateStylePack,
+  insertFreeCard: insertFreeCard,
   updateInkStickers: function(project,candidateId,sceneId,groups) {
     return commitEdit(project,function(next){
       var scene=requireCandidate(next,candidateId).editedScenes.find(function(s){return s.sceneId===sceneId;});
@@ -634,6 +772,7 @@ module.exports = {
   updateCardText: updateCardText,
   switchCandidateStyle: switchCandidateStyle,
   moveCard: moveCard,
+  removeCard: removeCard,
   updateCardStyle: updateCardStyle,
   setTextSizePreset: setTextSizePreset,
   addDecoration: addDecoration,

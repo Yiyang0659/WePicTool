@@ -1,4 +1,5 @@
 // pages/record/record.js
+const recordStorage = require('../../utils/recordStorage');
 const { normalizeTaskGroups, buildSendability, createMockTask } = require('../../utils/task');
 const funTextProject = require('../../utils/funTextProject');
 const { ENABLE_FUN_TEXT_STACK_ENTRY } = require('../../config/env');
@@ -59,7 +60,7 @@ Page({
   // 加载本地记录
   loadRecords: function () {
     try {
-      const records = wx.getStorageSync(RECORDS_KEY) || [];
+      const records = recordStorage.get(wx, RECORDS_KEY) || [];
       const processedRecords = this.processRecords(records);
       const groupedRecords = this.groupByDate(processedRecords);
       const totalImages = processedRecords.reduce((sum, record) => sum + (record.totalCount || 0), 0);
@@ -383,7 +384,7 @@ Page({
   // 保存记录到本地
   saveRecords: function (records) {
     try {
-      wx.setStorageSync(RECORDS_KEY, records);
+      recordStorage.set(wx, RECORDS_KEY, records);
     } catch (err) {
       console.error('保存记录失败:', err);
     }
@@ -399,7 +400,7 @@ Page({
   // 添加新记录（供结果页调用）
   addRecord: function (task, sourceImages, thumbnails) {
     try {
-      const records = wx.getStorageSync(RECORDS_KEY) || [];
+      const records = recordStorage.get(wx, RECORDS_KEY) || [];
       const groupSummary = this.buildGroupSummary(task.groups || {});
 
       const newRecord = {
@@ -419,7 +420,7 @@ Page({
         records.length = MAX_RECORDS;
       }
 
-      wx.setStorageSync(RECORDS_KEY, records);
+      recordStorage.set(wx, RECORDS_KEY, records);
     } catch (err) {
       console.error('添加记录失败:', err);
     }

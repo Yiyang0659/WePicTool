@@ -3,6 +3,8 @@
 const CLOUD_ENV_ID = 'cloud1-d0g1blfsde474b168';
 // POST 生产请求通过 wx.cloud.callContainer 调用该服务名，不在客户端保存任何服务端秘密。
 const FUN_CARD_RENDERER_SERVICE = 'fun-card-renderer';
+// Temporary acceptance target. Only develop builds may use this; clear after QA.
+const FUN_CARD_RENDERER_DEV_GRAY = 'gray015';
 // 仅用于授权字体加载；小程序 renderer POST 始终走 callContainer，不根据此 URL 改走 wx.request。
 // 字体发布到 CloudBase 静态托管，通过 HTTPS/CDN 供开发者工具和真机共用。
 const FUN_CARD_RENDERER_URL = 'https://cloud1-d0g1blfsde474b168-1451421513.tcloudbaseapp.com';
@@ -14,6 +16,8 @@ const ENABLE_OUTFIT_AI_ASSIST = true;
 const ENABLE_FUN_LOCAL_EDITOR = true;
 // 本机字体轮廓预览：输入、候选与编辑不请求云端；保存仍审核。false回滚云端底图。
 const ENABLE_FUN_OFFLINE_PREVIEW = true;
+// false时保存前向同一服务查询自由卡协议；旧服务仍阻断，不盲目开启。
+const FUN_CARD_RENDERER_SUPPORTS_FREE_CARDS = false;
 
 module.exports = {
   CLOUD_ENV_ID: CLOUD_ENV_ID,
@@ -22,6 +26,8 @@ module.exports = {
   ENABLE_OUTFIT_AI_ASSIST: ENABLE_OUTFIT_AI_ASSIST,
   ENABLE_FUN_LOCAL_EDITOR: ENABLE_FUN_LOCAL_EDITOR,
   ENABLE_FUN_OFFLINE_PREVIEW: ENABLE_FUN_OFFLINE_PREVIEW,
+  FUN_CARD_RENDERER_SUPPORTS_FREE_CARDS: FUN_CARD_RENDERER_SUPPORTS_FREE_CARDS,
   FUN_CARD_RENDERER_SERVICE: FUN_CARD_RENDERER_SERVICE,
+  FUN_CARD_RENDERER_DEV_GRAY: FUN_CARD_RENDERER_DEV_GRAY,
   FUN_CARD_RENDERER_URL: FUN_CARD_RENDERER_URL
 };

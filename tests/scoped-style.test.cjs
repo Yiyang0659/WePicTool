@@ -1,0 +1,68 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const model=require('../miniprogram/utils/funTextProject');
+const validator=require('../miniprogram/cloudhosting/fun-card-renderer/sceneValidator');
+const dressup=require('../miniprogram/utils/layeredDressup');
+const {loadMiniProgramPage,instantiatePage}=require('./helpers/miniprogram-loader.cjs');
+function project(){let p=model.createFunTextProject({sourceText:'我今天想见你',expressionKey:'funny-reversal',now:88});return model.selectCandidate(p,p.candidates[0].candidateId);}
+test('blank card adopts scene pack, accepts first text after green chalk styling, and exports seven ordered cards',()=>{
+  let p=project(),id=p.selectedCandidateId;
+  const first=p.candidates[0].editedScenes[0].sceneId;
+  p=model.insertFreeCard(p,id,first);
+  const free=p.candidates[0].editedScenes[1].sceneId;
+  p=model.updateStylePack(p,id,free,'chalk-chaos-v1','card');
+  p=model.updateCardStyle(p,id,free,{backgroundVariantKey:'chalk-board-green'},'card');
+  p=model.updateCardText(p,id,free,'你回去取');
+  assert.equal(p.candidates[0].editedScenes[1].layers.find(l=>l.type==='text').text,'你回去取');
+  p=model.insertFreeCard(p,id,free);
+  const second=p.candidates[0].editedScenes[2];
+  assert.equal(second.stylePackId,'chalk-chaos-v1');
+  p=model.updateCardText(p,id,second.sceneId,'新的文字');
+  const payload=model.buildRenderPayload(p);
+  assert.equal(payload.scenes.length,7);
+  assert.equal(validator.validateRenderPayload(payload).valid,true);
+  assert.deepEqual(model.buildPreviewGroups(p,payload.scenes.map(s=>({sceneId:s.sceneId,url:s.sceneId})))[0].cards.map(c=>c.id),payload.scenes.map(s=>s.sceneId));
+});
+test('legacy solid free card mismatched pack is repaired without changing contents or mutating draft',()=>{
+  let p=project(),id=p.selectedCandidateId,first=p.candidates[0].editedScenes[0].sceneId;
+  p=model.updateStylePack(p,id,first,'chalk-chaos-v1','card');
+  p=model.insertFreeCard(p,id,first);
+  const s=p.candidates[0].editedScenes[1];
+  s.stylePackId=p.candidates[0].stylePackId;
+  const original=structuredClone(p);
+  const payload=model.buildRenderPayload(p);
+  assert.equal(payload.scenes[1].stylePackId,'chalk-chaos-v1');
+  assert.deepEqual(p,original);
+  p=model.updateCardText(p,id,s.sceneId,'你好');
+  assert.equal(validator.validateRenderPayload(model.buildRenderPayload(p)).valid,true);
+});
+test('seven reordered cards survive per-card/stack style edits and share preview/export order',()=>{
+  let p=project(), id=p.selectedCandidateId;
+  for(let i=0;i<2;i++)p=model.insertFreeCard(p,id,p.candidates[0].editedScenes[0].sceneId);
+  p=model.moveCard(p,id,1,5);
+  const before=structuredClone(p.candidates[0].editedScenes),target=before[2].sceneId;
+  assert.equal(before.length,7);
+  p=model.updateStylePack(p,id,target,'blue-soda-v1','card');
+  p.candidates[0].editedScenes.forEach((s,i)=>{if(s.sceneId!==target)assert.deepEqual(s,before[i]);});
+  assert.equal(validator.validateRenderPayload(model.buildRenderPayload(p)).valid,true);
+  p=model.updateStylePack(p,id,target,'chalk-chaos-v1','stack');
+  const payload=model.buildRenderPayload(p);
+  assert.deepEqual(payload.scenes.map(s=>s.sceneId),before.map(s=>s.sceneId));
+  assert.ok(payload.scenes.every(s=>s.stylePackId==='chalk-chaos-v1'));
+  assert.ok(payload.scenes.filter(s=>s.sceneId.startsWith('scene_free_')).every(s=>s.layers.length===0));
+  assert.equal(validator.validateRenderPayload(payload).valid,true);
+  const groups=model.buildPreviewGroups(p,payload.scenes.map(s=>({sceneId:s.sceneId,url:'local/'+s.sceneId})));
+  assert.deepEqual(groups[0].cards.map(c=>c.id),before.map(s=>s.sceneId));
+  p=model.updateCardStyle(p,id,target,{backgroundColor:'#123456'},'stack');
+  assert.ok(model.buildRenderPayload(p).scenes.every(s=>s.background.color==='#123456'));
+});
+test('upload entry starts empty even with mixed system draft, retains explicit restoration',()=>{
+  const saved=dressup.createProject({sourceMode:'demo',templateId:'funny-paper-doll-v1',now:5});saved.sourceMode='mixed';
+  const page=instantiatePage(loadMiniProgramPage('miniprogram/pages/dressup/dressup.js',{}, {getStorageSync(){return saved;},showModal(o){o.success({confirm:true});}}));
+  page.onLoad({mode:'upload'});
+  assert.equal(page.data.groupList.length,4);
+  assert.ok(page.data.groupList.every(g=>g.count===0));
+  assert.equal(page.data.hasPreviousDraft,true);
+  page.onRestorePreviousDraft();
+  assert.ok(page.data.groupList.some(g=>g.count>0));
+});

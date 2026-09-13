@@ -246,8 +246,8 @@ test('render payload rejects missing, invalid, and undersized selected scenes', 
 
   const selected = model.selectCandidate(draft, draft.candidates[0].candidateId);
   const undersized = plain(selected);
-  undersized.candidates[0].editedScenes = undersized.candidates[0].editedScenes.slice(0, 2);
-  assert.throws(() => model.buildRenderPayload(undersized), /3.*8/);
+  undersized.candidates[0].editedScenes = [];
+  assert.throws(() => model.buildRenderPayload(undersized), /1.*8/);
 
   const invalid = plain(selected);
   invalid.candidates[0].editedScenes[0].width = 360;

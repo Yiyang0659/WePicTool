@@ -143,7 +143,7 @@ test('preview markup has one fixed WeChat shell, one scroll region and one combi
   assert.match(wxml, /预览模式/);
   assert.equal((wxml.match(/mode="aspectFill"/g) || []).length, 3);
   assert.match(wxml, /class="vimg"[^>]+mode="aspectFit"/);
-  assert.match(wxml, />好友</);
+  assert.match(wxml, />小鹿</);
   assert.doesNotMatch(wxml, /wx-status|class="dots"|group-label|分享给好友/);
   assert.match(wxss, /position:\s*fixed;[\s\S]*inset:\s*0;/);
   assert.match(wxss, /\.wx-body\s*\{[\s\S]*height:\s*0;/);

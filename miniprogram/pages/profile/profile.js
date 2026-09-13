@@ -1,4 +1,5 @@
 // pages/profile/profile.js
+const recordStorage = require('../../utils/recordStorage');
 Page({
   data: {
     userId: '',
@@ -27,7 +28,7 @@ Page({
   updateRecordCount: function () {
     let count = 0;
     try {
-      const records = wx.getStorageSync('wepictool_records');
+      const records = recordStorage.get(wx, 'wepictool_records');
       if (Array.isArray(records)) {
         count = records.length;
       }
@@ -191,8 +192,8 @@ Page({
   doClearCache: function () {
     try {
       // 清理本地存储中的记录和反馈
-      wx.removeStorageSync('wepictool_records');
-      wx.removeStorageSync('wepic_history_tasks');
+      recordStorage.remove(wx, 'wepictool_records');
+      recordStorage.remove(wx, 'wepic_history_tasks');
       wx.removeStorageSync('wepictool_feedbacks');
 
       // 清理临时文件

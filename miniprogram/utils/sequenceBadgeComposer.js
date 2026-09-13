@@ -65,11 +65,11 @@ function paintSequenceBadge(ctx, layout, label) {
   if (!ctx) throw makeError('顺序角标画布不可用', 'CANVAS_UNAVAILABLE');
   ctx.save();
   ctx.globalAlpha = 1;
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
   ctx.shadowBlur = layout.shadowBlur;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = layout.shadowOffsetY;
-  ctx.fillStyle = 'rgba(18, 18, 20, 0.78)';
+  ctx.fillStyle = '#8A8A8A';
   roundedRectPath(ctx, layout);
   ctx.fill();
   ctx.shadowColor = 'rgba(0, 0, 0, 0)';
@@ -79,7 +79,12 @@ function paintSequenceBadge(ctx, layout, label) {
   ctx.font = '600 ' + layout.fontSize + 'px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, layout.x + layout.width / 2, layout.y + layout.height / 2 + 1);
+  const metrics = typeof ctx.measureText === 'function' ? ctx.measureText(label) : null;
+  let y = layout.y + layout.height / 2;
+  if (metrics && Number.isFinite(metrics.actualBoundingBoxAscent) && Number.isFinite(metrics.actualBoundingBoxDescent)) {
+    y += (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
+  }
+  ctx.fillText(label, layout.x + layout.width / 2, y);
   ctx.restore();
 }
 

@@ -3,7 +3,9 @@ const KEY = 'wepic_handwriting_library_v1';
 function copy(value) { return JSON.parse(JSON.stringify(value)); }
 function validItem(item) {
   return item && /^hw_[a-zA-Z0-9_]+$/.test(item.id) && Number.isFinite(item.updatedAt) &&
-    Array.isArray(item.strokes) && item.strokes.length > 0 && ink.valid(item.strokes,item.workspaceSize) && validViewport(item);
+    Array.isArray(item.strokes) && item.strokes.length > 0 && ink.valid(item.strokes,item.workspaceSize) && validViewport(item) &&
+    (item.backgroundColor === undefined || /^#[0-9a-f]{6}$/i.test(item.backgroundColor)) &&
+    (item.purpose === undefined || ['sticker','card'].includes(item.purpose));
 }
 function validViewport(item) {
   const size=item.workspaceSize===undefined?1080:item.workspaceSize, v=item.viewport;
@@ -26,7 +28,9 @@ function save(storage, item) {
 }
 function scene(strokes, metadata) {
   const size=metadata && metadata.workspaceSize || 1080;
-  return {sceneId:'handwriting',background:{color:'transparent'},layers:[],strokes:copy(strokes),workspaceSize:size,
+  // The visible scene is always 1080 square, independently of the movable ink workspace.
+  return {sceneId:'handwriting',width:1080,height:1080,background:{color:metadata && metadata.purpose==='card' ? metadata.backgroundColor || '#FFFFFF' : 'transparent'},layers:[],strokes:copy(strokes),workspaceSize:size,
+    purpose:metadata && metadata.purpose || 'sticker',backgroundColor:metadata && metadata.backgroundColor || '#FFFFFF',
     viewport:copy(metadata && metadata.viewport || {x:0,y:0})};
 }
 function decorate(items) {

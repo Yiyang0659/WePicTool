@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {checkTabIcons} from './check-tab-icons.mjs';
 
 const args = process.argv.slice(2);
 const rootArgIndex = args.indexOf('--root');
@@ -69,6 +70,7 @@ if (!exists('miniprogram/app.json')) {
 }
 
 const appConfig = exists('miniprogram/app.json') ? readJson('miniprogram/app.json') : null;
+errors.push(...checkTabIcons(appConfig, name => fs.readFileSync(path.join(miniprogramRoot,name))));
 const rootProjectConfig = exists('project.config.json') ? readJson('project.config.json') : null;
 const projectConfig = exists('miniprogram/project.config.json')
   ? readJson('miniprogram/project.config.json')
@@ -329,11 +331,12 @@ if (errors.length > 0) {
     console.error('\n同时发现以下提醒:');
     for (const warning of warnings) console.error(`- ${warning}`);
   }
-  process.exit(1);
-}
-
-console.log(releaseMode ? '小程序发布预检通过。' : '小程序上线预检通过。');
-if (warnings.length > 0) {
-  console.log('\n上线前提醒:');
-  for (const warning of warnings) console.log(`- ${warning}`);
+  // Let Node drain its work; forced exit can deadlock concurrent V8 compilation.
+  process.exitCode = 1;
+} else {
+  console.log(releaseMode ? '小程序发布预检通过。' : '小程序上线预检通过。');
+  if (warnings.length > 0) {
+    console.log('\n上线前提醒:');
+    for (const warning of warnings) console.log(`- ${warning}`);
+  }
 }

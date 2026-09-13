@@ -70,11 +70,29 @@ function loadEditorPage(wxApi, customDeps) {
         return Promise.reject(new Error('preview renderer unavailable in unit test'));
       }
     },
-    '../../utils/funTextTransform': transformMath
+    '../../utils/funTextTransform': transformMath,
+    '../../utils/funLocalPreview':{async renderCards(api,canvas,p){return p.candidates.find(c=>c.candidateId===p.selectedCandidateId).editedScenes.map(s=>({sceneId:s.sceneId,role:s.role,order:s.order,url:'wxfile://local/'+s.order}));}}
   }, customDeps || {});
 
   return instantiatePage(loadMiniProgramPage('miniprogram/pages/fun-text-editor/fun-text-editor.js', deps, wxApi));
 }
+
+test('explicit card buttons move one position, retain selection, delete and undo', () => {
+  const {wxApi}=recordingWx(); const page=loadEditorPage(wxApi);
+  page.initProject(createSampleProject(),{currentCardIndex:1});
+  const ids=page.data.scenes.map(s=>s.sceneId);
+  page.onMoveCard({currentTarget:{dataset:{index:1,delta:-1}}});
+  assert.deepEqual(Array.from(page.data.scenes,s=>s.sceneId),[ids[1],ids[0],...ids.slice(2)]);
+  assert.equal(page.data.currentScene.sceneId,ids[1]);
+  page.onDeleteCard({currentTarget:{dataset:{index:0}}});
+  assert.equal(page.data.scenes.length,ids.length-1);
+  page.onUndo();
+  assert.equal(page.data.scenes[0].sceneId,ids[1]);
+  while(page.data.scenes.length>1)page.onDeleteCard({currentTarget:{dataset:{index:0}}});
+  page.onDeleteCard({currentTarget:{dataset:{index:0}}});
+  page.onMoveCard({currentTarget:{dataset:{index:0,delta:-1}}});
+  assert.equal(page.data.scenes.length,1);
+});
 
 test('editor opens the card passed by candidate navigation', () => {
   const { wxApi } = recordingWx();
@@ -83,6 +101,32 @@ test('editor opens the card passed by candidate navigation', () => {
   page.initProject(project, { currentCardIndex: 2 });
   assert.equal(page.data.currentCardIndex, 2);
   assert.equal(page.data.currentScene.sceneId, project.candidates[0].editedScenes[2].sceneId);
+});
+
+test('editor invalidates saved output after ink edits and submits the latest snapshot',async()=>{
+  const {wxApi}=recordingWx({createSelectorQuery(){return {select(){return this;},fields(){return this;},exec(cb){cb([{node:{}}]);}};}});
+  const requests=[],saved=[];
+  const page=loadEditorPage(wxApi,{
+    '../../config/env':{ENABLE_FUN_TEXT_STACK_ENTRY:true,ENABLE_FUN_LOCAL_EDITOR:true},
+    '../../utils/funPreviewPreloader':{warm(){}},
+    '../../utils/funCardRendererClient':{async requestRenderStack(api,payload){requests.push(JSON.parse(JSON.stringify(payload)));return {cards:payload.scenes.map(s=>({sceneId:s.sceneId,order:s.order,url:'cloud://test/revision'+requests.length+'/'+s.order+'.png'}))};}},
+    '../../utils/sequenceBadgeComposer':{async materializeManifest(api,canvas,manifest){manifest.stacks[0].cards.forEach(c=>{c.exportUrl=c.sourceUrl;});return manifest;}},
+    '../../utils/imageExporter':{async saveImagesSequentially(api,urls){saved.push(Array.from(urls));}}
+  });
+  page.initProject(createSampleProject(),{currentCardIndex:0});
+  await page.onSaveCurrentPage();
+  const sceneId=page.data.currentScene.sceneId, candidateId=page.data.selectedCandidate.candidateId;
+  const ink=[{id:'hw_test',x:540,y:540,scale:1,rotation:0,strokes:[{id:'stroke_test',brushKey:'pen',colorKey:'blue',width:28,points:[{x:300,y:760},{x:700,y:760}]}]}];
+  page.syncProject(model.updateInkStickers(page.data.project,candidateId,sceneId,ink),0,'');
+  await page.onSaveCurrentPage();
+  assert.equal(requests.length,2);
+  assert.equal(requests[1].scenes[0].strokes.length,1);
+  assert.equal(requests[1].scenes[0].strokes[0].colorKey,'blue');
+  assert.notEqual(saved[0][0],saved[1][0]);
+  await page.onSaveAllPages();
+  await page.onWechatPreview();
+  assert.equal(requests.length,2,'unchanged current/all/preview must share the latest manifest');
+  assert.equal(saved[2][0],saved[1][0]);
 });
 
 test('editor saves selected audited final card and reuses manifest for WeChat preview',async()=>{
@@ -320,6 +364,7 @@ test('switching style pack recomposes the entire stack with current text and ord
   page.onInputEditText({ detail: { value: '先等等' } });
   page.onConfirmText();
 
+  page.onSetEditScope({ currentTarget: { dataset: { scope: 'stack' } } });
   page.onSelectStylePack({ currentTarget: { dataset: { stylePackId: 'chalk-chaos-v1' } } });
 
   assert.equal(page.data.selectedCandidate.stylePackId, 'chalk-chaos-v1');
@@ -327,63 +372,11 @@ test('switching style pack recomposes the entire stack with current text and ord
   assert.equal(page.data.project.candidates[0].stylePackId, 'chalk-chaos-v1');
 });
 
-test('movable thumbnail lifecycle moves third card to first exactly once and retains the cover label', () => {
-  const { wxApi } = recordingWx({});
-  const calls = [];
-  const page = loadEditorPage(wxApi, {
-    '../../utils/funTextProject': Object.assign({}, model, {
-      moveCard(project, candidateId, fromIndex, toIndex) {
-        calls.push({ projectId: project.projectId, candidateId, fromIndex, toIndex });
-        return model.moveCard(project, candidateId, fromIndex, toIndex);
-      }
-    })
-  });
-  const project = createSampleProject();
-  const wxml = readMiniProgramFile('miniprogram/pages/fun-text-editor/fun-text-editor.wxml');
-  page.initProject(project);
-
-  const initialScenes = page.data.scenes.slice();
-  const movingSceneId = initialScenes[2].sceneId;
-  const startHandler = handlerBoundToMovableView(wxml, 'bindtouchstart');
-  const moveHandler = handlerBoundToMovableView(wxml, 'bindchange');
-  const endHandler = handlerBoundToMovableView(wxml, 'bindtouchend');
-  assert.equal(startHandler, 'onSortStart');
-  assert.equal(moveHandler, 'onSortMove');
-  assert.equal(endHandler, 'onSortEnd');
-  assert.match(wxml, /<movable-area/);
-  assert.match(wxml, /<movable-view/);
-
-  page[startHandler]({ currentTarget: { dataset: { index: 2 } } });
-  page[moveHandler]({ detail: { x: page.data.sortItems[0].x } });
-  assert.equal(page.data.sortToIndex, 0);
-  assert.equal(page.data.sortItems[0].positionX, page.data.sortItems[0].x + (page.data.sortItems[1].x - page.data.sortItems[0].x));
-  assert.equal(page.data.sortItems[1].positionX, page.data.sortItems[1].x + (page.data.sortItems[1].x - page.data.sortItems[0].x));
-  assert.equal(page.data.sortItems[2].positionX, page.data.sortItems[0].x);
-  page[moveHandler]({ detail: { x: page.data.sortItems[0].x } });
-  assert.equal(calls.length, 0, 'moving only updates the destination preview');
-  page[endHandler]();
-  page[endHandler]();
-
-  assert.deepEqual(calls, [{
-    projectId: project.projectId,
-    candidateId: project.selectedCandidateId,
-    fromIndex: 2,
-    toIndex: 0
-  }]);
-  assert.equal(page.data.scenes[0].sceneId, movingSceneId);
-  assert.equal(page.data.scenes[0].order, 1);
-  assert.equal(page.data.scenes[1].order, 2);
-  assert.equal(page.data.scenes[2].order, 3);
-  assert.deepEqual(page.data.scenes.map(s => s.order), page.data.scenes.map((_, i) => i + 1));
-  assert.equal(page.data.sortItems[0].label, '微信封面');
-});
 
 test('editor exposes visual choice previews, live sort positions and a canvas-safe text modal', () => {
   const wxml = readMiniProgramFile('miniprogram/pages/fun-text-editor/fun-text-editor.wxml');
   const wxss = readMiniProgramFile('miniprogram/pages/fun-text-editor/fun-text-editor.wxss');
 
-  assert.match(wxml, /x="\{\{item\.positionX\}\}"/);
-  assert.match(wxml, /animation="\{\{index !== draggingIndex\}\}"/);
   assert.match(wxml, /previewPatternClass/);
   assert.match(wxml, /style-preview/);
   assert.match(wxml, /item\.glyph/);
@@ -501,8 +494,8 @@ test('editor markup groups focused actions without exposing a general-purpose im
   const combined = [wxml, js, wxss, colors].join('\n');
 
   assert.match(wxml, /改文字/);
-  assert.match(wxml, /整组风格/);
-  assert.match(wxml, /调整顺序|拖动排序|排序/);
+  assert.match(wxml, /control-label">风格/);
+  assert.match(wxml, /卡片顺序/);
   assert.match(wxml, /微信封面/);
   assert.match(wxml, /fun-card-canvas/);
 

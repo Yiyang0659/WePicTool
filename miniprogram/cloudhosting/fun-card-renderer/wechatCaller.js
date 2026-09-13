@@ -29,7 +29,10 @@ function createWechatCaller(options) {
       url.search = new URLSearchParams({ appid: appId, secret: appSecret,
         js_code: code, grant_type: 'authorization_code' }).toString();
       const response = await request(url, { redirect: 'error', signal: controller.signal });
-      if (!response.ok) return { statusCode: 503, code: 'CALLER_AUTH_UNAVAILABLE' };
+      if (!response.ok) {
+        if (options.onError) options.onError({code:'WECHAT_LOGIN_HTTP_ERROR'});
+        return { statusCode: 503, code: 'CALLER_AUTH_UNAVAILABLE' };
+      }
       const data = await response.json();
       if (data && (!data.errcode || data.errcode === 0) &&
           typeof data.openid === 'string' && /^[\w-]{1,128}$/.test(data.openid)) {
@@ -41,6 +44,8 @@ function createWechatCaller(options) {
       return { statusCode: invalidCode ? 403 : 503,
         code: invalidCode ? 'CALLER_UNAUTHORIZED' : 'CALLER_AUTH_UNAVAILABLE' };
     } catch (_) {
+      if (options.onError) options.onError({code:controller.signal.aborted
+        ? 'WECHAT_LOGIN_TIMEOUT' : 'WECHAT_LOGIN_CONNECTION_OR_RESPONSE_ERROR'});
       return { statusCode: 503, code: 'CALLER_AUTH_UNAVAILABLE' };
     } finally {
       clearTimeout(timer);

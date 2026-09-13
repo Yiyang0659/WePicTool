@@ -30,6 +30,16 @@ function requestRenderer(wxApi, path, payload, options) {
   }
 
   var targetWx = resolveWxApi(wxApi);
+  // Candidate routing is explicitly restricted to development preview builds.
+  // Missing/unknown account information must never opt a production user in.
+  if ((path === '/render-stack' || path === '/render-capabilities') && env.FUN_CARD_RENDERER_DEV_GRAY === 'gray015') {
+    try {
+      var account = targetWx.getAccountInfoSync();
+      if (account && account.miniProgram && account.miniProgram.envVersion === 'develop') {
+        path += '?gray015=1';
+      }
+    } catch (_) { /* Keep the stable route. */ }
+  }
   var cooldown = safetyCooldowns.get(targetWx);
   if (cooldown && cooldown.until > Date.now()) {
     return Promise.reject(makeError('云端审核暂不可用，请稍等30秒再试；可以继续本机编辑', 'SAFETY_UNAVAILABLE'));
@@ -79,7 +89,20 @@ function requestRenderer(wxApi, path, payload, options) {
           return reject(error);
         }
         if (data.code === 'CALLER_UNAUTHORIZED' || data.code === 'CALLER_AUTH_UNAVAILABLE') {
-          return reject(makeError('微信身份验证暂不可用，请重试', data.code));
+          var authError = makeError(data.code === 'CALLER_UNAUTHORIZED'
+            ? '微信登录凭证校验失败，作品已保留，请重新进入后重试'
+            : '保存服务连接微信验证失败，作品已保留，请稍后重试', data.code);
+          authError.statusCode = statusCode;
+          var authRequestId = res.requestId || (res.header && (res.header['x-request-id'] || res.header['X-Request-Id']));
+          if (typeof authRequestId === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(authRequestId)) authError.requestId = authRequestId;
+          console.warn('[fun-card-renderer] 保存鉴权失败', {
+            code: data.code, statusCode: statusCode, requestId: authError.requestId || '',
+            requestPath: path, serviceName: serviceName, startedAt: startedAt
+          });
+          return reject(authError);
+        }
+        if (data.code === 'INVALID_REQUEST') {
+          return reject(makeError('保存服务无法处理当前卡片数据，作品已保留', 'INVALID_REQUEST'));
         }
         if (statusCode !== 200 || !data || data.ok !== true) {
           return reject(makeError('服务端渲染响应异常', 'INVALID_RENDER_RESPONSE'));
@@ -170,7 +193,9 @@ function requestPreviewStack(wxApi, payload, options) {
   });
 }
 
-function requestRenderStack(wxApi, payload, options) {
+async function requestRenderStack(wxApi, payload, options) {
+  // The render endpoint validates scenes and performs the final safety audit.
+  // A separate capability request can hit an older route and falsely block saving.
   return requestRenderer(wxApi, '/render-stack', payload, options).then(function (data) {
     if (!data || data.projectId !== payload.projectId || data.candidateId !== payload.candidateId) {
       throw makeError('渲染响应缺少匹配的候选数据', 'INVALID_RENDER_RESPONSE');

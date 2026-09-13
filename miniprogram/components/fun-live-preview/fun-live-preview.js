@@ -37,6 +37,7 @@ Component({
       return {x: Math.max(0,Math.min(1080,x/this._canvasWidth*1080)), y: Math.max(0,Math.min(1080,y/this._canvasWidth*1080))};
     },
     inkStart: function (event) {
+      if (!this.properties.drawing) { this.triggerEvent('browsestart',{touches:event.touches}); return; }
       if (!this.properties.drawing || event.touches.length !== 1) return;
       var p = this.inkPoint(event); if (!p) return;
       if(this.properties.panMode) {
@@ -81,7 +82,8 @@ Component({
         var that=this; this._inkTimer=setTimeout(function(){that._inkTimer=null;that.paintInk();},16);
       }
     },
-    inkEnd: function () {
+    inkEnd: function (event) {
+      if (!this.properties.drawing && event) { this.triggerEvent('browseend',{changedTouches:event.changedTouches}); return; }
       if(this._panStart) {
         if(this._panViewport)this.triggerEvent('viewportchange',this._panViewport);
         this.inkCancel();return;
@@ -95,6 +97,7 @@ Component({
       this.inkCancel();
     },
     inkCancel: function () {
+      this.triggerEvent('browsecancel');
       if(this._panStart)this._committedStrokes=null;
       this._panStart=null;this._panViewport=null;
       this._inkDraft=null; this._stroke=null;this._limitReported=false;
@@ -224,7 +227,7 @@ Component({
         canvas.width = Math.round(item.width * ratio); canvas.height = canvas.width;
         var ctx = canvas.getContext('2d'); ctx.scale(ratio, ratio);
         var scene = Object.assign({}, that.properties.scene, {
-          background: { color: 'rgba(0,0,0,0)' },
+          background: that.properties.localOnly ? that.properties.scene.background : { color: 'rgba(0,0,0,0)' },
           layers: localPreview && !that.properties.localOnly ? [] : that.properties.scene.layers.filter(function (layer) { return layer.type !== 'text'; })
         });
         painter.paintScene(ctx, scene, item.width);
