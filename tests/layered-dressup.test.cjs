@@ -153,7 +153,8 @@ test('creates an empty upload project without adding filler cards', () => {
     head: [],
     tops: [],
     bottoms: [],
-    shoes: []
+    shoes: [],
+    others: []
   });
   assert.deepEqual(plain(project.pendingItems), []);
   assert.equal(dressup.buildSendability(project).canExport, false);
@@ -489,13 +490,16 @@ test('AI importer keeps low-confidence items pending and emits reviewed groups b
   assert.equal(navigatedBack, 1);
 });
 
-test('AI importer respects the reviewed original-versus-white-background choice', () => {
+test('AI importer normalizes before returning and retains original-versus-white-background choice', async () => {
   const taskUtils = loadMiniProgramModule('miniprogram/utils/task.js');
   const definition = loadMiniProgramPage('miniprogram/pages/outfit-import/outfit-import.js', {
-    '../../utils/task': taskUtils
-  }, {});
+    '../../utils/task': taskUtils,
+    '../../utils/cardComposer': {composeCard:async()=>({tempFilePath:'wxfile://normalized',width:1024,height:1365})}
+  }, {createOffscreenCanvas:()=>({}),getFileSystemManager:()=>({saveFile:o=>o.success({savedFilePath:'wxfile://saved'})}),navigateBack(){},showToast(){}});
   const page = instantiatePage(definition);
-  page.showReviewTask({
+  let returned;
+  page._openerEventChannel={emit:(name,payload)=>{returned=payload;}};
+  await page.showReviewTask({
     groups: {
       shoes: [{
         resultId: 'shoe-one',
@@ -509,7 +513,10 @@ test('AI importer respects the reviewed original-versus-white-background choice'
     }
   });
 
-  page.onToggleReviewVersion({ currentTarget: { dataset: { id: 'shoe-one' } } });
+  assert.equal(page.data.phase,'select');
+  assert.equal(returned.groups.shoes[0].processedUrl,'wxfile://saved');
+
+  page.onToggleReviewVersion({ currentTarget: { dataset: { id: 'shoe-source' } } });
   const payload = page.buildImportPayload(false);
   assert.equal(payload.groups.shoes[0].url, 'cloud://shoe-original.jpg');
   assert.equal(payload.groups.shoes[0].processedUrl, '');

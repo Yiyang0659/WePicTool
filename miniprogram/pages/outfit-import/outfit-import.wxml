@@ -3,7 +3,7 @@
     <view class="purpose-card">
       <view class="purpose-badge">AI 添加方式</view>
       <view class="purpose-title">把混在一起的图片交给 AI</view>
-      <view class="purpose-desc">自动分类、去背并统一白底。整理结果确认后才会加入穿搭叠图，不会覆盖已有素材。</view>
+      <view class="purpose-desc">自动分类、提取衣物并统一大小，完成后直接加入工作台。AI 会尽量保留原款式，侧拍或遮挡的细节可能不同，请检查成图。</view>
     </view>
 
     <view class="section-head">

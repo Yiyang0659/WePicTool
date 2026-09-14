@@ -71,7 +71,7 @@ test('lays out two-digit badges inside square, portrait and landscape safe areas
     [1080, 1080], [1080, 1350], [1600, 900]
   ].forEach(([width, height]) => {
     ['01', '09', '10', '99'].forEach(label => {
-      const layout = composer.getSequenceBadgeLayout(width, height, label, 1);
+      const layout = composer.getSequenceBadgeLayout(width, height, label, 2);
       assert.ok(layout.x >= 0 && layout.y >= 0);
       assert.ok(layout.x + layout.width <= width);
       assert.ok(layout.y + layout.height <= height);
@@ -81,12 +81,12 @@ test('lays out two-digit badges inside square, portrait and landscape safe areas
   });
 });
 
-test('paints a dark rounded capsule and centered white sequence text', () => {
+test('paints a gray rounded capsule and centered white sequence text', () => {
   const { composer } = loadModules();
   const log = [];
   const canvas = recordingCanvas(log);
   const ctx = canvas.getContext('2d');
-  composer.paintSequenceBadge(ctx, composer.getSequenceBadgeLayout(1080, 1080, '01', 1), '01');
+  composer.paintSequenceBadge(ctx, composer.getSequenceBadgeLayout(1080, 1080, '01', 2), '01');
   assert.ok(log.some(entry => entry[0] === 'fill'));
   assert.ok(log.some(entry => entry[0] === 'fillText' && entry[1] === '01'));
   assert.deepEqual(log[0], ['save']);

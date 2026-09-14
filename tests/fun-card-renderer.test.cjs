@@ -17,6 +17,25 @@ const validator = require(path.join(serviceRoot, 'sceneValidator.js'));
 const renderer = require(path.join(serviceRoot, 'renderer.js'));
 const bundledFontRoot = path.join(serviceRoot, 'assets', 'fonts');
 
+test('final stages share a trace with text and image audit without logging content', async () => {
+  const logs=[];const traces=[];
+  const render=renderer.createSceneRenderer({
+    makePng:async()=>Buffer.from('image'),
+    checkImage:async(buffer,context)=>{traces.push(context.traceId);return {ok:true};},
+    uploadBuffer:async(buffer,cloudPath)=>({fileId:cloudPath,url:'https://example.com/card.png'})
+  });
+  const handler=server.createRenderStackHandler({
+    checkContent:async(text,context)=>{traces.push(context.traceId);return {ok:true};},
+    renderScenes:async(scenes,job)=>render(scenes.map(scene=>({...scene,strokes:[{}]})),job),
+    logStage:(stage,detail)=>logs.push(stage+' '+detail)
+  });
+  assert.equal((await handler(validPayload(),{traceId:'trace-final-1',openid:'private-openid'})).statusCode,200);
+  assert.equal(traces.length,4);assert.ok(traces.every(id=>id==='trace-final-1'));
+  assert.equal(logs.filter(line=>line.startsWith('audit-start')).length,1);
+  assert.ok(logs.every(line=>line.includes('traceId=trace-final-1')));
+  assert.ok(!logs.join('').includes('private-openid'));assert.ok(!logs.join('').includes('我今天想见你'));
+});
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -105,6 +124,48 @@ function validPreviewPayload() {
   };
 }
 
+test('editing a saved card creates immutable PNG URLs with the latest decoration and two ink colors', async () => {
+  const canvas = require(path.join(serviceRoot, 'node_modules/@napi-rs/canvas'));
+  const makePng = renderer.createPngMaker(canvas);
+  const stored = new Map(), downloaded = new Map();
+  const render = renderer.createSceneRenderer({
+    makePng,
+    checkImage: async () => ({ok:true}),
+    uploadBuffer: async (buffer, cloudPath) => {
+      const url='cloud://test/'+cloudPath;
+      stored.set(url, buffer);
+      return {fileId:url,url};
+    }
+  });
+  const handler=server.createRenderStackHandler({checkContent:async()=>({ok:true}),imageSafetyEnabled:true,renderScenes:render});
+  const payload=validPayload();
+  const first=await handler(payload,{traceId:'same-trace'});
+  assert.equal(first.statusCode,200);
+  const firstUrl=first.body.cards[0].url;
+  downloaded.set(firstUrl,stored.get(firstUrl));
+  const before=Buffer.from(stored.get(firstUrl));
+  payload.scenes[0].layers.push({id:'added_star',type:'sticker',assetKey:'sticker_2',x:540,y:220,scale:1,rotation:0});
+  payload.scenes[0].strokes=['purple','blue'].map((colorKey,i)=>({
+    id:'stroke_'+i,brushKey:'pen',colorKey,width:28,
+    points:[{x:300,y:760+i*100},{x:700,y:760+i*100}]
+  }));
+  const second=await handler(payload,{traceId:'same-trace'});
+  assert.equal(second.statusCode,200,JSON.stringify(second.body));
+  const secondUrl=second.body.cards[0].url;
+  assert.notEqual(secondUrl,firstUrl);
+  assert.deepEqual(stored.get(firstUrl),before,'previous image must not be overwritten');
+  const latest=downloaded.get(secondUrl)||stored.get(secondUrl);
+  assert.notDeepEqual(latest,before);
+  const png=await canvas.loadImage(latest), old=await canvas.loadImage(before);
+  const surface=canvas.createCanvas(1080,1080), ctx=surface.getContext('2d');
+  ctx.drawImage(png,0,0);
+  assert.deepEqual(Array.from(ctx.getImageData(500,760,1,1).data),[118,87,255,255]);
+  assert.deepEqual(Array.from(ctx.getImageData(500,860,1,1).data),[32,119,212,255]);
+  const star=Buffer.from(ctx.getImageData(470,150,140,140).data);
+  ctx.drawImage(old,0,0);
+  assert.notDeepEqual(star,Buffer.from(ctx.getImageData(470,150,140,140).data));
+});
+
 test('both handlers pass separate caller context to content auditing', async () => {
   const caller = { openid: 'header-only-openid' };
   for (const [factory, payload] of [
@@ -118,7 +179,9 @@ test('both handlers pass separate caller context to content auditing', async () 
       return { ok: false, code: 'SAFETY_UNAVAILABLE' };
     }});
     assert.equal((await handler(payload, caller)).statusCode, 503);
-    assert.equal(received, caller);
+    assert.equal(received.openid, caller.openid);
+    if (factory === server.createRenderStackHandler) assert.match(received.traceId, /^[a-f0-9-]{36}$/);
+    assert.deepEqual(caller, { openid: 'header-only-openid' });
   }
 });
 
@@ -349,8 +412,11 @@ test('renders the final stack at 1080 and preserves scene order', async () => {
     projectId: payload.projectId,
     candidateId: payload.candidateId,
     kind: 'final',
+    traceId: jobs[0].traceId,
+    revision: jobs[0].revision,
     size: 1080
   }]);
+  assert.match(jobs[0].traceId, /^[a-f0-9-]{36}$/);
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.ok, true);
   assert.equal(response.body.projectId, payload.projectId);

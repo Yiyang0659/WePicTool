@@ -4,7 +4,7 @@
   <view class="wx-nav" style="{{navStyle}}">
     <view class="wx-nav-row" style="{{navRowStyle}}">
       <view class="back" aria-role="button" aria-label="返回" bindtap="onBack">‹</view>
-      <view class="name">好友</view>
+      <view class="name">小鹿</view>
     </view>
 
     <view
@@ -14,13 +14,13 @@
       aria-label="{{themeToggleLabel}}"
       bindtap="onToggleTheme"
     >
+      <view class="theme-slider {{themeMode === 'dark' ? 'theme-slider-dark' : ''}}"></view>
       <view class="theme-segment {{themeMode === 'light' ? 'active' : ''}}">
-        <text class="theme-symbol theme-sun">☼</text>
+        <image class="theme-icon" src="/assets/preview-ui/sun.svg" mode="aspectFit" />
         <text class="sr-only">普通模式</text>
       </view>
-      <view class="theme-divider"></view>
       <view class="theme-segment {{themeMode === 'dark' ? 'active' : ''}}">
-        <text class="theme-symbol theme-moon">☾</text>
+        <image class="theme-icon" src="/assets/preview-ui/moon.svg" mode="aspectFit" />
         <text class="sr-only">深色模式</text>
       </view>
     </view>
@@ -38,7 +38,7 @@
 
       <block wx:for="{{groupList}}" wx:for-item="g" wx:for-index="gi" wx:key="key">
         <view class="msg me stackmsg">
-          <view class="avatar mine" aria-label="我的头像">😎</view>
+          <view class="avatar mine cat-avatar" aria-label="猫咪头像"><image class="cat-avatar-image" src="/assets/preview-ui/cat-avatar.png" mode="aspectFit" /></view>
           <view class="stackmsg-content">
             <view
               hidden="{{g.expanded}}"
@@ -81,7 +81,7 @@
         </view>
 
         <view wx:for="{{g.rest}}" wx:for-item="cd" wx:for-index="ki" wx:key="num" hidden="{{!g.expanded}}" class="msg me xrow {{g.leaving ? 'leave' : 'enter'}}" style="animation-delay: {{g.leaving ? cd.leaveDelay : cd.enterDelay}}ms;">
-          <view class="avatar mine" aria-label="我的头像">😎</view>
+          <view class="avatar mine cat-avatar" aria-label="猫咪头像"><image class="cat-avatar-image" src="/assets/preview-ui/cat-avatar.png" mode="aspectFit" /></view>
           <view class="xcard" style="{{g.stageStyle}}" data-gi="{{gi}}" data-url="{{cd.url}}" bindtap="onOpenViewer" bindlongpress="onCardLongPress">
             <view class="stack-card" style="{{cd.cardStyle}}">
               <image wx:if="{{!cd.err}}" class="card-img" src="{{cd.url}}" mode="aspectFill" lazy-load="{{false}}" data-gi="{{gi}}" data-kind="rest" data-ci="{{ki}}" binderror="onImgError" />
@@ -99,6 +99,7 @@
     </view>
   </scroll-view>
 
+  <view wx:if="{{canSaveCurrent && !isEmpty}}" class="preview-save-bar"><button class="preview-save-button" disabled="{{saveBusy}}" bindtap="onSaveCurrentPreview"><image class="save-download-icon" src="/assets/preview-ui/download.svg" mode="aspectFit" /><text>保存到相册</text></button></view>
   <view class="wx-inputbar" aria-role="button" aria-label="预览模式，点击查看说明" bindtap="onInputHint">
     <text class="input-icon">◉</text>
     <view class="field">预览模式</view>
@@ -109,5 +110,9 @@
   <view class="viewer" wx:if="{{viewer.show}}" catchtap="onCloseViewer">
     <image class="vimg" src="{{viewer.url}}" mode="aspectFit" />
     <view class="vtip">点任意处关闭</view>
+  </view>
+  <canvas type="2d" id="previewExportCanvas" class="preview-export-canvas" />
+  <view wx:if="{{saveStatus}}" class="preview-save-mask" catchtouchmove="onSaveMaskTouch" catchtap="onDismissSave">
+    <view class="preview-save-dialog"><view wx:if="{{saveBusy}}" class="preview-save-spinner"></view><view class="preview-save-status">{{saveStatus}}</view><button wx:if="{{saveDone && !saveBusy}}" catchtap="onGoWechat">去微信发送</button><text wx:if="{{!saveBusy}}" class="preview-save-close">点击关闭</text></view>
   </view>
 </view>

@@ -30,6 +30,16 @@ function requestRenderer(wxApi, path, payload, options) {
   }
 
   var targetWx = resolveWxApi(wxApi);
+  // Candidate routing is explicitly restricted to development preview builds.
+  // Missing/unknown account information must never opt a production user in.
+  if (path === '/render-stack' && env.FUN_CARD_RENDERER_DEV_GRAY === 'gray015') {
+    try {
+      var account = targetWx.getAccountInfoSync();
+      if (account && account.miniProgram && account.miniProgram.envVersion === 'develop') {
+        path += '?gray015=1';
+      }
+    } catch (_) { /* Keep the stable route. */ }
+  }
   var cooldown = safetyCooldowns.get(targetWx);
   if (cooldown && cooldown.until > Date.now()) {
     return Promise.reject(makeError('云端审核暂不可用，请稍等30秒再试；可以继续本机编辑', 'SAFETY_UNAVAILABLE'));
@@ -171,6 +181,13 @@ function requestPreviewStack(wxApi, payload, options) {
 }
 
 function requestRenderStack(wxApi, payload, options) {
+  var emptyIndex = (payload.scenes || []).findIndex(function(scene) {
+    return Array.isArray(scene.layers) && !scene.layers.length && !(scene.strokes || []).length;
+  });
+  if (emptyIndex >= 0) return Promise.reject(makeError('第' + (emptyIndex+1) + '张还是空白，请添加文字、手写或装饰后再保存', 'EMPTY_CARD'));
+  if (env.FUN_CARD_RENDERER_SUPPORTS_FREE_CARDS !== true && (payload.scenes || []).some(function(scene) {
+    return (scene.background && scene.background.assetKey === 'solid') || String(scene.sceneId).indexOf('scene_free_') === 0;
+  })) return Promise.reject(makeError('自由卡保存服务尚未更新，作品已保留，可继续编辑和预览', 'FREE_CARDS_NOT_READY'));
   return requestRenderer(wxApi, '/render-stack', payload, options).then(function (data) {
     if (!data || data.projectId !== payload.projectId || data.candidateId !== payload.candidateId) {
       throw makeError('渲染响应缺少匹配的候选数据', 'INVALID_RENDER_RESPONSE');

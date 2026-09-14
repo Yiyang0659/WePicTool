@@ -70,21 +70,23 @@ page {
   position: absolute;
   z-index: 5;
   display: flex;
-  width: 68px;
+  width: 72px;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.56);
+  background-color: #eeeeef;
+  box-shadow: inset 0 1px 2px #00000005;
+  padding: 2px;
 }
 
 .theme-segment {
   position: relative;
   display: flex;
-  width: 33px;
-  height: calc(100% - 4px);
+  flex: 1;
+  height: 100%;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
@@ -94,9 +96,13 @@ page {
 
 .theme-segment.active {
   color: rgba(0, 0, 0, 0.82);
-  background-color: #ffffff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
+
+.theme-slider { position:absolute; left:2px; top:2px; width:calc((100% - 4px) / 2); height:calc(100% - 4px); border-radius:999px; background:#fff; box-shadow:0 2px 5px #00000018; transition:transform 200ms ease; }
+.theme-slider-dark { transform:translateX(100%); }
+.theme-icon {display:block;width:20px;height:20px;opacity:.4;transition:opacity 200ms ease;}
+.active .theme-icon {opacity:1;}
+.theme-dark .theme-icon,.theme-dark .save-download-icon {filter:invert(1);}
 
 .theme-divider {
   width: 1px;
@@ -170,9 +176,33 @@ page {
 }
 
 .msg.me .avatar {
-  margin-left: 8px;
-  background-color: #95ec69;
+  margin-left: 12px;
+  background-color: #f5d9c9;
 }
+
+.cat-face { width:28px; height:26px; position:relative; margin-top:7px; border-radius:45% 45% 40% 40%; background:#fffaf0; border-top:8px solid #77716a; box-sizing:border-box; }
+.cat-face::before,.cat-face::after { content:''; position:absolute; top:-14px; width:10px; height:15px; background:#77716a; border-radius:2px; z-index:-1; }
+.cat-face::before {left:1px;transform:rotate(-15deg);}
+.cat-face::after {right:1px;transform:rotate(15deg);}
+.cat-eyes {font-size:10px; line-height:12px; color:#302b26; white-space:pre; text-align:center;}
+.cat-nose {font-size:7px; line-height:7px; color:#c78d86; text-align:center;}
+.cat-avatar {position:relative;}
+.cat-avatar-image {position:absolute;width:126%;height:126%;left:-13%;top:-13%;}
+.wx,.wx-nav,.wx-body,.wx-inputbar {transition:background-color 200ms ease,color 200ms ease;}
+.theme-dark .theme-slider {background:#555;}
+.preview-save-bar {flex:none; padding:12px 0 16px; text-align:center;}
+.preview-save-button {display:inline-flex; gap:12px; align-items:center; justify-content:center; padding:0 26px; height:46px; line-height:1; border-radius:999px; background:#fff; color:#191919; font-size:17px; font-weight:600; box-shadow:0 4px 14px #0000000c;}
+.save-download-icon {display:block;width:24px;height:24px;flex:none;}
+.preview-save-button::after {border:0;}
+.preview-save-hint {display:block; font-size:10px; color:#999; margin-top:6px;}
+.theme-dark .preview-save-button {background:#292929;color:#eee;}
+.preview-export-canvas {position:fixed;left:-2000px;top:-2000px;width:1080px;height:1080px;pointer-events:none;}
+.preview-save-mask {position:fixed;inset:0;z-index:9999;background:#0003;display:flex;align-items:center;justify-content:center;}
+.preview-save-dialog {width:240px;box-sizing:border-box;padding:28px 20px;border-radius:12px;background:#303030;color:#fff;text-align:center;box-shadow:0 8px 30px #0002;}
+.preview-save-status {font-size:15px;line-height:1.6;}
+.preview-save-spinner {width:28px;height:28px;border:3px solid #ffffff40;border-top-color:#fff;border-radius:50%;margin:0 auto 18px;animation:preview-saving 850ms linear infinite;}
+.preview-save-close {display:block;margin-top:16px;color:#ccc;font-size:12px;}
+@keyframes preview-saving {to {transform:rotate(360deg);}}
 
 .stackmsg-content {
   display: flex;
@@ -373,7 +403,7 @@ page {
 .theme-dark .wx-time { color: rgba(255, 255, 255, 0.3); }
 .theme-dark .theme-toggle { border-color: rgba(255, 255, 255, 0.15); background-color: rgba(0, 0, 0, 0.16); }
 .theme-dark .theme-segment { color: rgba(255, 255, 255, 0.46); }
-.theme-dark .theme-segment.active { color: rgba(255, 255, 255, 0.86); background-color: #404040; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
+.theme-dark .theme-segment.active { color: rgba(255, 255, 255, 0.86); }
 .theme-dark .theme-divider { background-color: rgba(255, 255, 255, 0.12); }
 .theme-dark .stack-card { border-color: rgba(255, 255, 255, 0.1); background-color: #191919; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45); }
 .theme-dark .expand-cap { border-color: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.72); background-color: rgba(64, 64, 64, 0.82); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }

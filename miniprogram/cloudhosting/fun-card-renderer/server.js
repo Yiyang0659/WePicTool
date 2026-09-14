@@ -113,16 +113,23 @@ function createRenderStackHandler(dependencies) {
     if (!validateRenderPayload(input).valid) return failure(400, 'INVALID_REQUEST');
     if (input.scenes.some(hasUnverifiedInk) && !deps.imageSafetyEnabled) return failure(503, 'IMAGE_SAFETY_UNAVAILABLE');
     const startedAt = Date.now();
-    if (typeof deps.logStage === 'function') deps.logStage('audit-start', 'kind=final');
+    const traceId = normalizeTraceId(context && context.traceId) || randomUUID();
+    context = { ...context, traceId };
+    const log = (stage, detail) => {
+      if (typeof deps.logStage !== 'function') return;
+      try { deps.logStage(stage, detail + ' traceId=' + traceId + ' time=' + new Date().toISOString()); }
+      catch (_) { /* Diagnostics must not affect rendering. */ }
+    };
+    log('audit-start', 'kind=final');
     const blocked = await auditPayload(deps.checkContent, input, deps.auditTimeoutMs, context);
     if (blocked) {
       if (typeof deps.logStage === 'function') {
-        deps.logStage('audit-end', 'kind=final status=' + blocked.statusCode + ' elapsedMs=' + (Date.now() - startedAt));
+        log('audit-end', 'kind=final status=' + blocked.statusCode + ' elapsedMs=' + (Date.now() - startedAt));
       }
       return blocked;
     }
     if (typeof deps.logStage === 'function') {
-      deps.logStage('render-start', 'kind=final elapsedMs=' + (Date.now() - startedAt));
+      log('render-start', 'kind=final elapsedMs=' + (Date.now() - startedAt));
     }
     try {
       const cards = await withDeadline(
@@ -130,15 +137,22 @@ function createRenderStackHandler(dependencies) {
           projectId: input.projectId,
           candidateId: input.candidateId,
           kind: 'final',
+          traceId,
+          // Immutable output identity: editing the same card must never overwrite
+          // a URL that WeChat/CDN or another in-flight export may still be using.
+          revision: randomUUID(),
           size: 1080
         }),
         deps.renderTimeoutMs,
         DEFAULT_RENDER_TIMEOUT_MS,
         'RENDER_TIMEOUT'
       );
-      if (!cardsMatchScenes(cards, input.scenes)) return failure(500, 'RENDER_FAILED');
+      if (!cardsMatchScenes(cards, input.scenes)) {
+        log('render-end', 'kind=final status=500 code=RENDER_FAILED');
+        return failure(500, 'RENDER_FAILED');
+      }
       if (typeof deps.logStage === 'function') {
-        deps.logStage('render-end', 'kind=final status=200 elapsedMs=' + (Date.now() - startedAt));
+        log('render-end', 'kind=final status=200 elapsedMs=' + (Date.now() - startedAt));
       }
       return {
         statusCode: 200,
@@ -151,8 +165,8 @@ function createRenderStackHandler(dependencies) {
       };
     } catch (error) {
       if (typeof deps.logStage === 'function') {
-        const code = error && error.code ? error.code : 'RENDER_FAILED';
-        deps.logStage('render-end', 'kind=final status=error code=' + code + ' elapsedMs=' + (Date.now() - startedAt));
+        const code = ['CONTENT_UNSAFE', 'IMAGE_SAFETY_UNAVAILABLE', 'RENDER_TIMEOUT'].includes(error && error.code) ? error.code : 'RENDER_FAILED';
+        log('render-end', 'kind=final status=error code=' + code + ' elapsedMs=' + (Date.now() - startedAt));
       }
       if (error && error.code==='CONTENT_UNSAFE') return failure(403,'CONTENT_UNSAFE');
       if (error && error.code==='IMAGE_SAFETY_UNAVAILABLE') return failure(503,'IMAGE_SAFETY_UNAVAILABLE');

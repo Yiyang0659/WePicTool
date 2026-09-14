@@ -27,7 +27,7 @@
         <view class="material-entry-icon">AI</view>
         <view>
           <view class="material-entry-title">AI 帮我整理</view>
-          <view class="material-entry-subtitle">识别后先确认再加入</view>
+          <view class="material-entry-subtitle">识别后自动加入，可再调整</view>
         </view>
       </view>
     </view>
@@ -82,6 +82,7 @@
             <view class="icon-action {{!it.canRight ? 'disabled' : ''}}" bindtap="onMoveItem" data-group="{{g.key}}" data-index="{{i}}" data-direction="1">→</view>
             <view class="icon-action danger" bindtap="onRemoveItem" data-group="{{g.key}}" data-id="{{it.id}}">删</view>
           </view>
+          <view wx:if="{{it.source === 'ai'}}" class="action-secondary" bindtap="onEditMaterial" data-group="{{g.key}}" data-id="{{it.id}}">调整 / 原图</view>
         </view>
       </view>
     </scroll-view>
@@ -93,7 +94,7 @@
 
     <view class="group-actions">
       <view class="action-secondary" bindtap="onAddUserItems" data-group="{{g.key}}">上传到此部位</view>
-      <view class="action-secondary" bindtap="onAddSystemItems" data-group="{{g.key}}">补系统素材</view>
+      <view wx:if="{{g.key !== 'others'}}" class="action-secondary" bindtap="onAddSystemItems" data-group="{{g.key}}">补系统素材</view>
       <view class="action-primary {{!g.canExport ? 'disabled' : ''}}" bindtap="onSaveGroup" data-group="{{g.key}}">保存此组</view>
     </view>
   </view>
@@ -118,6 +119,7 @@
       <view class="guide-step"><text class="guide-num">3</text><text>发送前确认 01 在第一位</text></view>
       <view class="guide-step"><text class="guide-num">4</text><text>勾选「发送后合并展示」再发送</text></view>
       <view class="guide-primary" bindtap="onGuidePreview">看看朋友视角</view>
+      <view class="guide-primary" bindtap="onGoWechat">去微信发送</view>
       <view class="guide-secondary" bindtap="onCloseGuide">我知道了</view>
     </view>
   </view>

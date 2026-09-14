@@ -1,6 +1,6 @@
 const registry = require('../config/playRegistry');
 
-const GROUP_DEFINITIONS = registry.GROUP_DEFINITIONS;
+const GROUP_DEFINITIONS = registry.GROUP_DEFINITIONS.concat([{ key: 'others', title: '其他素材', emoji: '🖼', maxCount: 12 }]);
 const STACK_THRESHOLD = registry.STACK_THRESHOLD;
 const GROUP_KEYS = GROUP_DEFINITIONS.map(function (group) { return group.key; });
 const PENDING_MAX_COUNT = 36;
@@ -53,7 +53,7 @@ function normalizeItem(item, groupKey, source, index, seed) {
   var input = item || {};
   var processedUrl = input.processedUrl || input.mattedUrl || input.mattedFileId || '';
   var originalUrl = input.originalUrl || input.originalFileId || input.localPath || input.tempFilePath || input.url || input.fileId || '';
-  var url = processedUrl || input.url || input.localPath || input.tempFilePath || input.fileId || originalUrl;
+  var url = input.displayUrl || processedUrl || input.url || input.localPath || input.tempFilePath || input.fileId || originalUrl;
   return {
     id: input.id || input.resultId || input.assetId || (source + '_' + seed + '_' + index),
     assetId: input.assetId || (source === 'system' ? input.id || '' : ''),
@@ -62,7 +62,8 @@ function normalizeItem(item, groupKey, source, index, seed) {
     source: source,
     title: input.title || '',
     url: url,
-    localPath: input.localPath || input.tempFilePath || url,
+    displayUrl: input.displayUrl || url,
+    localPath: input.displayUrl || processedUrl || input.localPath || input.tempFilePath || url,
     fileId: input.fileId || '',
     originalUrl: originalUrl,
     originalFileId: input.originalFileId || '',
@@ -105,7 +106,7 @@ function createProject(options) {
       throw new Error('内置素材包不可用: ' + templateId);
     }
     GROUP_KEYS.forEach(function (groupKey) {
-      groups[groupKey] = reindex(pack.groups[groupKey].map(function (item, index) {
+      groups[groupKey] = reindex((pack.groups[groupKey] || []).map(function (item, index) {
         return normalizeItem(item, groupKey, 'system', index, now);
       }), groupKey);
     });
@@ -280,7 +281,7 @@ function buildSendability(project) {
       : 0;
     var mode = count === 0 ? 'empty' : (count >= STACK_THRESHOLD ? 'stackable' : 'normal');
     if (mode === 'stackable') {
-      validGroupCount += 1;
+      if (definition.key !== 'others') validGroupCount += 1;
       totalExportCount += count;
     }
     groups[definition.key] = {
@@ -296,7 +297,7 @@ function buildSendability(project) {
     groups: groups,
     validGroupCount: validGroupCount,
     totalExportCount: totalExportCount,
-    canExport: validGroupCount > 0
+    canExport: totalExportCount > 0
   };
 }
 
@@ -332,6 +333,7 @@ function serializeProject(project) {
 }
 
 module.exports = {
+  GROUP_DEFINITIONS: GROUP_DEFINITIONS,
   GROUP_KEYS: GROUP_KEYS,
   createProject: createProject,
   addItems: addItems,

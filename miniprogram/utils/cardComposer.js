@@ -8,6 +8,7 @@
 // - 浅色 / 白色衣物自动加轻阴影和细描边兜底
 
 const PROCESSABLE_GROUPS = ['tops', 'bottoms', 'shoes'];
+const framing = require('./garmentFraming');
 
 const RATIO_MAP = {
   '1:1': 1,
@@ -167,19 +168,37 @@ function composeWithPageCanvas(canvas, options) {
 
       return new Promise((resolve, reject) => {
         img.onload = () => {
+          let crop = { x: 0, y: 0, width: imageInfo.width, height: imageInfo.height };
+          if (isMatted) {
+            // Use the same canvas at bounded resolution to measure generated white margins.
+            const scale = Math.min(1, 512 / Math.max(imageInfo.width, imageInfo.height));
+            canvas.width = Math.max(1, Math.round(imageInfo.width * scale));
+            canvas.height = Math.max(1, Math.round(imageInfo.height * scale));
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            try {
+              const bounds = framing.findBounds(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+              if (bounds) crop = {
+                x: bounds.x * imageInfo.width / canvas.width, y: bounds.y * imageInfo.height / canvas.height,
+                width: bounds.width * imageInfo.width / canvas.width, height: bounds.height * imageInfo.height / canvas.height
+              };
+            } catch (_) { /* Pixel read unavailable: preserve full image, never crop blindly. */ }
+            canvas.width = width; canvas.height = height;
+          }
           // 1. 填充背景
           ctx.fillStyle = background;
           ctx.fillRect(0, 0, width, height);
 
           // 2. 计算绘制参数
-          const params = calculateDrawParams(width, height, imageInfo.width, imageInfo.height, category);
+          const params = isMatted ? framing.fit(width, height, crop.width, crop.height)
+            : calculateDrawParams(width, height, imageInfo.width, imageInfo.height, category);
 
           // 3. 高质量缩放：大图缩小到 1024px 时保留纹理细节
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
 
           // 4. 可选：轻阴影 + 细描边，增强浅色衣物可见性
-          if (enhanceLightColor) {
+          if (enhanceLightColor && !isMatted) {
             ctx.save();
             ctx.shadowColor = shadowColor;
             // 抠图 PNG 的矩形阴影更明显，减小 blur 半径
@@ -189,9 +208,9 @@ function composeWithPageCanvas(canvas, options) {
           }
 
           // 5. 绘制主体
-          ctx.drawImage(img, params.x, params.y, params.width, params.height);
+          ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, params.x, params.y, params.width, params.height);
 
-          if (enhanceLightColor) {
+          if (enhanceLightColor && !isMatted) {
             ctx.restore();
 
             // 抠图 PNG 跳过矩形描边（透明背景上矩形框非常明显）

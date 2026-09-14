@@ -167,8 +167,10 @@ function validateScene(scene, expectedOrder, expectedStylePackId) {
     const backgroundKeys = Object.keys(scene.background).sort();
     push(errors, backgroundKeys.length === 2 && backgroundKeys[0] === 'assetKey' && backgroundKeys[1] === 'color', '背景形式不受支持');
     push(errors, HEX_COLOR.test(scene.background.color || ''), '背景颜色不合法');
-    push(errors, BACKGROUND_KEYS.has(scene.background.assetKey), '背景素材不在白名单');
-    push(errors, (BACKGROUND_BY_STYLE_PACK[stylePackId] || []).includes(scene.background.assetKey), '场景背景与视觉包不匹配');
+    const solid = scene.background.assetKey === 'solid';
+    push(errors, solid || BACKGROUND_KEYS.has(scene.background.assetKey), '背景素材不在白名单');
+    push(errors, solid || (BACKGROUND_BY_STYLE_PACK[stylePackId] || []).includes(scene.background.assetKey), '场景背景与视觉包不匹配');
+    if (solid) push(errors, scene.backgroundVariantKey === undefined, '纯色背景不能带模板变体');
     if (scene.backgroundVariantKey !== undefined) {
       const variant = BACKGROUND_VARIANTS[scene.backgroundVariantKey];
       push(errors, Boolean(variant), '背景变体不在白名单');
@@ -229,15 +231,15 @@ function validateCommonPayload(payload) {
   return errors;
 }
 
-function validateCandidate(candidate) {
+function validateCandidate(candidate, minimum) {
   const errors = [];
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return { valid: false, errors: ['候选必须是对象'] };
   }
   push(errors, hasBoundedId(candidate.candidateId, CANDIDATE_ID, 110), 'candidateId 不合法');
   push(errors, STYLE_PACK_KEYS.has(candidate.stylePackId), '视觉包不在白名单');
-  if (!Array.isArray(candidate.scenes) || candidate.scenes.length < 3 || candidate.scenes.length > 8) {
-    errors.push('场景数量必须在 3 到 8 张之间');
+  if (!Array.isArray(candidate.scenes) || candidate.scenes.length < (minimum || 1) || candidate.scenes.length > 8) {
+    errors.push('场景数量必须在 ' + (minimum || 1) + ' 到 8 张之间');
     return { valid: false, errors };
   }
   const sceneIds = new Set();
@@ -247,7 +249,7 @@ function validateCandidate(candidate) {
     if (scene && scene.background) {
       push(
         errors,
-        (BACKGROUND_BY_STYLE_PACK[candidate.stylePackId] || []).includes(scene.background.assetKey),
+        scene.background.assetKey === 'solid' || (BACKGROUND_BY_STYLE_PACK[candidate.stylePackId] || []).includes(scene.background.assetKey),
         '场景背景与视觉包不匹配'
       );
     }
@@ -276,7 +278,7 @@ function validatePreviewPayload(payload) {
   }
   const candidateIds = new Set();
   payload.candidates.forEach((candidate, index) => {
-    const result = validateCandidate(candidate);
+    const result = validateCandidate(candidate, 3);
     result.errors.forEach((error) => errors.push('候选 ' + (index + 1) + ': ' + error));
     if (candidate && typeof candidate.candidateId === 'string') {
       push(errors, !candidateIds.has(candidate.candidateId), 'candidateId 必须唯一');

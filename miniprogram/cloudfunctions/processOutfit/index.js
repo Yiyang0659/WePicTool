@@ -27,6 +27,7 @@ const OTHER_GROUP = 'others';
 const SAFETY_CONCURRENCY = 2;
 
 const GROUP_META = {
+  head: { itemLabel: '头像 / 发型' },
   tops: { itemLabel: '上衣' },
   bottoms: { itemLabel: '下装' },
   shoes: { itemLabel: '鞋子' },
@@ -36,12 +37,13 @@ const GROUP_META = {
 const CLASSIFICATION_PROMPT = `你是一名穿搭商品分类助手。请判断这张图片中的主体物品属于哪个类别，只返回以下标签之一，并给出置信度：
 
 可选标签：
+- head：以头部、脸或发型为主要内容的头像、半身头像
 - tops：上衣、T恤、衬衫、外套、卫衣、针织衫、POLO衫、背心等穿在上半身的衣物
 - bottoms：裤子、牛仔裤、休闲裤、裙子、半身裙、短裤等穿在下半身的衣物
 - shoes：鞋、运动鞋、皮鞋、靴子、凉鞋、高跟鞋等 footwear
 - other_product：其他商品或小物件（如手表、手机、化妆品、食品等）
 - daily：完整人物试穿图、真人上身照、生活场景照、合照、风景照
-- unsupported：头像、包、帽子、腰带、项链、眼镜、围巾、手套等非穿搭主链路配饰
+- unsupported：包、帽子、腰带、项链、眼镜、围巾、手套等非穿搭主链路配饰
 - uncertain：图片模糊、主体无法辨认、或无法归入以上任何类别
 
 输出格式必须是纯 JSON，不要加 markdown 代码块，不要解释：
@@ -64,6 +66,7 @@ const CLASSIFICATION_PROMPT = `你是一名穿搭商品分类助手。请判断�
 
 function createEmptyGroups() {
   return {
+    head: [],
     tops: [],
     bottoms: [],
     shoes: [],
@@ -79,6 +82,7 @@ function getMockCategory(index) {
 }
 
 function normalizeGroupKey(groupKey) {
+  if (groupKey === 'head') return 'head';
   if (!groupKey) return OTHER_GROUP;
   if (groupKey === 'unprocessed') return OTHER_GROUP;
   if (PROCESSABLE_GROUPS.indexOf(groupKey) !== -1) return groupKey;
@@ -313,7 +317,7 @@ async function classifyImageWithDashScope(imageInput, apiKey) {
 // ===== 阶段三：抠图 =====
 // 注意：白底卡片合成在前端通过 Canvas 完成，云函数只负责抠图
 
-const MATTING_PROMPT = '对这张图片进行抠图，去除原背景，将背景替换为纯白色，保留主体的完整轮廓，确保边缘干净';
+const { garmentPrompt } = require('./garmentPrompt');
 
 // 抠图模型：默认 qwen-image-2.0-pro-2026-06-22（2026-09-07 改用用户百炼账号免费额度内的
 // qwen-image-2.0-pro 定版；历史实测 qwen-image-edit / qwen-image-edit-plus / qwen-image-2.0 /
@@ -323,7 +327,7 @@ const MATTING_PROMPT = '对这张图片进行抠图，去除原背景，将背�
 // 若被设成 wanx-v1 等不兼容模型，改代码默认值也不会生效
 const MATTING_MODEL = process.env.DASHSCOPE_MATTING_MODEL || 'qwen-image-2.0-pro-2026-06-22';
 
-async function mattingImageWithDashScope(imageInput, apiKey) {
+async function mattingImageWithDashScope(imageInput, apiKey, category) {
   const maxRetries = 1;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -343,7 +347,7 @@ async function mattingImageWithDashScope(imageInput, apiKey) {
                 role: 'user',
                 content: [
                   { image: imageInput },
-                  { text: MATTING_PROMPT }
+                  { text: garmentPrompt(category) }
                 ]
               }
             ]
@@ -397,11 +401,11 @@ async function mattingImageWithDashScope(imageInput, apiKey) {
   }
 }
 
-async function processMattingForImage(image, imageInput, apiKey) {
+async function processMattingForImage(image, imageInput, apiKey, category) {
   console.log('开始抠图: ' + image.imageId);
 
   // 1. 调用抠图 API
-  const resultImageUrl = await mattingImageWithDashScope(imageInput, apiKey);
+  const resultImageUrl = await mattingImageWithDashScope(imageInput, apiKey, category);
   console.log('抠图完成: ' + image.imageId + ', 结果 URL: ' + resultImageUrl.substring(0, 80) + '...');
 
   // 2. 下载抠图结果图片
@@ -465,7 +469,7 @@ async function processMatting(images, classifications, apiKey, base64Cache) {
               console.log('抠图未命中缓存，重新下载: ' + task.image.imageId);
               imageInput = await downloadImageAsBase64(task.image);
             }
-            const matted = await processMattingForImage(task.image, imageInput, apiKey);
+            const matted = await processMattingForImage(task.image, imageInput, apiKey, classifications[task.index].category);
             mattedResults[task.index] = matted;
           } catch (err) {
             console.error('图片 ' + task.image.imageId + ' 抠图失败:', err.message);
@@ -598,7 +602,7 @@ function createTaskFromClassifications(normalizedImages, classifications, useMoc
     const matted = mattedResults && mattedResults[index];
 
     const result = {
-      resultId: 'result_' + (index + 1),
+      resultId: 'result_' + image.imageId,
       sourceImageId: image.imageId,
       category,
       classification: useMockFallback
@@ -609,7 +613,7 @@ function createTaskFromClassifications(normalizedImages, classifications, useMoc
             needsConfirmation: classification.confidence < 0.8
           },
       type: matted ? 'matted' : 'original',
-      status: 'done',
+      status: !useMockFallback && PROCESSABLE_GROUPS.indexOf(category) !== -1 && !matted ? 'processing_failed' : 'done',
       localPath: '',
       fileId: matted ? matted.mattedFileId : image.fileId,
       url: matted ? matted.mattedUrl : image.url,

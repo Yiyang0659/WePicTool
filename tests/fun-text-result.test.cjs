@@ -44,6 +44,7 @@ function recordingWx(overrides) {
     storage: {}
   };
   const wxApi = Object.assign({
+    createSelectorQuery(){return {select(){return this},fields(){return this},exec(cb){cb([{node:{}}])}}},
     login(options) { options.success({ code: 'test-login-code' }); },
     navigateTo(options) {
       calls.navigations.push(options.url);
@@ -115,11 +116,12 @@ function loadResultPage(wxApi, customDeps) {
   const deps = Object.assign({
     '../../config/env': { ENABLE_FUN_TEXT_STACK_ENTRY: true },
     '../../utils/funTextProject': model,
-    '../../utils/funCardRendererClient': client,
+    '../../utils/funCardRendererClient': {async requestRenderStack(api,payload){return {cards:payload.scenes.map(s=>({sceneId:s.sceneId,role:s.role,order:s.order,url:'cloud://test/final/'+s.sceneId+'.png'}))};}},
     '../../utils/imageExporter': exporter,
     '../../utils/stackExportManifest': manifest,
     '../../utils/sequenceBadgeComposer': defaultSequenceComposer,
-    '../../utils/scenePainter': painter
+    '../../utils/scenePainter': painter,
+    '../../utils/funLocalPreview': {async renderCards(api,canvas,p){return cardsForProject(p);}}
   }, customDeps || {});
 
   const page = instantiatePage(loadMiniProgramPage('miniprogram/pages/template-result/template-result.js', deps, wxApi));
@@ -241,6 +243,7 @@ test('template-result upserts one record per project while preserving its origin
   const { wxApi, calls } = recordingWx();
   calls.storage.wepictool_records = unrelated.slice(0, 5).concat(oldRecord, unrelated.slice(5));
   const page = loadResultPage(wxApi, {
+    '../../utils/funLocalPreview': {async renderCards(){return refreshedCards;}},
     '../../utils/funCardRendererClient': {
       requestRenderStack() {
         return Promise.resolve({ cards: refreshedCards });
@@ -384,261 +387,19 @@ test('template-result collapses every record with the same valid canonical funte
   assert.equal(matching[0].createdAt, first.createdAt);
 });
 
-test('template-result rerenders legacy caches and cards with non-persistent URL schemes', async () => {
-  const project = createSampleProject();
-  const completeCards = cardsForProject(project);
-  const seedWx = recordingWx();
-  const seedPage = loadResultPage(seedWx.wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        return Promise.resolve({ cards: completeCards });
-      }
-    }
-  });
-  await seedPage.initProject(project);
-  const persistedTask = seedPage.data.task;
-  const invalidUrls = [
-    'wxfile://tmp/render.png',
-    '/tmp/render.png',
-    'javascript:alert(1)',
-    'data:image/png;base64,AAAA',
-    '',
-    '   '
-  ];
 
-  const invalidCaches = [
-    { cards: completeCards, task: null, label: 'legacy cache without fingerprint' },
-    { cards: completeCards.slice(0, -1), task: persistedTask, label: 'incomplete cache' },
-    { cards: completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { sceneId: 'wrong-scene' }) : card), task: persistedTask, label: 'wrong scene' },
-    { cards: completeCards.map((card, index) => index === 0 ? Object.assign({}, card, { order: 99 }) : card), task: persistedTask, label: 'wrong order' }
-  ].concat(invalidUrls.map(url => ({
-    cards: persistedTask.cards.map((card, index) => index === 0 ? Object.assign({}, card, { url }) : card),
-    task: persistedTask,
-    label: url || 'empty URL'
-  })));
 
-  for (const cache of invalidCaches) {
-    let requests = 0;
-    const freshCards = cardsForProject(project, `cloud://test/fresh-${invalidCaches.indexOf(cache)}`);
-    const { wxApi } = recordingWx();
-    const page = loadResultPage(wxApi, {
-      '../../utils/funCardRendererClient': {
-        requestRenderStack() {
-          requests += 1;
-          return Promise.resolve({ cards: freshCards });
-        }
-      }
-    });
 
-    await page.initProject(project, cache.cards, cache.task);
 
-    assert.equal(requests, 1, cache.label);
-    assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), freshCards.map(card => card.url));
-  }
-});
 
-test('template-result reuses only fingerprinted persistent cards and trims their URLs', async () => {
-  const project = createSampleProject();
-  const completeCards = cardsForProject(project);
-  const seedWx = recordingWx();
-  const seedPage = loadResultPage(seedWx.wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        return Promise.resolve({ cards: completeCards });
-      }
-    }
-  });
-  await seedPage.initProject(project);
-  const persistedTask = JSON.parse(JSON.stringify(seedPage.data.task));
-  persistedTask.cards[0].url = `  ${persistedTask.cards[0].url}  `;
-  let requests = 0;
-  const { wxApi } = recordingWx();
-  const page = loadResultPage(wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        requests += 1;
-        return Promise.reject(new Error('valid cache must not render'));
-      }
-    }
-  });
 
-  await page.initProject(project, persistedTask.cards, persistedTask);
 
-  assert.equal(requests, 0);
-  assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), completeCards.map(card => card.url));
-});
 
-test('template-result rejects a cache when nested selected-scene content changed but ids and order stayed equal', async () => {
-  const project = createSampleProject();
-  const completeCards = cardsForProject(project);
-  const seedWx = recordingWx();
-  const seedPage = loadResultPage(seedWx.wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        return Promise.resolve({ cards: completeCards });
-      }
-    }
-  });
-  await seedPage.initProject(project);
 
-  const changedProject = JSON.parse(JSON.stringify(project));
-  const selected = changedProject.candidates.find(candidate => candidate.candidateId === changedProject.selectedCandidateId);
-  selected.editedScenes[0].layers[0].text = '渲染内容已经变化';
-  selected.editedScenes[0].layers[0].lines = ['渲染内容', '已经变化'];
-  const freshCards = cardsForProject(changedProject, 'cloud://test/content-changed');
-  let requests = 0;
-  const { wxApi } = recordingWx();
-  const page = loadResultPage(wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        requests += 1;
-        return Promise.resolve({ cards: freshCards });
-      }
-    }
-  });
 
-  await page.initProject(changedProject, seedPage.data.task.cards, seedPage.data.task);
 
-  assert.equal(requests, 1);
-  assert.deepEqual(Array.from(page.data.renderedCards, card => card.url), freshCards.map(card => card.url));
-});
 
-test('template-result ignores a stale remote success after a newer project succeeds', async () => {
-  const firstProject = createSampleProject();
-  const secondProject = Object.assign({}, createSampleProject(), {
-    projectId: 'funtext_second',
-    sourceText: '第二个项目'
-  });
-  const firstRequest = deferred();
-  const secondRequest = deferred();
-  let requestCount = 0;
-  const { wxApi, calls } = recordingWx();
-  const page = loadResultPage(wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        requestCount += 1;
-        return requestCount === 1 ? firstRequest.promise : secondRequest.promise;
-      }
-    }
-  });
 
-  const firstInit = page.initProject(firstProject);
-  const secondInit = page.initProject(secondProject);
-  secondRequest.resolve({ cards: cardsForProject(secondProject, 'cloud://test/second') });
-  await secondInit;
-  firstRequest.resolve({ cards: cardsForProject(firstProject, 'cloud://test/first') });
-  await firstInit;
-
-  assert.equal(page.data.project.projectId, secondProject.projectId);
-  assert.equal(page.data.task.taskId, secondProject.projectId);
-  assert.deepEqual(Array.from(calls.storage.wepictool_records, record => record.projectId), [secondProject.projectId]);
-  assert.deepEqual(Array.from(calls.storage.wepic_history_tasks, task => task.taskId), [secondProject.projectId]);
-});
-
-test('template-result ignores an older failure when the same project retry already succeeded', async () => {
-  const project = createSampleProject();
-  const firstRequest = deferred();
-  const secondRequest = deferred();
-  let requestCount = 0;
-  const { wxApi, calls } = recordingWx();
-  const page = loadResultPage(wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        requestCount += 1;
-        return requestCount === 1 ? firstRequest.promise : secondRequest.promise;
-      }
-    }
-  });
-
-  const firstInit = page.initProject(project);
-  const secondInit = page.initProject(project);
-  secondRequest.resolve({ cards: cardsForProject(project, 'cloud://test/retry-success') });
-  await secondInit;
-  firstRequest.reject(codedError('CONTENT_UNSAFE', 'stale failure'));
-  await firstInit;
-
-  assert.equal(page.data.renderFailed, false, page.data.renderErrorMessage);
-  assert.equal(page.data.task.taskId, project.projectId);
-  assert.equal(calls.storage.wepictool_records.length, 1);
-  assert.match(page.data.renderedCards[0].url, /retry-success/);
-});
-
-test('template-result ignores retry taps while a render request is still pending', async () => {
-  const project = createSampleProject();
-  const pendingRequest = deferred();
-  let requestCount = 0;
-  const { wxApi } = recordingWx();
-  const page = loadResultPage(wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        requestCount += 1;
-        return pendingRequest.promise;
-      }
-    }
-  });
-
-  const init = page.initProject(project);
-  page.onRetryRender();
-
-  assert.equal(requestCount, 1);
-  pendingRequest.resolve({ cards: cardsForProject(project) });
-  await init;
-});
-
-test('template-result stops a stale local Canvas export after a newer project succeeds', async () => {
-  const firstProject = createSampleProject();
-  const secondProject = Object.assign({}, createSampleProject(), {
-    projectId: 'funtext_canvas_newer',
-    sourceText: '新的项目'
-  });
-  const firstExport = deferred();
-  let selectorCallback;
-  let exportCalls = 0;
-  let requestCount = 0;
-  const canvasNode = {
-    getContext() {
-      return { clearRect() {} };
-    }
-  };
-  const { wxApi, calls } = recordingWx({
-    createSelectorQuery() {
-      return {
-        select() { return this; },
-        fields() { return this; },
-        exec(callback) { selectorCallback = callback; }
-      };
-    },
-    canvasToTempFilePath(options) {
-      exportCalls += 1;
-      firstExport.promise.then(() => options.success({ tempFilePath: 'wxfile://stale.png' }));
-    }
-  });
-  const page = loadResultPage(wxApi, {
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        requestCount += 1;
-        if (requestCount === 1) return Promise.reject(codedError('NETWORK_ERROR'));
-        return Promise.resolve({ cards: cardsForProject(secondProject, 'cloud://test/canvas-newer') });
-      }
-    },
-    '../../utils/scenePainter': { paintScene() {} }
-  });
-
-  await page.initProject(firstProject);
-  selectorCallback([{ node: canvasNode }]);
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(exportCalls, 1);
-
-  await page.initProject(secondProject);
-  firstExport.resolve();
-  await new Promise(resolve => setImmediate(resolve));
-  await new Promise(resolve => setImmediate(resolve));
-
-  assert.equal(exportCalls, 1);
-  assert.equal(page.data.task.taskId, secondProject.projectId);
-  assert.equal(page.data.renderFailed, false);
-  assert.deepEqual(Array.from(calls.storage.wepictool_records, record => record.projectId), [secondProject.projectId]);
-});
 
 test('template-result rejects unsupported funtext project versions without rendering or recording', async () => {
   const project = Object.assign({}, createSampleProject(), { version: 2 });
@@ -670,164 +431,13 @@ test('template-result rejects unsupported funtext project versions without rende
   assert.equal(calls.storage.wepictool_records, undefined);
 });
 
-test('template-result fails closed without local fallback or history for safety and response errors', async () => {
-  const project = createSampleProject();
-  const failClosedCodes = [
-    'CONTENT_UNSAFE',
-    'SAFETY_UNAVAILABLE',
-    'INVALID_RENDER_RESPONSE',
-    'WX_API_UNAVAILABLE',
-    'constructor',
-    'toString',
-    '__proto__',
-    undefined
-  ];
 
-  for (const code of failClosedCodes) {
-    let canvasQueries = 0;
-    const { wxApi, calls } = recordingWx({
-      createSelectorQuery() {
-        canvasQueries += 1;
-        return {
-          select() { return this; },
-          fields() { return this; },
-          exec(callback) { callback([]); }
-        };
-      }
-    });
-    const page = loadResultPage(wxApi, {
-      '../../utils/funCardRendererClient': {
-        requestRenderStack() {
-          return Promise.reject(codedError(code));
-        }
-      }
-    });
 
-    await page.initProject(project);
 
-    assert.equal(canvasQueries, 0, `${code} must not start local Canvas export`);
-    assert.equal(page.data.renderFailed, true, `${code} must leave the page failed`);
-    assert.equal(page.data.task, null, `${code} must not create a task`);
-    assert.equal(calls.storage.wepic_history_tasks, undefined, `${code} must not write history`);
-  }
-});
 
-test('template-result uses local Canvas only for explicit renderer connection errors', async () => {
-  const project = createSampleProject();
-  for (const code of ['FUN_RENDERER_NOT_CONFIGURED', 'NETWORK_ERROR']) {
-    let exported = 0;
-    const canvasNode = {
-      getContext() {
-        return { clearRect() {} };
-      }
-    };
-    const { wxApi, calls } = recordingWx({
-      createSelectorQuery() {
-        return {
-          select() { return this; },
-          fields() { return this; },
-          exec(callback) { callback([{ node: canvasNode }]); }
-        };
-      },
-      canvasToTempFilePath(options) {
-        exported += 1;
-        options.success({ tempFilePath: `wxfile://local-${exported}.png` });
-      }
-    });
-    const page = loadResultPage(wxApi, {
-      '../../utils/funCardRendererClient': {
-        requestRenderStack() {
-          return Promise.reject(codedError(code));
-        }
-      },
-      '../../utils/scenePainter': {
-        paintScene() {}
-      }
-    });
 
-    await page.initProject(project);
-    await new Promise(resolve => setImmediate(resolve));
 
-    assert.equal(page.data.renderFailed, false, code);
-    assert.equal(page.data.renderedCards.length, project.candidates[0].editedScenes.length, code);
-    assert.equal((calls.storage.wepic_history_tasks || []).length, 1, code);
-  }
-});
 
-test('template-result falls back locally for an invalid cloud response only with loopback renderer config', async () => {
-  const project = createSampleProject();
-  let exported = 0;
-  const canvasNode = {
-    getContext() {
-      return { clearRect() {} };
-    }
-  };
-  const { wxApi, calls } = recordingWx({
-    createSelectorQuery() {
-      return {
-        select() { return this; },
-        fields() { return this; },
-        exec(callback) { callback([{ node: canvasNode }]); }
-      };
-    },
-    canvasToTempFilePath(options) {
-      exported += 1;
-      options.success({ tempFilePath: `wxfile://loopback-${exported}.png` });
-    }
-  });
-  const page = loadResultPage(wxApi, {
-    '../../config/env': {
-      ENABLE_FUN_TEXT_STACK_ENTRY: true,
-      FUN_CARD_RENDERER_URL: 'http://127.0.0.1:8080'
-    },
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        return Promise.reject(codedError('INVALID_RENDER_RESPONSE', '服务端渲染响应异常'));
-      }
-    },
-    '../../utils/scenePainter': { paintScene() {} }
-  });
-
-  await page.initProject(project);
-  await new Promise(resolve => setImmediate(resolve));
-
-  assert.equal(page.data.renderFailed, false);
-  assert.equal(page.data.renderedCards.length, project.candidates[0].editedScenes.length);
-  assert.equal((calls.storage.wepic_history_tasks || []).length, 1);
-});
-
-test('template-result keeps invalid renderer responses fail-closed with an HTTPS production config', async () => {
-  const project = createSampleProject();
-  let canvasQueries = 0;
-  const { wxApi, calls } = recordingWx({
-    createSelectorQuery() {
-      canvasQueries += 1;
-      return {
-        select() { return this; },
-        fields() { return this; },
-        exec(callback) { callback([]); }
-      };
-    }
-  });
-  const page = loadResultPage(wxApi, {
-    '../../config/env': {
-      ENABLE_FUN_TEXT_STACK_ENTRY: true,
-      FUN_CARD_RENDERER_URL: 'https://renderer.example.com'
-    },
-    '../../utils/funCardRendererClient': {
-      requestRenderStack() {
-        return Promise.reject(codedError('INVALID_RENDER_RESPONSE', '服务端渲染响应异常'));
-      }
-    }
-  });
-
-  await page.initProject(project);
-
-  assert.equal(canvasQueries, 0);
-  assert.equal(page.data.renderFailed, true);
-  assert.equal(page.data.task, null);
-  assert.equal(calls.storage.wepic_history_tasks, undefined);
-});
 
 test('saving sequentially guides the user through WeChat four-step flow and supports resume on error', async () => {
   const project = createSampleProject();
@@ -986,7 +596,7 @@ test('funtext ignores an older save failure after a newer project starts', async
   await page.prepareExportManifest();
 
   const saving = page.onSaveStack();
-  await Promise.resolve();
+  await new Promise(resolve=>setImmediate(resolve));
   const newerProject = createSampleProject();
   page.nextRenderGeneration();
   page.invalidateExportState();

@@ -10,6 +10,34 @@ var candidateValidator = require('./candidateValidator');
 
 var HISTORY_LIMIT = 20;
 var SIZE_PRESET_SCALE = { small: 0.84, standard: 1, large: 1.16 };
+var freeCardSequence = 0;
+
+function insertFreeCard(project, candidateId, afterSceneId, options) {
+  var value = options || {};
+  var color = value.backgroundColor || '#FFFFFF';
+  if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error('背景颜色不合法');
+  return commitEdit(project, function(next) {
+    var candidate = requireCandidate(next, candidateId);
+    var source = requireScene(candidate, afterSceneId);
+    if (candidate.editedScenes.length >= 8) throw new Error('每组最多8张，请先删除一张再添加');
+    var scene = {
+      sceneId: 'scene_free_' + Date.now() + '_' + (freeCardSequence++),
+      order: source.order + 1, role: 'ending', width: 1080, height: 1080,
+      stylePackId: candidate.stylePackId, paletteKey: source.paletteKey,
+      fontFeelKey: source.fontFeelKey, background: {assetKey:'solid',color:color.toUpperCase()}, layers:[]
+    };
+    if (value.inkSticker) {
+      scene.inkStickers = [clone(value.inkSticker)];
+      require('./inkStickers').flatten(scene);
+    }
+    candidate.editedScenes.splice(source.order, 0, scene);
+    candidate.editedScenes.forEach(function(s,i){s.order=i+1;});
+    // Baselines are separate from template cards; deleted free cards do not resurrect on restore-all.
+    candidate.freeSceneOriginals = (candidate.freeSceneOriginals || []).filter(function(s) {
+      return candidate.editedScenes.some(function(current){return current.sceneId===s.sceneId;});
+    }).concat([clone(scene)]);
+  });
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -282,6 +310,17 @@ function updateCardText(project, candidateId, sceneId, text) {
       return layer.type === 'text';
     });
     if (!recomposedText) throw new Error('该卡片没有可编辑文字');
+    if (scene.background.assetKey === 'solid') {
+      var pack = stylePacks.getStylePack(candidate.stylePackId);
+      var palette = stylePacks.getPalette(pack, scene.paletteKey);
+      function brightness(color) {
+        return parseInt(color.slice(1,3),16)*0.299 + parseInt(color.slice(3,5),16)*0.587 + parseInt(color.slice(5,7),16)*0.114;
+      }
+      var backgroundBrightness = brightness(scene.background.color);
+      recomposedText.color = Object.keys(palette.colors).map(function(key){return palette.colors[key];}).reduce(function(a,b) {
+        return Math.abs(brightness(a)-backgroundBrightness)>=Math.abs(brightness(b)-backgroundBrightness)?a:b;
+      });
+    }
     scene.layers.unshift(recomposedText);
   }
 
@@ -294,11 +333,35 @@ function switchCandidateStyle(project, candidateId, stylePackId) {
   return commitEdit(project, function (next) {
   var candidate = requireCandidate(next, candidateId);
   var previousInk = {};
-  candidate.editedScenes.forEach(function(scene){ previousInk[scene.sceneId]={strokes:scene.strokes,inkStickers:scene.inkStickers}; });
+  candidate.editedScenes.forEach(function(scene){ previousInk[scene.sceneId]=clone(scene); });
   candidate.stylePackId = stylePackId;
   candidate.originalScenes = clone(composer.composeCandidate(candidate, stylePackId));
   candidate.editedScenes = clone(composeEditedScenes(candidate, stylePackId));
-  candidate.editedScenes.forEach(function(scene){ var saved=previousInk[scene.sceneId];if(saved){if(saved.strokes)scene.strokes=clone(saved.strokes);if(saved.inkStickers)scene.inkStickers=clone(saved.inkStickers);} });
+  candidate.editedScenes.forEach(function(scene){
+    var saved=previousInk[scene.sceneId];
+    if (!saved) return;
+    if(saved.strokes)scene.strokes=clone(saved.strokes);
+    if(saved.inkStickers)scene.inkStickers=clone(saved.inkStickers);
+    if(saved.background.assetKey==='solid') {scene.background=clone(saved.background);delete scene.backgroundVariantKey;}
+    if(scene.sceneId.indexOf('scene_free_')===0) {
+      // A style change must not invent template decorations on a free card.
+      var pack=stylePacks.getStylePack(stylePackId);
+      var palette=stylePacks.getPalette(pack,pack.defaultPaletteKey);
+      scene.layers=clone(saved.layers);
+      scene.layers.forEach(function(layer){if(layer.type==='text')layer.color=palette.colors.primary;});
+      scene.fontFeelKey=saved.fontFeelKey;
+    }
+  });
+  });
+}
+
+function removeCard(project, candidateId, index) {
+  var candidate = requireCandidate(project, candidateId);
+  if (!Number.isInteger(index) || index < 0 || index >= candidate.editedScenes.length || candidate.editedScenes.length <= 1) return project;
+  return commitEdit(project, function(next) {
+    var scenes = requireCandidate(next, candidateId).editedScenes;
+    scenes.splice(index, 1);
+    scenes.forEach(function(scene, i) { scene.order = i + 1; });
   });
 }
 
@@ -323,6 +386,11 @@ function moveCard(project, candidateId, fromIndex, toIndex) {
 
 function updateSceneStyle(scene, pack, changes) {
   var value = changes || {};
+  if (value.backgroundColor !== undefined) {
+    if (!/^#[0-9a-f]{6}$/i.test(value.backgroundColor)) throw new Error('背景颜色不合法');
+    scene.background = {assetKey:'solid',color:value.backgroundColor.toUpperCase()};
+    delete scene.backgroundVariantKey;
+  }
   if (value.backgroundVariantKey) {
     var variant = stylePacks.getBackgroundVariant(pack, value.backgroundVariantKey);
     if (!variant) throw new Error('背景不属于当前风格');
@@ -475,9 +543,14 @@ function restoreCard(project, candidateId, sceneId) {
   return commitEdit(project, function (next) {
     var candidate = requireCandidate(next, candidateId);
     var index = candidate.editedScenes.findIndex(function (scene) { return scene.sceneId === sceneId; });
-    var original = candidate.originalScenes.find(function (scene) { return scene.sceneId === sceneId; });
+    var original = candidate.originalScenes.concat(candidate.freeSceneOriginals || []).find(function (scene) { return scene.sceneId === sceneId; });
     if (!original) throw new Error('未找到原始卡片');
     var restored = clone(original);
+    if (sceneId.indexOf('scene_free_')===0) {
+      var pack = stylePacks.getStylePack(candidate.stylePackId);
+      restored.stylePackId = pack.id;
+      restored.paletteKey = pack.defaultPaletteKey;
+    }
     restored.order = candidate.editedScenes[index].order;
     candidate.editedScenes[index] = restored;
   });
@@ -541,11 +614,11 @@ function validateCandidateCards(candidate) {
 }
 
 function validateRenderScenes(candidate) {
-  if (!Array.isArray(candidate.editedScenes) || candidate.editedScenes.length < 3 || candidate.editedScenes.length > 8) {
-    throw new Error('渲染卡片数量必须在 3 到 8 张之间');
+  if (!Array.isArray(candidate.editedScenes) || candidate.editedScenes.length < 1 || candidate.editedScenes.length > 8) {
+    throw new Error('渲染卡片数量必须在 1 到 8 张之间');
   }
-  if (candidate.editedScenes.length !== candidate.cards.length) {
-    throw new Error('场景数量必须与候选卡片一致');
+  if (candidate.editedScenes.filter(function(s){return s.sceneId.indexOf('scene_free_')!==0;}).length > candidate.cards.length) {
+    throw new Error('场景数量不能超过候选卡片');
   }
   var sceneIds = new Set();
   candidate.editedScenes.forEach(function (scene, index) {
@@ -555,7 +628,7 @@ function validateRenderScenes(candidate) {
     }
     sceneIds.add(scene.sceneId);
     var logicalIndex = logicalCardIndex(scene.sceneId);
-    var logicalCard = candidate.cards[logicalIndex];
+    var logicalCard = candidate.cards[logicalIndex] || (candidate.freeSceneOriginals || []).find(function(s){return s.sceneId===scene.sceneId;});
     if (!logicalCard || scene.role !== logicalCard.role) {
       throw new Error('场景与逻辑卡片不一致');
     }
@@ -611,6 +684,7 @@ function buildPreviewGroups(project, renderedCards) {
 }
 
 module.exports = {
+  insertFreeCard: insertFreeCard,
   updateInkStickers: function(project,candidateId,sceneId,groups) {
     return commitEdit(project,function(next){
       var scene=requireCandidate(next,candidateId).editedScenes.find(function(s){return s.sceneId===sceneId;});
@@ -634,6 +708,7 @@ module.exports = {
   updateCardText: updateCardText,
   switchCandidateStyle: switchCandidateStyle,
   moveCard: moveCard,
+  removeCard: removeCard,
   updateCardStyle: updateCardStyle,
   setTextSizePreset: setTextSizePreset,
   addDecoration: addDecoration,

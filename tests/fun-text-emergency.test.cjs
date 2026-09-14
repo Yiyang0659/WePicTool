@@ -91,7 +91,7 @@ test('emergency flag blocks result restoration, remote/local render, retry, savi
   page.setData({ project, renderedCards: cards, rendering: false });
   const generation = page.nextRenderGeneration();
   page.applyRenderSuccess(project, cards, generation);
-  page.renderLocalCanvasStack(project, generation);
+  await page.initProject(project);
   page.onRetryRender();
   page.onPreviewStack();
   page.onEditStack();
